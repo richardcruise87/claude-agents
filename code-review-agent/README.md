@@ -13,6 +13,8 @@ Automatically monitors OpenDev for new changes, downloads them to your local Dev
 - 📝 **Generates reviews**: Comprehensive markdown documents with recommendations
 - 🎯 **Categorized issues**: Critical, Major, Minor, Nit with file:line references
 - ⚖️ **Final verdict**: Approve/Request Changes/Needs Discussion
+- 🔄 **Patchset tracking**: Incremental reviews that compare with previous patchsets
+- 📚 **Review history**: Preserves all previous reviews with proper versioning
 
 ## Prerequisites
 
@@ -161,6 +163,53 @@ crontab -e
 # Add (runs every hour):
 0 * * * * cd /path/to/code-review-agent && ./octavia_review_agent.py >> monitor.log 2>&1
 ```
+
+## Patchset Tracking (Incremental Reviews)
+
+The agent automatically tracks patchsets and provides **incremental reviews** when developers upload new versions.
+
+### How It Works
+
+When you review the same change multiple times:
+
+1. **First review (PS 1)**:
+   ```bash
+   ./review_single_change.py 919846
+   # Creates: review_openstack_octavia_919846_ps1_20260326_120000-latest.md
+   # Finds 4 critical issues
+   ```
+
+2. **Developer uploads PS 2** fixing 2 issues:
+   ```bash
+   ./review_single_change.py 919846
+   # Old review renamed: review_..._ps1_....md (removes -latest)
+   # Creates: review_..._ps2_...-latest.md
+   # New review includes:
+   #   - ✅ Fixed: Issues 1 and 2
+   #   - ❌ Still present: Issues 3 and 4
+   #   - Focus on what changed
+   ```
+
+3. **Developer uploads PS 3** fixing remaining issues:
+   ```bash
+   ./review_single_change.py 919846
+   # Old PS 2 renamed, new PS 3 created
+   # Review confirms all issues resolved!
+   ```
+
+### Review File Naming
+
+- **Current review**: `review_repo_change_ps2_timestamp-latest.md`
+- **Historical reviews**: `review_repo_change_ps1_timestamp.md` (no -latest)
+
+### Benefits
+
+- ✅ **Don't repeat yourself** - Agent remembers previous findings
+- ✅ **Focus on changes** - See only what's new
+- ✅ **Track progress** - Which issues were addressed?
+- ✅ **Full history** - All reviews preserved
+
+See [PATCHSET_TRACKING.md](PATCHSET_TRACKING.md) for detailed documentation.
 
 ## Configuration
 

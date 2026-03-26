@@ -17,6 +17,11 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
+from patchset_tracker import (
+    prepare_review_context,
+    create_review_filename,
+    extract_patchset_from_review
+)
 
 # Load configuration
 CONFIG = load_config()
@@ -80,8 +85,66 @@ async def review_specific_change(change_url_or_number):
     output_dir = Path(REVIEWS_OUTPUT_DIR)
     output_dir.mkdir(exist_ok=True, parents=True)
 
+    # Fetch patchset number from Gerrit
+    print("🔍 Fetching patchset information from Gerrit...")
+    current_patchset = None
+    patchset_ref = None
+
+    async for message in query(
+        prompt=f"""
+        Fetch the change details from Gerrit API:
+        {GERRIT_BASE_URL}/changes/{change_number}?o=CURRENT_REVISION
+
+        Extract:
+        1. The current revision number (patchset number)
+        2. The git ref for fetching (refs/changes/.../...)
+
+        Return as JSON with keys: patchset_number, ref
+        Note: Gerrit prepends ")]]}}'" to JSON - strip it.
+        The patchset number is under revisions -> _number field.
+        """,
+        options=ClaudeAgentOptions(allowed_tools=["WebFetch"]),
+    ):
+        if hasattr(message, 'result'):
+            # Try to parse the patchset info
+            result_text = message.result.strip()
+            try:
+                # Simple extraction - look for numbers
+                import json
+                # Try to extract JSON from result
+                if 'patchset_number' in result_text:
+                    data = json.loads(result_text)
+                    current_patchset = data.get('patchset_number')
+                    patchset_ref = data.get('ref')
+                else:
+                    # Try to find patchset number in text
+                    match = re.search(r'"_number":\s*(\d+)', result_text)
+                    if match:
+                        current_patchset = int(match.group(1))
+                    # Try to find ref
+                    match = re.search(r'"ref":\s*"([^"]+)"', result_text)
+                    if match:
+                        patchset_ref = match.group(1)
+            except:
+                pass
+
+            if current_patchset:
+                print(f"✓ Patchset: {current_patchset}")
+            if patchset_ref:
+                print(f"✓ Ref: {patchset_ref}")
+
+    # Check for previous reviews and prepare context
+    previous_review_content, previous_patchset, old_review_file = prepare_review_context(
+        output_dir, repo_name, change_number, current_patchset
+    )
+
+    # Create the new review filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    review_file = output_dir / f"review_{repo_name.replace('/', '_')}_{change_number}_{timestamp}.md"
+    review_file = create_review_filename(
+        output_dir, repo_name, change_number, current_patchset, timestamp
+    )
+
+    print(f"📄 Review will be saved to: {review_file.name}\n")
 
     repo_path = Path(DEVSTACK_PATH) / repo_name.split('/')[-1]
 
@@ -90,15 +153,59 @@ async def review_specific_change(change_url_or_number):
         print(f"   Please ensure DevStack is set up correctly.")
         return
 
+    # Build the prompt with previous review context if available
+    previous_review_section = ""
+    if previous_review_content and previous_patchset:
+        previous_review_section = f"""
+
+## IMPORTANT: Previous Review Context
+
+This change has been reviewed before. You previously reviewed **Patchset {previous_patchset}**.
+
+**Previous Review Summary** (for context):
+```
+{previous_review_content[:3000]}
+... (truncated for brevity)
+```
+
+**Your Task for This Review:**
+- Focus on what changed between PS {previous_patchset} and PS {current_patchset or 'current'}
+- Note if previous issues were addressed
+- Identify new issues introduced in this patchset
+- Comment on whether the change is moving in the right direction
+- Include a "Changes Since Previous Review" section
+
+"""
+    elif previous_review_content:
+        previous_review_section = f"""
+
+## IMPORTANT: Previous Review Context
+
+This change has been reviewed before.
+
+**Previous Review Summary** (for context):
+```
+{previous_review_content[:3000]}
+... (truncated for brevity)
+```
+
+**Your Task for This Review:**
+- Note if previous issues were addressed
+- Identify any new issues
+- Include a "Changes Since Previous Review" section if you can determine what changed
+
+"""
+
     prompt = f"""
 You are performing a comprehensive code review for an OpenStack Octavia change.
 
 **Change Information:**
 - Repository: {repo_name}
 - Change Number: {change_number}
+- Patchset: {current_patchset or 'unknown'}
 - Gerrit URL: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}
 - Local repo: {repo_path}
-
+{previous_review_section}
 **Your Task:**
 Perform a complete code review following these steps:
 
@@ -109,7 +216,7 @@ Save the current branch name so we can return to it later.
 Fetch the specific patchset from Gerrit:
 ```bash
 cd {repo_path}
-git fetch {GERRIT_BASE_URL}/{repo_name} refs/changes/*/{change_number}/*
+{"git fetch " + GERRIT_BASE_URL + "/" + repo_name + " " + patchset_ref if patchset_ref else "git fetch " + GERRIT_BASE_URL + "/" + repo_name + " refs/changes/*/" + change_number + "/*"}
 git checkout FETCH_HEAD
 ```
 
@@ -123,7 +230,19 @@ git checkout FETCH_HEAD
   * Scope and impact
   * Any breaking changes
   * New features or bug fixes
+{"" if not previous_patchset else f'''
+## Step 3a: Compare with Previous Patchset (PS {previous_patchset})
 
+**IMPORTANT**: You have context from a previous review of Patchset {previous_patchset}.
+
+Compare the current patchset with your previous review:
+- Check if issues you identified in PS {previous_patchset} were addressed
+- Identify what changed between patchsets (new files, modifications, deletions)
+- Note if the change is improving or regressing
+- Be specific about what was fixed and what wasn't
+
+Reference the previous review context provided at the beginning of these instructions.
+'''}
 ## Step 4: Run Unit Tests
 Execute unit tests and capture results:
 ```bash
@@ -209,8 +328,10 @@ Create a comprehensive markdown review saved to: {review_file}
 # Code Review: {repo_name} - Change #{change_number}
 
 **Gerrit URL**: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}
+**Patchset**: {current_patchset or 'unknown'}
 **Reviewed**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 **Reviewer**: Claude Code Review Agent (Vertex AI)
+{"**Previous Review**: Patchset " + str(previous_patchset) if previous_patchset else "**First Review**"}
 
 ---
 
@@ -234,7 +355,31 @@ Create a comprehensive markdown review saved to: {review_file}
 [What parts of the system are affected?]
 
 ---
+{"" if not previous_patchset else f'''
+## Changes Since Previous Review (PS {previous_patchset})
 
+### Issues Addressed
+[List issues from previous review that were fixed in this patchset]
+- ✅ Issue 1: Description of what was fixed
+- ✅ Issue 2: Description of what was fixed
+- ⚠️ Issue 3: Partially addressed or still present
+
+### New Changes in This Patchset
+[What was added/modified/removed in this patchset compared to PS {previous_patchset}]
+- New file: path/to/file.py
+- Modified: path/to/another.py (what changed)
+- Removed: old/file.py
+
+### New Issues Introduced
+[Any new problems that appeared in this patchset]
+- Issue 1: Description
+- Issue 2: Description
+
+### Overall Progress
+[Assessment of whether the change is improving or regressing]
+
+---
+'''}
 ## Test Results
 
 ### Unit Tests
