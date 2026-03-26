@@ -257,56 +257,77 @@ async def monitor_and_review(repo_name, max_reviews=5):
         print(f"\n✓ No new changes found for {repo_name}")
         return
 
-    # This is a simplified parser - you may need to adjust based on actual response
-    # For now, we'll use the agent to help us parse
+    # Parse the Gerrit JSON response directly
     print(f"\n📋 Parsing changes...")
 
-    async for message in query(
-        prompt=f"""
-        Parse this Gerrit API response and extract a list of changes:
-        {changes_info}
+    try:
+        import json
+        # Gerrit response contains ")]}'" prefix - extract the JSON part
+        response_text = str(changes_info)
 
-        For each change, extract:
-        - change_id (the unique ID)
-        - change_number (the numeric ID)
-        - subject (title)
-        - current_revision hash
-        - ref (for git fetch, usually in revisions[hash].ref)
+        # Try to find JSON in the response
+        json_start = response_text.find('[')
+        if json_start == -1:
+            json_start = response_text.find('{')
 
-        Return as a JSON array of objects.
-        Limit to the first {max_reviews} changes.
-        """,
-        options=ClaudeAgentOptions(allowed_tools=[]),
-    ):
-        if hasattr(message, 'result'):
-            try:
-                # Attempt to parse the changes
-                import json
-                changes_list = json.loads(message.result) if isinstance(message.result, str) else message.result
+        if json_start != -1:
+            json_text = response_text[json_start:]
+            changes_list = json.loads(json_text)
 
-                reviewed_count = 0
-                for change in changes_list[:max_reviews]:
-                    change_id = change.get('change_id')
-                    change_number = change.get('change_number')
-                    revision_ref = change.get('ref')
+            # Handle both single object and array responses
+            if isinstance(changes_list, dict):
+                changes_list = [changes_list]
 
-                    if not all([change_id, change_number, revision_ref]):
-                        print(f"⚠️  Skipping incomplete change data: {change}")
-                        continue
+            print(f"✓ Found {len(changes_list)} change(s)")
 
-                    if change_id in reviewed:
-                        print(f"⏭️  Skipping already reviewed: {change_number}")
-                        continue
+            reviewed_count = 0
+            for change in changes_list[:max_reviews]:
+                # Extract change info from Gerrit JSON structure
+                change_id = change.get('id') or change.get('change_id')
+                change_number = str(change.get('_number', ''))
 
-                    # Review this change
-                    await review_change(repo_name, change_number, change_id, revision_ref)
-                    reviewed_count += 1
+                # Get current revision info
+                current_revision = change.get('current_revision')
+                revisions = change.get('revisions', {})
 
-                print(f"\n✅ Completed {reviewed_count} reviews for {repo_name}")
+                revision_ref = None
+                if current_revision and current_revision in revisions:
+                    revision_ref = revisions[current_revision].get('ref')
 
-            except Exception as e:
-                print(f"⚠️  Could not parse changes: {e}")
-                print(f"Raw response: {message.result}")
+                subject = change.get('subject', 'No subject')
+
+                if not all([change_id, change_number]):
+                    print(f"⚠️  Skipping incomplete change: {subject}")
+                    continue
+
+                if change_id in reviewed:
+                    print(f"⏭️  Skipping already reviewed: #{change_number} - {subject}")
+                    continue
+
+                print(f"\n📌 Reviewing change #{change_number}: {subject}")
+
+                # If we don't have the ref, construct it
+                if not revision_ref and change_number:
+                    last_two = str(change_number)[-2:].zfill(2)
+                    # Get patchset number from current revision if available
+                    patchset = 1
+                    if current_revision and current_revision in revisions:
+                        patchset = revisions[current_revision].get('_number', 1)
+                    revision_ref = f"refs/changes/{last_two}/{change_number}/{patchset}"
+
+                # Review this change
+                await review_change(repo_name, change_number, change_id, revision_ref)
+                reviewed_count += 1
+
+            print(f"\n✅ Completed {reviewed_count} reviews for {repo_name}")
+
+    except json.JSONDecodeError as e:
+        print(f"⚠️  Could not parse JSON: {e}")
+        print(f"Response excerpt: {str(changes_info)[:500]}...")
+    except Exception as e:
+        print(f"⚠️  Error processing changes: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 async def main():
