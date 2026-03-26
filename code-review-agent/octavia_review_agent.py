@@ -99,155 +99,72 @@ async def fetch_pending_changes(repo_name):
 
 async def review_change(repo_name, change_number, change_id, revision_ref):
     """
-    Main agent workflow to review a single change.
+    Review a single change by calling the review_single_change.py script.
 
-    Steps:
-    1. Fetch the change to local devstack
-    2. Run unit tests
-    3. Run functional tests
-    4. Analyze code changes
-    5. Prepare testing strategy
-    6. Generate code review
-    7. Save to document
+    This avoids nested agent calls by delegating to a separate process.
     """
     print(f"\n{'='*80}")
     print(f"🤖 Starting review for {repo_name} - Change #{change_number}")
     print(f"{'='*80}\n")
 
-    # Create output directory
-    output_dir = Path(CONFIG["reviews_output_dir"])
-    output_dir.mkdir(exist_ok=True, parents=True)
+    # Get the script path
+    script_dir = Path(__file__).parent
+    review_script = script_dir / "review_single_change.py"
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    review_file = output_dir / f"review_{repo_name.replace('/', '_')}_{change_number}_{timestamp}.md"
-
-    repo_path = Path(CONFIG["devstack_path"]) / repo_name.split('/')[-1]
-
-    prompt = f"""
-You are performing a comprehensive code review for an OpenStack Octavia change.
-
-**Change Information:**
-- Repository: {repo_name}
-- Change Number: {change_number}
-- Change ID: {change_id}
-- Gerrit URL: {CONFIG['gerrit_base_url']}/c/{repo_name}/+/{change_number}
-
-**Your Task:**
-Perform a complete code review following these steps:
-
-## Step 1: Fetch the Change
-Navigate to: {repo_path}
-Fetch the change using:
-```
-git fetch {CONFIG['gerrit_base_url']}/{repo_name} {revision_ref}
-git checkout FETCH_HEAD
-```
-
-## Step 2: Analyze the Changes
-- Run `git diff HEAD~1` to see what changed
-- Read the modified files to understand the changes
-- Identify the purpose and scope of the change
-- Check the commit message for clarity and completeness
-
-## Step 3: Run Unit Tests
-- Navigate to the repository directory
-- Run the unit tests: `tox -e py3` or appropriate test command
-- Capture the output
-- Note any failures or warnings
-
-## Step 4: Run Functional Tests (if applicable)
-- Run functional tests: `tox -e functional` or similar
-- Capture the output
-- Note any failures or issues
-
-## Step 5: Code Quality Analysis
-Analyze the code for:
-- **Code Style**: PEP 8 compliance, naming conventions
-- **Error Handling**: Proper exception handling, edge cases
-- **Security**: No SQL injection, XSS, or other vulnerabilities
-- **Performance**: No obvious inefficiencies or bottlenecks
-- **Testing**: Are new tests included? Do they cover the changes?
-- **Documentation**: Are docstrings updated? Is the commit message clear?
-- **Backwards Compatibility**: Are there breaking changes?
-- **Dependencies**: Are new dependencies necessary and appropriate?
-
-## Step 6: Prepare Testing Strategy
-Document:
-- What tests were run
-- What additional tests should be run (if any)
-- Recommended manual testing steps
-- Any test scenarios that might be missing
-
-## Step 7: Generate Review Document
-Create a comprehensive review document with:
-
-### Change Summary
-- Brief description of what the change does
-- Files modified/added/deleted
-
-### Test Results
-- Unit test results (pass/fail, output)
-- Functional test results (pass/fail, output)
-- Any test failures or errors
-
-### Code Analysis
-- Overall code quality assessment
-- Specific issues found (with file:line references)
-- Positive aspects worth noting
-
-### Testing Strategy
-- Tests that were executed
-- Additional testing recommendations
-- Manual test scenarios
-
-### Recommendations
-- Required changes (blocking issues)
-- Suggested improvements (nice-to-haves)
-- Questions for the author
-- Overall verdict: Approve / Request Changes / Needs Discussion
-
-### Review Comments
-Provide specific, actionable comments in this format:
-```
-File: path/to/file.py:123
-Severity: [Critical|Major|Minor|Nit]
-Comment: [Detailed comment with reasoning]
-Suggestion: [Specific code suggestion if applicable]
-```
-
-**IMPORTANT:**
-- Be constructive and professional
-- Provide specific examples and line numbers
-- Suggest solutions, not just problems
-- Note what's done well, not just issues
-- Do NOT post this review - save it to: {review_file}
-
-After completing the analysis, save the complete review document to {review_file}.
-Also return to the original git branch when done.
-"""
+    if not review_script.exists():
+        print(f"❌ Error: review_single_change.py not found at {review_script}")
+        save_reviewed_change(change_id)
+        return None
 
     try:
-        async for message in query(
-            prompt=prompt,
-            options=ClaudeAgentOptions(
-                allowed_tools=["Bash", "Read", "Write", "Grep", "Glob"],
-            ),
-        ):
-            # Stream progress updates
-            if hasattr(message, 'text'):
-                print(f"  {message.text}")
-            elif hasattr(message, 'result'):
-                print(f"\n✅ Review Complete!")
+        # Call review_single_change.py as a subprocess
+        # This runs in its own process with its own agent context
+        import subprocess
+
+        print(f"📋 Calling review script for change #{change_number}...")
+
+        result = subprocess.run(
+            [sys.executable, str(review_script), str(change_number)],
+            cwd=str(script_dir),
+            capture_output=True,
+            text=True,
+            timeout=1800  # 30 minute timeout for reviews
+        )
+
+        # Print the output from the review script
+        if result.stdout:
+            print(result.stdout)
+
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+        if result.returncode == 0:
+            print(f"\n✅ Review Complete!")
+            save_reviewed_change(change_id)
+
+            # Find the review file that was created
+            output_dir = Path(CONFIG["reviews_output_dir"])
+            pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*-latest.md"
+            review_files = list(output_dir.glob(pattern))
+
+            if review_files:
+                review_file = max(review_files, key=lambda p: p.stat().st_mtime)
                 print(f"📄 Review saved to: {review_file}")
-                print(f"\nSummary: {message.result}")
-
-                # Mark as reviewed
-                save_reviewed_change(change_id)
                 return review_file
+            else:
+                print(f"📄 Review completed (check {output_dir})")
+                return None
+        else:
+            print(f"\n❌ Review failed with exit code {result.returncode}")
+            save_reviewed_change(change_id)
+            return None
 
+    except subprocess.TimeoutExpired:
+        print(f"\n❌ Review timed out after 30 minutes")
+        save_reviewed_change(change_id)
+        return None
     except Exception as e:
         print(f"\n❌ Error during review: {e}")
-        # Still mark as reviewed to avoid retry loops
         save_reviewed_change(change_id)
         return None
 
