@@ -51,33 +51,50 @@ async def fetch_pending_changes(repo_name):
         "&o=CURRENT_REVISION&o=CURRENT_COMMIT&o=DETAILED_ACCOUNTS"
     )
 
-    changes = []
-    async for message in query(
-        prompt=f"""
-        Fetch the list of open changes from this Gerrit API endpoint:
-        {gerrit_query_url}
+    try:
+        # Use httpx for async HTTP requests (more reliable than nested agent calls)
+        import httpx
 
-        Parse the JSON response and extract:
-        - Change ID
-        - Change number
-        - Subject (title)
-        - Current revision
-        - Ref (for git fetch)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(gerrit_query_url)
+            response.raise_for_status()
 
-        Return the information as a structured list.
-        Note: Gerrit prepends ")]]}}'" to JSON responses for security - strip it.
-        """,
-        options=ClaudeAgentOptions(
-            allowed_tools=["WebFetch"],
-        ),
-    ):
-        if hasattr(message, 'result'):
-            # Parse the agent's response to extract change information
-            changes_info = message.result
-            print(f"  Found changes: {changes_info}")
-            return changes_info
+            # Gerrit prepends ")]}'" for security - strip it
+            text = response.text
+            if text.startswith(")]}"):
+                text = text[4:]  # Remove ")]}'"
 
-    return changes
+            print(f"✓ Fetched changes from Gerrit API")
+            return text
+
+    except ImportError:
+        # Fallback to urllib if httpx not available
+        print("⚠️  httpx not available, using urllib...")
+        import urllib.request
+        import ssl
+
+        # Create SSL context that doesn't verify (for development)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        try:
+            with urllib.request.urlopen(gerrit_query_url, context=ctx, timeout=30) as response:
+                text = response.read().decode('utf-8')
+
+                # Strip Gerrit security prefix
+                if text.startswith(")]}"):
+                    text = text[4:]
+
+                print(f"✓ Fetched changes from Gerrit API")
+                return text
+        except Exception as e:
+            print(f"❌ Error fetching from Gerrit: {e}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error fetching from Gerrit: {e}")
+        return None
 
 
 async def review_change(repo_name, change_number, change_id, revision_ref):
