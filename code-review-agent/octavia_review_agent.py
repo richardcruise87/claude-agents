@@ -145,8 +145,13 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
 
         print(f"📋 Calling review script for change #{change_number}...")
 
+        # Build command with patchset if available
+        cmd = [sys.executable, str(review_script), str(change_number)]
+        if patchset:
+            cmd.append(str(patchset))
+
         result = subprocess.run(
-            [sys.executable, str(review_script), str(change_number)],
+            cmd,
             cwd=str(script_dir),
             capture_output=True,
             text=True,
