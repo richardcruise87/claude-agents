@@ -3,13 +3,16 @@
 Review a specific Octavia change from OpenDev.
 
 Usage:
-    python review_single_change.py <change_number>
+    python review_single_change.py <change_number> [patchset]
     python review_single_change.py 912345
+    python review_single_change.py 912345 2
     python review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345
+    python review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345 3
 """
 import asyncio
 import sys
 import re
+import argparse
 from datetime import datetime
 from pathlib import Path
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -30,8 +33,15 @@ REVIEWS_OUTPUT_DIR = CONFIG["reviews_output_dir"]
 GERRIT_BASE_URL = CONFIG["gerrit_base_url"]
 
 
-async def review_specific_change(change_url_or_number):
-    """Review a specific change by URL or change number."""
+async def review_specific_change(change_url_or_number, requested_patchset=None):
+    """
+    Review a specific change by URL or change number.
+
+    Args:
+        change_url_or_number: Change number or Gerrit URL
+        requested_patchset: Optional specific patchset number to review (e.g., 2)
+                          If None, reviews the latest patchset
+    """
 
     # Parse change number from URL or direct number
     if "review.opendev.org" in change_url_or_number:
@@ -86,52 +96,63 @@ async def review_specific_change(change_url_or_number):
     output_dir.mkdir(exist_ok=True, parents=True)
 
     # Fetch patchset number from Gerrit
-    print("🔍 Fetching patchset information from Gerrit...")
-    current_patchset = None
-    patchset_ref = None
+    if requested_patchset:
+        print(f"🔍 Fetching patchset {requested_patchset} information from Gerrit...")
+        current_patchset = requested_patchset
+        # Construct the ref for the specific patchset
+        # Format: refs/changes/NN/NNNN/P where last NN are last 2 digits of change
+        last_two = str(change_number)[-2:]
+        patchset_ref = f"refs/changes/{last_two}/{change_number}/{requested_patchset}"
+        print(f"✓ Patchset: {current_patchset} (requested)")
+        print(f"✓ Ref: {patchset_ref}")
+    else:
+        print("🔍 Fetching latest patchset information from Gerrit...")
+        current_patchset = None
+        patchset_ref = None
 
-    async for message in query(
-        prompt=f"""
-        Fetch the change details from Gerrit API:
-        {GERRIT_BASE_URL}/changes/{change_number}?o=CURRENT_REVISION
+        async for message in query(
+            prompt=f"""
+            Fetch the change details from Gerrit API:
+            {GERRIT_BASE_URL}/changes/{change_number}?o=CURRENT_REVISION&o=ALL_REVISIONS
 
-        Extract:
-        1. The current revision number (patchset number)
-        2. The git ref for fetching (refs/changes/.../...)
+            Extract:
+            1. The current revision number (latest patchset number)
+            2. The git ref for fetching (refs/changes/.../...)
+            3. All available patchset numbers
 
-        Return as JSON with keys: patchset_number, ref
-        Note: Gerrit prepends ")]]}}'" to JSON - strip it.
-        The patchset number is under revisions -> _number field.
-        """,
-        options=ClaudeAgentOptions(allowed_tools=["WebFetch"]),
-    ):
-        if hasattr(message, 'result'):
-            # Try to parse the patchset info
-            result_text = message.result.strip()
-            try:
-                # Simple extraction - look for numbers
-                import json
-                # Try to extract JSON from result
-                if 'patchset_number' in result_text:
-                    data = json.loads(result_text)
-                    current_patchset = data.get('patchset_number')
-                    patchset_ref = data.get('ref')
-                else:
-                    # Try to find patchset number in text
-                    match = re.search(r'"_number":\s*(\d+)', result_text)
-                    if match:
-                        current_patchset = int(match.group(1))
-                    # Try to find ref
-                    match = re.search(r'"ref":\s*"([^"]+)"', result_text)
-                    if match:
-                        patchset_ref = match.group(1)
-            except:
-                pass
+            Return as JSON with keys: patchset_number, ref, all_patchsets
+            Note: Gerrit prepends ")]]}}'" to JSON - strip it.
+            The patchset number is under revisions -> _number field.
+            """,
+            options=ClaudeAgentOptions(allowed_tools=["WebFetch"]),
+        ):
+            if hasattr(message, 'result'):
+                # Try to parse the patchset info
+                result_text = message.result.strip()
+                try:
+                    # Simple extraction - look for numbers
+                    import json
+                    # Try to extract JSON from result
+                    if 'patchset_number' in result_text:
+                        data = json.loads(result_text)
+                        current_patchset = data.get('patchset_number')
+                        patchset_ref = data.get('ref')
+                    else:
+                        # Try to find patchset number in text
+                        match = re.search(r'"_number":\s*(\d+)', result_text)
+                        if match:
+                            current_patchset = int(match.group(1))
+                        # Try to find ref
+                        match = re.search(r'"ref":\s*"([^"]+)"', result_text)
+                        if match:
+                            patchset_ref = match.group(1)
+                except:
+                    pass
 
-            if current_patchset:
-                print(f"✓ Patchset: {current_patchset}")
-            if patchset_ref:
-                print(f"✓ Ref: {patchset_ref}")
+                if current_patchset:
+                    print(f"✓ Patchset: {current_patchset} (latest)")
+                if patchset_ref:
+                    print(f"✓ Ref: {patchset_ref}")
 
     # Check for previous reviews and prepare context
     previous_review_content, previous_patchset, old_review_file = prepare_review_context(
@@ -196,6 +217,11 @@ This change has been reviewed before.
 
 """
 
+    # Add note if reviewing a specific (potentially not latest) patchset
+    specific_patchset_note = ""
+    if requested_patchset:
+        specific_patchset_note = f"\n**NOTE**: You are reviewing a SPECIFIC patchset (PS {requested_patchset}), which may not be the latest version of this change.\n"
+
     prompt = f"""
 You are performing a comprehensive code review for an OpenStack Octavia change.
 
@@ -205,7 +231,7 @@ You are performing a comprehensive code review for an OpenStack Octavia change.
 - Patchset: {current_patchset or 'unknown'}
 - Gerrit URL: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}
 - Local repo: {repo_path}
-{previous_review_section}
+{specific_patchset_note}{previous_review_section}
 **Your Task:**
 Perform a complete code review following these steps:
 
@@ -595,15 +621,55 @@ git checkout <original_branch>
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python review_single_change.py <change_number_or_url>")
-        print("\nExamples:")
-        print("  python review_single_change.py 912345")
-        print("  python review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='Review an OpenStack Octavia change from OpenDev',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Review latest patchset
+  %(prog)s 919846
 
-    change_input = sys.argv[1]
-    asyncio.run(review_specific_change(change_input))
+  # Review specific patchset
+  %(prog)s 919846 2
+  %(prog)s 919846 --patchset 3
+
+  # Review using URL
+  %(prog)s https://review.opendev.org/c/openstack/octavia/+/919846
+
+  # Review specific patchset using URL
+  %(prog)s https://review.opendev.org/c/openstack/octavia/+/919846 2
+        """
+    )
+
+    parser.add_argument(
+        'change',
+        help='Change number or Gerrit URL (e.g., 919846 or https://review.opendev.org/c/openstack/octavia/+/919846)'
+    )
+
+    parser.add_argument(
+        'patchset',
+        nargs='?',
+        type=int,
+        default=None,
+        help='Specific patchset number to review (e.g., 2). If omitted, reviews the latest patchset.'
+    )
+
+    parser.add_argument(
+        '--patchset', '-p',
+        dest='patchset_flag',
+        type=int,
+        help='Alternative way to specify patchset number'
+    )
+
+    args = parser.parse_args()
+
+    # Determine which patchset to use (positional arg takes precedence)
+    patchset = args.patchset if args.patchset else args.patchset_flag
+
+    if patchset:
+        print(f"📌 Reviewing patchset {patchset}\n")
+
+    asyncio.run(review_specific_change(args.change, patchset))
 
 
 if __name__ == "__main__":

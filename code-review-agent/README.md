@@ -126,8 +126,25 @@ Edit `config.json` to match your environment:
 The easiest way to get started:
 
 ```bash
+# Review latest patchset
 ./review_single_change.py <change_number>
+
+# Review specific patchset
+./review_single_change.py <change_number> <patchset>
+
+# Examples
+./review_single_change.py 919846           # Latest patchset
+./review_single_change.py 919846 2         # Patchset 2
+./review_single_change.py 919846 -p 3      # Patchset 3 (alternative)
 ```
+
+**Reviewing Specific Patchsets:**
+
+You can review any patchset, not just the latest. This is useful for:
+- 📜 Reviewing historical patchsets for context
+- 🔍 Comparing different versions
+- ✅ Validating bug fixes between patchsets
+- 📊 Understanding change evolution
 
 **What it does:**
 1. Fetches the change from OpenDev

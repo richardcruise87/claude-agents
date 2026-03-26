@@ -114,6 +114,36 @@ Moving in the right direction, but still needs work.
 ...
 ```
 
+## Reviewing Specific Patchsets
+
+You can review any patchset, not just the latest:
+
+```bash
+# Review the latest patchset (default)
+./review_single_change.py 919846
+
+# Review patchset 2 specifically
+./review_single_change.py 919846 2
+
+# Review patchset 1 to see the original submission
+./review_single_change.py 919846 1
+
+# Alternative syntax
+./review_single_change.py 919846 --patchset 3
+./review_single_change.py 919846 -p 3
+```
+
+**Use Cases:**
+- Review an older patchset for historical context
+- Compare different patchsets manually
+- Review a specific version referenced in discussion
+- Validate that a bug existed in PS 1 but was fixed in PS 3
+
+**Filename includes patchset:**
+- PS 1: `review_openstack_octavia_919846_ps1_20260326_120000-latest.md`
+- PS 2: `review_openstack_octavia_919846_ps2_20260326_130000-latest.md`
+- PS 3: `review_openstack_octavia_919846_ps3_20260326_140000-latest.md`
+
 ## Example Workflow
 
 ### Developer uploads PS 1

@@ -12,11 +12,20 @@ Your agent is ready! All prerequisites are configured:
 ### Option 1: Review a Specific Change (Recommended to Start)
 
 ```bash
-# Example: Review change #912345
+# Review latest patchset
 ./review_single_change.py 912345
 
-# Or use the full URL
+# Review specific patchset (e.g., patchset 2)
+./review_single_change.py 912345 2
+
+# Using URL (latest)
 ./review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345
+
+# Using URL (specific patchset)
+./review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345 3
+
+# Alternative syntax
+./review_single_change.py 912345 --patchset 2
 ```
 
 **What happens:**
