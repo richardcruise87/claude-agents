@@ -1,0 +1,64 @@
+{
+  "comment": "Copy this file to config.json and customize for your environment",
+
+  "repositories": [
+    "openstack/octavia",
+    "openstack/octavia-lib",
+    "openstack/octavia-tempest-plugin",
+    "openstack/python-octaviaclient"
+  ],
+
+  "devstack": {
+    "path": "/opt/stack",
+    "comment": "Path to your DevStack installation. Change this to match your setup."
+  },
+
+  "output": {
+    "reviews_directory": "~/octavia_reviews",
+    "comment": "Where to save review documents. Can use ~ for home directory.",
+    "review_format": "markdown",
+    "include_test_output": true,
+    "include_code_snippets": true
+  },
+
+  "gerrit": {
+    "base_url": "https://review.opendev.org",
+    "api_version": "2.16",
+    "comment": "Gerrit server configuration. Usually doesn't need to change."
+  },
+
+  "testing": {
+    "run_unit_tests": true,
+    "run_functional_tests": true,
+    "run_pep8": true,
+    "unit_test_command": "tox -e py3",
+    "functional_test_command": "tox -e functional",
+    "pep8_command": "tox -e pep8",
+    "test_timeout_seconds": 1800
+  },
+
+  "monitoring": {
+    "check_interval_minutes": 60,
+    "max_reviews_per_cycle": 3,
+    "reviewed_changes_file": "~/.octavia_reviewed_changes.json",
+    "comment": "Settings for automated monitoring mode"
+  },
+
+  "analysis": {
+    "check_security": true,
+    "check_performance": true,
+    "check_breaking_changes": true,
+    "check_documentation": true,
+    "minimum_test_coverage": 80
+  },
+
+  "filters": {
+    "skip_wip": true,
+    "skip_draft": true,
+    "comment": "Skip Work-In-Progress and draft changes",
+    "min_patchset": 1,
+    "include_authors": [],
+    "exclude_authors": [],
+    "comment2": "Leave arrays empty to include/exclude no one"
+  }
+}
