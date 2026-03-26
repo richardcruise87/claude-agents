@@ -30,12 +30,25 @@ def load_reviewed_changes():
     return set()
 
 
-def save_reviewed_change(change_id):
-    """Mark a change as reviewed."""
+def save_reviewed_change(change_id, patchset=None):
+    """
+    Mark a change as reviewed.
+
+    Args:
+        change_id: The Gerrit change ID (e.g., "openstack%2Foctavia~919846")
+        patchset: Optional patchset number. If provided, creates a patchset-aware ID.
+    """
     reviewed = load_reviewed_changes()
-    reviewed.add(change_id)
+
+    # Create patchset-aware ID if patchset is provided
+    if patchset is not None:
+        review_id = f"{change_id}~ps{patchset}"
+    else:
+        review_id = change_id
+
+    reviewed.add(review_id)
     with open(CONFIG["reviewed_changes_file"], 'w') as f:
-        json.dump(list(reviewed), f)
+        json.dump(list(reviewed), f, indent=2)
 
 
 async def fetch_pending_changes(repo_name):
@@ -97,14 +110,23 @@ async def fetch_pending_changes(repo_name):
         return None
 
 
-async def review_change(repo_name, change_number, change_id, revision_ref):
+async def review_change(repo_name, change_number, change_id, revision_ref, patchset=None):
     """
     Review a single change by calling the review_single_change.py script.
 
     This avoids nested agent calls by delegating to a separate process.
+
+    Args:
+        repo_name: Repository name (e.g., "openstack/octavia")
+        change_number: Change number (e.g., "919846")
+        change_id: Gerrit change ID (e.g., "openstack%2Foctavia~919846")
+        revision_ref: Git ref for the revision (e.g., "refs/changes/46/919846/2")
+        patchset: Patchset number (e.g., 2) for tracking purposes
     """
     print(f"\n{'='*80}")
     print(f"🤖 Starting review for {repo_name} - Change #{change_number}")
+    if patchset:
+        print(f"📌 Patchset: {patchset}")
     print(f"{'='*80}\n")
 
     # Get the script path
@@ -113,7 +135,7 @@ async def review_change(repo_name, change_number, change_id, revision_ref):
 
     if not review_script.exists():
         print(f"❌ Error: review_single_change.py not found at {review_script}")
-        save_reviewed_change(change_id)
+        save_reviewed_change(change_id, patchset)
         return None
 
     try:
@@ -140,11 +162,14 @@ async def review_change(repo_name, change_number, change_id, revision_ref):
 
         if result.returncode == 0:
             print(f"\n✅ Review Complete!")
-            save_reviewed_change(change_id)
+            save_reviewed_change(change_id, patchset)
 
             # Find the review file that was created
             output_dir = Path(CONFIG["reviews_output_dir"])
-            pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*-latest.md"
+            if patchset:
+                pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_ps{patchset}_*.md"
+            else:
+                pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*.md"
             review_files = list(output_dir.glob(pattern))
 
             if review_files:
@@ -156,16 +181,16 @@ async def review_change(repo_name, change_number, change_id, revision_ref):
                 return None
         else:
             print(f"\n❌ Review failed with exit code {result.returncode}")
-            save_reviewed_change(change_id)
+            save_reviewed_change(change_id, patchset)
             return None
 
     except subprocess.TimeoutExpired:
         print(f"\n❌ Review timed out after 30 minutes")
-        save_reviewed_change(change_id)
+        save_reviewed_change(change_id, patchset)
         return None
     except Exception as e:
         print(f"\n❌ Error during review: {e}")
-        save_reviewed_change(change_id)
+        save_reviewed_change(change_id, patchset)
         return None
 
 
@@ -224,9 +249,12 @@ async def monitor_and_review(repo_name, max_reviews=5):
                 current_revision = change.get('current_revision')
                 revisions = change.get('revisions', {})
 
+                # Extract patchset number
+                patchset = None
                 revision_ref = None
                 if current_revision and current_revision in revisions:
                     revision_ref = revisions[current_revision].get('ref')
+                    patchset = revisions[current_revision].get('_number')
 
                 subject = change.get('subject', 'No subject')
 
@@ -234,23 +262,30 @@ async def monitor_and_review(repo_name, max_reviews=5):
                     print(f"⚠️  Skipping incomplete change: {subject}")
                     continue
 
-                if change_id in reviewed:
-                    print(f"⏭️  Skipping already reviewed: #{change_number} - {subject}")
-                    continue
+                # Check if this specific patchset has been reviewed
+                if patchset:
+                    patchset_review_id = f"{change_id}~ps{patchset}"
+                    if patchset_review_id in reviewed:
+                        print(f"⏭️  Skipping already reviewed: #{change_number} PS{patchset} - {subject}")
+                        continue
+                else:
+                    # Fallback: check if change was reviewed (backward compatibility)
+                    if change_id in reviewed:
+                        print(f"⏭️  Skipping already reviewed: #{change_number} - {subject}")
+                        continue
 
-                print(f"\n📌 Reviewing change #{change_number}: {subject}")
+                print(f"\n📌 Reviewing change #{change_number} PS{patchset if patchset else '?'}: {subject}")
 
                 # If we don't have the ref, construct it
                 if not revision_ref and change_number:
                     last_two = str(change_number)[-2:].zfill(2)
                     # Get patchset number from current revision if available
-                    patchset = 1
-                    if current_revision and current_revision in revisions:
-                        patchset = revisions[current_revision].get('_number', 1)
+                    if not patchset:
+                        patchset = 1
                     revision_ref = f"refs/changes/{last_two}/{change_number}/{patchset}"
 
-                # Review this change
-                await review_change(repo_name, change_number, change_id, revision_ref)
+                # Review this change with patchset tracking
+                await review_change(repo_name, change_number, change_id, revision_ref, patchset)
                 reviewed_count += 1
 
             print(f"\n✅ Completed {reviewed_count} reviews for {repo_name}")

@@ -38,18 +38,14 @@ def find_previous_reviews(
     Returns a list of review files sorted by modification time (oldest first).
     """
     # Pattern: review_{repo}_{change_number}_*.md
-    # But NOT files ending with -latest.md (those are already marked)
     pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*.md"
 
     all_reviews = list(output_dir.glob(pattern))
 
-    # Filter out -latest files to find the actual old reviews
-    old_reviews = [r for r in all_reviews if not r.stem.endswith('-latest')]
-
     # Sort by modification time
-    old_reviews.sort(key=lambda p: p.stat().st_mtime)
+    all_reviews.sort(key=lambda p: p.stat().st_mtime)
 
-    return old_reviews
+    return all_reviews
 
 
 def get_latest_review(
@@ -62,16 +58,7 @@ def get_latest_review(
 
     Returns the path to the latest review or None if no previous review exists.
     """
-    # First check for -latest files
-    latest_pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*-latest.md"
-    latest_files = list(output_dir.glob(latest_pattern))
-
-    if latest_files:
-        # Return the most recent -latest file
-        latest_files.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        return latest_files[0]
-
-    # Otherwise get the most recent regular review
+    # Get all reviews and return the most recent
     reviews = find_previous_reviews(output_dir, repo_name, change_number)
     return reviews[-1] if reviews else None
 
@@ -83,16 +70,25 @@ def rename_review_with_patchset(
     """
     Rename a review file to include the patchset number.
 
+    This is mainly for backward compatibility with old review files
+    that don't have patchset numbers in their filenames.
+
     Changes:
     - review_repo_123_timestamp.md -> review_repo_123_ps1_timestamp.md
     - review_repo_123_timestamp-latest.md -> review_repo_123_ps1_timestamp.md
 
     Returns the new path.
     """
-    # Remove -latest suffix if present
     stem = review_file.stem
+
+    # Remove -latest suffix if present (backward compatibility)
     if stem.endswith('-latest'):
-        stem = stem[:-7]  # Remove '-latest'
+        stem = stem[:-7]
+
+    # Check if patchset number is already in the filename
+    if f'_ps{patchset_number}_' in stem or stem.endswith(f'_ps{patchset_number}'):
+        # Already has the correct patchset number, no rename needed
+        return review_file
 
     # Insert patchset number before timestamp
     # Pattern: review_{repo}_{change}_{timestamp}
@@ -162,14 +158,15 @@ def create_review_filename(
     """
     Create a review filename with proper formatting.
 
-    Format: review_{repo}_{change}_ps{patchset}_{timestamp}-latest.md
+    Format: review_{repo}_{change}_ps{patchset}_{timestamp}.md
+
+    The patchset number is always included for clarity and tracking.
     """
     repo_slug = repo_name.replace('/', '_')
 
-    if patchset_number:
-        filename = f"review_{repo_slug}_{change_number}_ps{patchset_number}_{timestamp}-latest.md"
-    else:
-        filename = f"review_{repo_slug}_{change_number}_{timestamp}-latest.md"
+    # Use patchset number if provided, otherwise default to 1
+    ps = patchset_number if patchset_number else 1
+    filename = f"review_{repo_slug}_{change_number}_ps{ps}_{timestamp}.md"
 
     return output_dir / filename
 
