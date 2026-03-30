@@ -8,19 +8,9 @@ Loads configuration from:
 3. config.sample.json (fallback)
 4. Defaults (lowest priority)
 """
-import json
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
-
-
-def expand_path(path_str):
-    """Expand ~ and environment variables in paths."""
-    if not path_str:
-        return path_str
-    expanded = os.path.expanduser(path_str)
-    expanded = os.path.expandvars(expanded)
-    return expanded
+from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths
 
 
 def load_config():
@@ -29,39 +19,29 @@ def load_config():
 
     Returns a dictionary with configuration settings.
     """
-    # Get the directory where this script is located
-    script_dir = Path(__file__).parent.absolute()
+    config_dir = Path(__file__).parent.absolute()
 
-    # Try to load from config.json, fallback to config.sample.json
-    config_file = script_dir / "config.json"
-    if not config_file.exists():
-        config_file = script_dir / "config.sample.json"
-
-    # Load from file
-    if config_file.exists():
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-    else:
-        # Fallback defaults if no config file exists
-        config = {
-            "repositories": ["openstack/octavia"],
-            "devstack": {"path": "/opt/stack"},
-            "output": {"reviews_directory": "~/octavia_reviews"},
-            "gerrit": {"base_url": "https://review.opendev.org"},
-            "testing": {
-                "run_unit_tests": True,
-                "run_functional_tests": True,
-                "run_pep8": True,
-                "unit_test_command": "tox -e py3",
-                "functional_test_command": "tox -e functional",
-                "pep8_command": "tox -e pep8",
-                "test_timeout_seconds": 1800
-            },
-            "monitoring": {
-                "max_reviews_per_cycle": 3,
-                "reviewed_changes_file": "~/.octavia_reviewed_changes.json"
-            }
-        }
+    # Default configuration
+    defaults = {
+        "repositories": ["openstack/octavia"],
+        "devstack": {"path": "/opt/stack"},
+        "output": {"reviews_directory": "~/octavia_reviews"},
+        "gerrit": {"base_url": "https://review.opendev.org"},
+        "testing": {
+            "run_unit_tests": True,
+            "run_functional_tests": True,
+            "run_pep8": True,
+            "unit_test_command": "tox -e py3",
+            "functional_test_command": "tox -e functional",
+            "pep8_command": "tox -e pep8",
+            "test_timeout_seconds": 1800
+        },
+        "monitoring": {
+            "max_reviews_per_cycle": 3,
+            "reviewed_changes_file": "~/.octavia_reviewed_changes.json"
+        },
+        "filters": {}
+    }
 
     # Environment variable overrides
     env_overrides = {
@@ -73,32 +53,19 @@ def load_config():
         "CUTOFF_DATE": ("filters", "cutoff_date"),
     }
 
-    for env_var, (section, key) in env_overrides.items():
-        value = os.getenv(env_var)
-        if value:
-            if section not in config:
-                config[section] = {}
-            # Convert to int if it looks like a number
-            if value.isdigit():
-                value = int(value)
-            config[section][key] = value
+    # Load config using shared library
+    config = load_agent_config(config_dir, env_overrides, defaults)
 
-    # Handle cutoff_date: default to 30 days ago if not specified or null
-    if "filters" not in config:
-        config["filters"] = {}
-    if not config["filters"].get("cutoff_date"):
-        # Default to 30 days ago
-        default_cutoff = datetime.now() - timedelta(days=30)
-        config["filters"]["cutoff_date"] = default_cutoff.strftime('%Y-%m-%d')
+    # Apply cutoff date logic (default to 30 days ago)
+    config = apply_cutoff_date(config, ["filters", "cutoff_date"], default_days=30)
 
     # Expand paths
-    config["devstack"]["path"] = expand_path(config["devstack"]["path"])
-    config["output"]["reviews_directory"] = expand_path(
-        config["output"]["reviews_directory"]
-    )
-    config["monitoring"]["reviewed_changes_file"] = expand_path(
-        config["monitoring"].get("reviewed_changes_file", "~/.octavia_reviewed_changes.json")
-    )
+    path_keys = [
+        ("devstack", "path"),
+        ("output", "reviews_directory"),
+        ("monitoring", "reviewed_changes_file"),
+    ]
+    config = expand_config_paths(config, path_keys)
 
     # Create a flat CONFIG dict for backward compatibility
     flat_config = {
@@ -132,6 +99,7 @@ def get_config_info():
         "DEVSTACK_PATH": os.getenv("DEVSTACK_PATH"),
         "REVIEWS_OUTPUT_DIR": os.getenv("REVIEWS_OUTPUT_DIR"),
         "GERRIT_URL": os.getenv("GERRIT_URL"),
+        "CUTOFF_DATE": os.getenv("CUTOFF_DATE"),
     }
 
     active_overrides = {k: v for k, v in env_vars.items() if v}
