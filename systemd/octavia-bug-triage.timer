@@ -1,0 +1,29 @@
+[Unit]
+Description=Octavia Bug Triage Agent Timer
+Documentation=https://github.com/richardcruise87/claude-agents
+Requires=octavia-bug-triage.service
+
+[Timer]
+# Run daily at 9:00 AM
+OnCalendar=daily
+OnCalendar=*-*-* 09:00:00
+
+# Alternative schedules (comment/uncomment as needed):
+# Every 6 hours:
+# OnCalendar=00/6:00:00
+
+# Twice daily (9 AM and 5 PM):
+# OnCalendar=*-*-* 09:00:00
+# OnCalendar=*-*-* 17:00:00
+
+# Weekdays only at 9 AM:
+# OnCalendar=Mon..Fri *-*-* 09:00:00
+
+# Run on boot if missed (e.g., system was off)
+Persistent=true
+
+# Add randomization to avoid thundering herd (optional)
+# RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

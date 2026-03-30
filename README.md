@@ -116,6 +116,39 @@ cp config.sample.json config.json
 # Edit config.json with your settings
 ```
 
+## Automation with Systemd
+
+Run agents automatically on a schedule using systemd timers:
+
+```bash
+# Quick setup
+cd systemd
+./setup-systemd.sh
+
+# Enable timers
+systemctl --user enable octavia-bug-triage.timer
+systemctl --user start octavia-bug-triage.timer
+
+systemctl --user enable octavia-code-review.timer
+systemctl --user start octavia-code-review.timer
+
+# Enable persistence after logout
+loginctl enable-linger $USER
+```
+
+**Default Schedules:**
+- Bug Triage: Daily at 9:00 AM
+- Code Review: Every 4 hours
+
+**Features:**
+- Runs in isolated virtual environment
+- Automatic scheduling with systemd timers
+- Logging via journald
+- Easy monitoring with systemctl
+- Customizable schedules and resource limits
+
+See [systemd/README.md](systemd/README.md) for complete documentation.
+
 ## Adding New Agents
 
 Create a new directory under `claude-agents/` with:

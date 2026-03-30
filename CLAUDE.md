@@ -266,6 +266,163 @@ Example: review_openstack_octavia_982567_ps1_20260330_103423.md
 
 ---
 
+## Automation with Systemd
+
+### Overview
+
+Both agents can be automated using systemd user services and timers, running in isolated virtual environments.
+
+**Setup Script:** `systemd/setup-systemd.sh`
+
+**Installed Files:**
+- `octavia-bug-triage.service` - Bug triage service
+- `octavia-bug-triage.timer` - Bug triage timer (daily at 9:00 AM)
+- `octavia-code-review.service` - Code review service
+- `octavia-code-review.timer` - Code review timer (every 4 hours)
+
+### Quick Setup
+
+```bash
+cd systemd
+./setup-systemd.sh
+
+# Enable and start timers
+systemctl --user enable octavia-bug-triage.timer
+systemctl --user start octavia-bug-triage.timer
+
+systemctl --user enable octavia-code-review.timer
+systemctl --user start octavia-code-review.timer
+
+# Enable persistence after logout
+loginctl enable-linger $USER
+```
+
+### Virtual Environment
+
+Services run from: `~/.venv/claude-agents/`
+
+The setup script creates this venv and installs all packages:
+```bash
+~/.venv/claude-agents/bin/octavia-triage-bugs
+~/.venv/claude-agents/bin/octavia-review-agent
+~/.venv/claude-agents/bin/octavia-review-change
+```
+
+### Service Configuration
+
+Services are installed to: `~/.config/systemd/user/`
+
+**Service features:**
+- Type=oneshot (run and complete)
+- User services (no root required)
+- Environment variable support
+- Journald logging
+- Optional resource limits
+
+**Example service:**
+```ini
+[Service]
+Type=oneshot
+User=rcruise
+WorkingDirectory=/home/rcruise/git/claude-agents/bug-triage-agent
+ExecStart=/home/rcruise/.venv/claude-agents/bin/octavia-triage-bugs
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+StandardOutput=journal
+```
+
+### Timer Schedules
+
+**Bug Triage (default: daily at 9:00 AM):**
+```ini
+[Timer]
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+```
+
+**Code Review (default: every 4 hours):**
+```ini
+[Timer]
+OnCalendar=00/4:00:00
+Persistent=true
+```
+
+**Custom schedules** (edit timer files):
+- Hourly: `OnCalendar=hourly`
+- Every 6 hours: `OnCalendar=00/6:00:00`
+- Weekdays at 9 AM: `OnCalendar=Mon..Fri *-*-* 09:00:00`
+- Multiple times: Add multiple `OnCalendar` lines
+
+### Management Commands
+
+```bash
+# Check status
+systemctl --user list-timers
+systemctl --user status octavia-bug-triage.timer
+
+# Run manually
+systemctl --user start octavia-bug-triage.service
+systemctl --user start octavia-code-review.service
+
+# View logs
+journalctl --user -u octavia-bug-triage.service -f
+journalctl --user -u octavia-code-review.service -n 50
+
+# Stop/disable
+systemctl --user stop octavia-bug-triage.timer
+systemctl --user disable octavia-bug-triage.timer
+
+# Reload after editing
+systemctl --user daemon-reload
+systemctl --user restart octavia-bug-triage.timer
+```
+
+### Environment Variables
+
+Add to service files in `~/.config/systemd/user/`:
+```ini
+[Service]
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="CUTOFF_DATE=2026-03-01"
+Environment="MAX_BUGS=5"
+Environment="MAX_REVIEWS=3"
+Environment="GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json"
+```
+
+### Troubleshooting
+
+**Check service logs:**
+```bash
+journalctl --user -u octavia-bug-triage.service --no-pager
+systemctl --user status octavia-bug-triage.service
+```
+
+**Test command directly:**
+```bash
+~/.venv/claude-agents/bin/octavia-triage-bugs
+```
+
+**Verify timer next run:**
+```bash
+systemctl --user list-timers octavia-bug-triage.timer
+```
+
+**Common issues:**
+- Venv not found: Check ExecStart path in service file
+- Config not found: Ensure config.json exists in agent directory
+- Credentials error: Set GOOGLE_APPLICATION_CREDENTIALS or run `gcloud auth application-default login`
+- Service not persisting: Run `loginctl enable-linger $USER`
+
+### Documentation
+
+See [systemd/README.md](systemd/README.md) for complete systemd documentation including:
+- Manual setup instructions
+- Advanced configuration
+- Resource limits
+- Monitoring and notifications
+- Multiple instance setups
+
+---
+
 ## Important Patterns and Conventions
 
 ### Configuration Loading
