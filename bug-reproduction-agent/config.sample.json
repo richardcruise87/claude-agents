@@ -1,0 +1,33 @@
+{
+  "comment": "Copy this file to config.json and customize for your environment",
+  "triage_reports_dir": "~/octavia_bug_triages",
+  "reproductions_output_dir": "~/octavia_bug_reproductions",
+  "reproduction_tracking_file": "~/.octavia_bug_reproductions.json",
+
+  "devstack": {
+    "path": "/opt/stack",
+    "openrc_file": "/opt/stack/devstack/openrc",
+    "required_services": [
+      "devstack@o-api.service",
+      "devstack@o-cw.service",
+      "devstack@o-hm.service",
+      "devstack@keystone.service",
+      "devstack@n-api.service",
+      "devstack@q-svc.service"
+    ],
+    "health_timeout": 30,
+    "min_disk_space_gb": 10,
+    "comment": "DevStack configuration and health check requirements"
+  },
+
+  "reproduction": {
+    "max_attempts": 3,
+    "script_timeout": 600,
+    "cleanup_after_attempt": true,
+    "working_directory": "/tmp/octavia-reproductions",
+    "comment": "Reproduction attempt settings"
+  },
+
+  "cutoff_date": null,
+  "comment2": "Cutoff date (YYYY-MM-DD) for processing triages. Defaults to 30 days ago if null."
+}

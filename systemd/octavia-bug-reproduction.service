@@ -1,0 +1,31 @@
+[Unit]
+Description=Octavia Bug Reproduction Agent
+Documentation=https://github.com/richardcruise87/claude-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=%u
+WorkingDirectory=%h/git/claude-agents/bug-reproduction-agent
+
+# Virtual environment activation and execution
+ExecStart=%h/.venv/claude-agents/bin/octavia-reproduce-bugs
+
+# Environment variables
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+# Environment="MAX_ATTEMPTS=3"
+# Environment="SCRIPT_TIMEOUT=600"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=octavia-bug-reproduction
+
+# Resource limits
+MemoryMax=4G
+CPUQuota=100%
+TimeoutSec=1800
+
+[Install]
+WantedBy=multi-user.target

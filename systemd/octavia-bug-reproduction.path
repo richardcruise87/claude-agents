@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for new Octavia bug triage reports
+Documentation=https://github.com/richardcruise87/claude-agents
+
+[Path]
+PathChanged=%h/octavia_bug_triages
+Unit=octavia-bug-reproduction.service
+
+[Install]
+WantedBy=paths.target

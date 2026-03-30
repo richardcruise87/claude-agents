@@ -1,0 +1,53 @@
+You are refining a bug reproduction script that failed to reproduce the bug.
+
+BUG CONTEXT:
+Bug Number: {bug_number}
+Title: {bug_title}
+Reproduction Attempt: {attempt_number}/{max_attempts}
+
+PREVIOUS SCRIPT:
+```bash
+{previous_script}
+```
+
+EXECUTION OUTPUT:
+Exit Code: {exit_code}
+
+STDOUT:
+```
+{stdout}
+```
+
+STDERR:
+```
+{stderr}
+```
+
+ERROR ANALYSIS:
+The script failed with the above output. Common issues to address:
+
+1. **Timing Problems**: Resources not ready (add more sleep/waits, check status)
+2. **Status Transitions**: Not waiting for OPERATING_STATUS to become ONLINE
+3. **Resource Dependencies**: Creating resources before dependencies are ready
+4. **Missing Error Handling**: Script exits before bug condition is tested
+5. **Wrong Sequence**: Operations in incorrect order
+6. **Insufficient Waits**: Health monitors, member status transitions need time
+
+TASK:
+Generate an IMPROVED version of the script that fixes the identified issues.
+
+FOCUS ON:
+1. Adding appropriate wait loops that check resource status before proceeding
+2. Checking both PROVISIONING_STATUS and OPERATING_STATUS where applicable
+3. Adding more detailed logging to understand what's happening
+4. Better error messages that indicate what failed
+5. Alternative approaches if the current method isn't working
+6. Longer sleeps for health monitor transitions (use delays from triage)
+
+REQUIREMENTS:
+- Keep the same safety structure (set -euo pipefail, cleanup trap)
+- Maintain the same overall approach but fix timing/status issues
+- Add status checking loops (e.g., "while status != ACTIVE; do sleep 1; done")
+- Include all fixes in comments so the next attempt understands what changed
+
+Generate the refined bash script below (complete script with shebang):

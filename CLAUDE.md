@@ -14,7 +14,8 @@ This repository contains Claude-based automation agents for OpenStack project ma
 
 1. **Bug Triage Agent** (`bug-triage-agent/`) - Monitors Launchpad for bugs, performs intelligent triage
 2. **Code Review Agent** (`code-review-agent/`) - Monitors Gerrit for changes, performs AI-powered code reviews
-3. **Shared Library** (`agents_lib/`) - Common utilities shared between agents
+3. **Bug Reproduction Agent** (`bug-reproduction-agent/`) - Watches for triage reports, reproduces bugs in DevStack
+4. **Shared Library** (`agents_lib/`) - Common utilities shared between agents
 
 ### Key Features
 
@@ -42,14 +43,16 @@ source venv/bin/activate
 pip install -e agents_lib/
 
 # Install agents individually
-pip install -e bug-triage-agent/    # Provides: octavia-triage-bugs
-pip install -e code-review-agent/   # Provides: octavia-review-agent, octavia-review-change
+pip install -e bug-triage-agent/          # Provides: octavia-triage-bugs
+pip install -e code-review-agent/         # Provides: octavia-review-agent, octavia-review-change
+pip install -e bug-reproduction-agent/    # Provides: octavia-reproduce-bugs
 ```
 
 **Installed Commands:**
 - `octavia-triage-bugs [--single-bug FILE]` - Bug triage agent
 - `octavia-review-agent` - Code review monitoring agent
 - `octavia-review-change <change_number> [patchset]` - Review specific change
+- `octavia-reproduce-bugs` - Bug reproduction agent
 
 **Dependencies:**
 Each agent package automatically installs:
@@ -107,18 +110,37 @@ claude-agents/
 │   ├── README.md                # Agent documentation
 │   └── QUICK_START.md           # Quick start guide
 │
-└── code-review-agent/           # Gerrit code review agent
+├── code-review-agent/           # Gerrit code review agent
+│   ├── setup.py                 # Package installation
+│   ├── MANIFEST.in              # Package data inclusion
+│   ├── octavia_review_agent.py  # Main monitoring agent
+│   ├── review_single_change.py  # Single change review script
+│   ├── config.py                # Configuration loader
+│   ├── config.sample.json       # Template configuration
+│   ├── config.json              # Active config (gitignored)
+│   ├── patchset_tracker.py      # Patchset tracking
+│   ├── prompts/
+│   │   ├── __init__.py          # Prompt loader
+│   │   └── code_review_prompt.txt # Review prompt template
+│   ├── README.md                # Agent documentation
+│   └── QUICK_START.md           # Quick start guide
+│
+└── bug-reproduction-agent/     # Bug reproduction agent
     ├── setup.py                 # Package installation
     ├── MANIFEST.in              # Package data inclusion
-    ├── octavia_review_agent.py  # Main monitoring agent
-    ├── review_single_change.py  # Single change review script
-    ├── config.py                # Configuration loader
+    ├── bug_reproduction_agent.py # Main orchestrator + CLI entry point
     ├── config.sample.json       # Template configuration
     ├── config.json              # Active config (gitignored)
-    ├── patchset_tracker.py      # Patchset tracking
+    ├── triage_parser.py         # Parse markdown triage reports
+    ├── devstack_health.py       # DevStack health checks
+    ├── script_generator.py      # Generate/refine reproduction scripts
+    ├── script_executor.py       # Safe script execution
+    ├── report_generator.py      # Generate markdown reports
+    ├── reproduction_tracker.py  # Tracking wrapper
     ├── prompts/
     │   ├── __init__.py          # Prompt loader
-    │   └── code_review_prompt.txt # Review prompt template
+    │   ├── script_generation_prompt.txt  # Initial script generation
+    │   └── script_refinement_prompt.txt  # Script refinement
     ├── README.md                # Agent documentation
     └── QUICK_START.md           # Quick start guide
 ```
@@ -266,11 +288,117 @@ Example: review_openstack_octavia_982567_ps1_20260330_103423.md
 
 ---
 
+## Bug Reproduction Agent
+
+**Purpose:** Watch for bug triage reports and attempt to reproduce bugs in DevStack environments
+
+**Key Files:**
+- `bug_reproduction_agent.py` - Main orchestrator and CLI entry point
+- `triage_parser.py` - Parse markdown triage reports
+- `devstack_health.py` - DevStack health checks
+- `script_generator.py` - AI-powered script generation and refinement
+- `script_executor.py` - Safe script execution with timeout
+- `report_generator.py` - Generate comprehensive markdown reports
+- `reproduction_tracker.py` - Tracking wrapper (uses agents_lib)
+- `prompts/script_generation_prompt.txt` - Initial script generation
+- `prompts/script_refinement_prompt.txt` - Script refinement after failures
+
+**Configuration:** `config.json`
+```json
+{
+  "triage_reports_dir": "~/octavia_bug_triages",
+  "reproductions_output_dir": "~/octavia_bug_reproductions",
+  "reproduction_tracking_file": "~/.octavia_bug_reproductions.json",
+  "devstack": {
+    "path": "/opt/stack",
+    "openrc_file": "/opt/stack/devstack/openrc",
+    "required_services": [
+      "devstack@o-api.service",
+      "devstack@o-cw.service",
+      "devstack@o-hm.service"
+    ],
+    "health_timeout": 30,
+    "min_disk_space_gb": 10
+  },
+  "reproduction": {
+    "max_attempts": 3,
+    "script_timeout": 600,
+    "cleanup_after_attempt": true,
+    "working_directory": "/tmp/octavia-reproductions"
+  },
+  "cutoff_date": null
+}
+```
+
+**Output Format:**
+```
+Reports: reproduction_<bug_number>_<title_slug>_<timestamp>_<sequence>.md
+Scripts: scripts/bug_<bug_number>_reproduction.sh
+
+Example: reproduction_2146764_test_backup_member_randomly_fails_20260330_143022_1.md
+         scripts/bug_2146764_reproduction.sh
+```
+
+**Workflow:**
+1. systemd Path unit detects new triage report (inotify watch)
+2. Service triggered → Agent starts
+3. Find newest unprocessed triage (check tracking file)
+4. Parse triage markdown → Extract reproduction steps
+5. DevStack health check → Abort if unhealthy
+6. Generate reproduction script (Attempt 1: extract from triage)
+7. Execute script with timeout and safety (cleanup trap, set -euo pipefail)
+8. Analyze results:
+   - SUCCESS → Generate report with root cause
+   - FAILURE → AI refines script, retry up to 3 attempts
+   - ENVIRONMENT ERROR → Abort, report DevStack issue
+9. Generate comprehensive markdown report
+10. Update tracking file (mark as processed)
+11. Exit (systemd cleans up)
+
+**Reproduction Status Types:**
+- **REPRODUCED**: Bug successfully appeared
+- **NOT_REPRODUCED**: Script ran but bug didn't appear
+- **ENVIRONMENT_ERROR**: DevStack unhealthy or service failure
+- **SCRIPT_ERROR**: Script syntax or logic error (AI refines)
+- **TIMEOUT**: Exceeded time limit (AI optimizes)
+
+**Tracking File:** `~/.octavia_bug_reproductions.json`
+```json
+{
+  "bug_2146764": {
+    "last_processed": "2026-03-30T14:30:22.123456",
+    "triage_file": "/home/rcruise/octavia_bug_triages/bug_2146764_..._1.md",
+    "sequence": 1,
+    "reproduction_status": "REPRODUCED",
+    "attempts": 2,
+    "final_script_path": "/home/rcruise/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh"
+  }
+}
+```
+
+**systemd Integration:**
+- **Path unit** (`octavia-bug-reproduction.path`) - Watches `~/octavia_bug_triages/` via inotify
+- **Service unit** (`octavia-bug-reproduction.service`) - Type=oneshot (runs once per trigger)
+- **Resource limits**: MemoryMax=4G, CPUQuota=100%, TimeoutSec=1800
+- **Environment**: `CLAUDE_CODE_USE_VERTEX=1`
+
+**Running:**
+```bash
+# Automatic (event-driven)
+systemctl --user enable octavia-bug-reproduction.path
+systemctl --user start octavia-bug-reproduction.path
+
+# Manual
+octavia-reproduce-bugs
+```
+
+---
+
 ## Automation with Systemd
 
 ### Overview
 
-Both agents can be automated using systemd user services and timers, running in isolated virtual environments.
+All agents can be automated using systemd user services, timers, and path units, running in isolated virtual environments.
 
 **Setup Script:** `systemd/setup-systemd.sh`
 
@@ -279,6 +407,8 @@ Both agents can be automated using systemd user services and timers, running in 
 - `octavia-bug-triage.timer` - Bug triage timer (daily at 9:00 AM)
 - `octavia-code-review.service` - Code review service
 - `octavia-code-review.timer` - Code review timer (every 4 hours)
+- `octavia-bug-reproduction.service` - Bug reproduction service
+- `octavia-bug-reproduction.path` - Bug reproduction path watcher (event-driven)
 
 ### Quick Setup
 
@@ -293,6 +423,10 @@ systemctl --user start octavia-bug-triage.timer
 systemctl --user enable octavia-code-review.timer
 systemctl --user start octavia-code-review.timer
 
+# Enable and start path watcher (event-driven)
+systemctl --user enable octavia-bug-reproduction.path
+systemctl --user start octavia-bug-reproduction.path
+
 # Enable persistence after logout
 loginctl enable-linger $USER
 ```
@@ -306,6 +440,7 @@ The setup script creates this venv and installs all packages:
 ~/.venv/claude-agents/bin/octavia-triage-bugs
 ~/.venv/claude-agents/bin/octavia-review-agent
 ~/.venv/claude-agents/bin/octavia-review-change
+~/.venv/claude-agents/bin/octavia-reproduce-bugs
 ```
 
 ### Service Configuration
@@ -352,28 +487,50 @@ Persistent=true
 - Weekdays at 9 AM: `OnCalendar=Mon..Fri *-*-* 09:00:00`
 - Multiple times: Add multiple `OnCalendar` lines
 
+### Path Units (Event-Driven)
+
+**Bug Reproduction (watches for new triage reports):**
+```ini
+[Path]
+PathChanged=%h/octavia_bug_triages
+Unit=octavia-bug-reproduction.service
+```
+
+**How it works:**
+- Uses kernel inotify to watch directory for changes
+- Triggers service immediately when new file appears
+- Type=oneshot service ensures only one instance runs
+- Subsequent triggers queue automatically
+
 ### Management Commands
 
 ```bash
 # Check status
 systemctl --user list-timers
+systemctl --user list-units --type=path
 systemctl --user status octavia-bug-triage.timer
+systemctl --user status octavia-bug-reproduction.path
 
 # Run manually
 systemctl --user start octavia-bug-triage.service
 systemctl --user start octavia-code-review.service
+systemctl --user start octavia-bug-reproduction.service
 
 # View logs
 journalctl --user -u octavia-bug-triage.service -f
 journalctl --user -u octavia-code-review.service -n 50
+journalctl --user -u octavia-bug-reproduction.service -f
 
 # Stop/disable
 systemctl --user stop octavia-bug-triage.timer
 systemctl --user disable octavia-bug-triage.timer
+systemctl --user stop octavia-bug-reproduction.path
+systemctl --user disable octavia-bug-reproduction.path
 
 # Reload after editing
 systemctl --user daemon-reload
 systemctl --user restart octavia-bug-triage.timer
+systemctl --user restart octavia-bug-reproduction.path
 ```
 
 ### Environment Variables

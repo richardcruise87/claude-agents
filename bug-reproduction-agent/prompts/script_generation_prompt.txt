@@ -1,0 +1,54 @@
+You are helping reproduce an OpenStack Octavia bug in a DevStack environment.
+
+TRIAGE SUMMARY:
+Bug Number: {bug_number}
+Title: {bug_title}
+Severity: {severity}
+Root Cause: {root_cause}
+
+REPRODUCTION STEPS FROM TRIAGE:
+{reproduction_steps}
+
+TASK:
+Generate a complete bash script that:
+1. Sources OpenStack credentials from {openrc_file}
+2. Executes the reproduction steps extracted from the triage report
+3. Includes error handling and cleanup using trap
+4. Logs progress clearly with echo statements
+5. Returns exit code 0 if the bug is successfully reproduced, 1 if not reproduced
+
+REQUIREMENTS:
+- Use `set -euo pipefail` for safety (exit on error, undefined variables, pipe failures)
+- Add a cleanup trap to delete test resources (loadbalancers, servers, etc.)
+- Include comments explaining each step
+- Add sleep/wait commands where needed for asynchronous operations
+- Check for expected error conditions that indicate bug reproduction
+- Wait for resources to reach ACTIVE/ONLINE status before proceeding
+- Use `--wait` flag for OpenStack commands where available
+
+DEVSTACK PATH: {devstack_path}
+
+SCRIPT TEMPLATE:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Cleanup trap - always executes on exit
+trap cleanup EXIT
+function cleanup() {{
+    echo "=== Cleanup ==="
+    # Delete test resources
+    # Example: openstack loadbalancer delete --cascade test-lb 2>/dev/null || true
+}}
+
+# Source OpenStack credentials
+source {openrc_file}
+
+# Main reproduction logic
+# <YOUR GENERATED STEPS HERE>
+
+# Success/failure detection
+# Exit 0 if bug reproduced, 1 if not
+```
+
+Generate the complete bash script below (include the shebang and all sections):

@@ -48,6 +48,29 @@ cd code-review-agent
 
 **Documentation:** [code-review-agent/README.md](code-review-agent/README.md)
 
+### [Bug Reproduction Agent](bug-reproduction-agent/)
+
+AI-powered bug reproduction agent that validates bug triage reports in DevStack environments.
+
+**Features:**
+- 🔬 Watches for new bug triage reports
+- 🤖 AI-generated reproduction scripts
+- 🔄 Iterative script refinement (up to 3 attempts)
+- 🏥 DevStack health checks
+- 🛡️ Safe execution with timeouts and cleanup
+- 📝 Comprehensive reproduction reports
+- 💾 Saves working reproduction scripts
+
+**Quick start:**
+```bash
+octavia-reproduce-bugs  # After installation
+# Or run directly:
+cd bug-reproduction-agent
+./bug_reproduction_agent.py
+```
+
+**Documentation:** [bug-reproduction-agent/README.md](bug-reproduction-agent/README.md)
+
 ---
 
 ## About
@@ -74,14 +97,16 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e agents_lib/
 
 # Install agents individually
-pip install -e bug-triage-agent/     # Installs 'octavia-triage-bugs' command
-pip install -e code-review-agent/    # Installs 'octavia-review-agent' and 'octavia-review-change' commands
+pip install -e bug-triage-agent/          # Installs 'octavia-triage-bugs' command
+pip install -e code-review-agent/         # Installs 'octavia-review-agent' and 'octavia-review-change' commands
+pip install -e bug-reproduction-agent/    # Installs 'octavia-reproduce-bugs' command
 ```
 
 After installation, the agents are available as commands:
 - `octavia-triage-bugs` - Bug triage agent
 - `octavia-review-agent` - Code review monitoring agent
 - `octavia-review-change <change_number>` - Review a specific change
+- `octavia-reproduce-bugs` - Bug reproduction agent
 
 ### Option 2: Run Directly (Development)
 
@@ -132,6 +157,10 @@ systemctl --user start octavia-bug-triage.timer
 systemctl --user enable octavia-code-review.timer
 systemctl --user start octavia-code-review.timer
 
+# Enable path watcher for bug reproduction (event-driven)
+systemctl --user enable octavia-bug-reproduction.path
+systemctl --user start octavia-bug-reproduction.path
+
 # Enable persistence after logout
 loginctl enable-linger $USER
 ```
@@ -139,6 +168,7 @@ loginctl enable-linger $USER
 **Default Schedules:**
 - Bug Triage: Daily at 9:00 AM
 - Code Review: Every 4 hours
+- Bug Reproduction: Event-driven (triggered by new triage reports)
 
 **Features:**
 - Runs in isolated virtual environment

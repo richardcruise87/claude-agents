@@ -1,0 +1,32 @@
+# Configuration
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Reproduction outputs (optional - comment out if you want to commit reproductions)
+reproductions/
+*.md
+!README.md
+!QUICK_START.md
+
+# Tracking file
+.octavia_bug_reproductions.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
