@@ -51,7 +51,6 @@ async def generate_initial_script(
     # Use Claude Agent SDK to generate script
     options = ClaudeAgentOptions(
         model="sonnet",  # Use Sonnet for script generation
-        verbose=True
     )
 
     result = await query(prompt, options=options)
@@ -103,7 +102,6 @@ async def refine_script(
     # Use Claude Agent SDK to refine script
     options = ClaudeAgentOptions(
         model="sonnet",  # Use Sonnet for refinement
-        verbose=True
     )
 
     result = await query(prompt, options=options)

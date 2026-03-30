@@ -86,20 +86,27 @@ def extract_bug_metadata(markdown: str) -> Dict:
     """
     metadata = {}
 
-    # Extract bug number
-    match = re.search(r'\*\*Bug ID:\*\*\s*(\d+)', markdown)
+    # Extract bug number (handle multiple triage formats)
+    # Format 1: **Bug ID:** 2146764 (asterisks after colon)
+    # Format 2: - **Bug Number**: 2146740 (asterisks before colon)
+    match = re.search(r'-?\s*\*\*Bug (?:ID|Number)(?::\*\*|\*\*:)\s+(\d+)', markdown)
     if match:
         metadata["bug_number"] = match.group(1)
 
-    # Extract bug title
-    match = re.search(r'\*\*Title:\*\*\s*(.+)', markdown)
+    # Extract bug title (both formats)
+    match = re.search(r'-?\s*\*\*Title(?::\*\*|\*\*:)\s+(.+)', markdown)
     if match:
         metadata["bug_title"] = match.group(1).strip()
 
-    # Extract severity from Executive Summary
-    match = re.search(r'\*\*Severity:\*\*\s*\*\*(\w+)\*\*', markdown)
+    # Extract severity/importance (try multiple formats)
+    match = re.search(r'-?\s*\*\*(?:Severity|Importance):\*\*\s*(?:\*\*)?(\w+)(?:\*\*)?', markdown)
     if match:
         metadata["severity"] = match.group(1)
+    else:
+        # Try to extract from Executive Summary (e.g., "VALID BUG - HIGH SEVERITY")
+        match = re.search(r'(?:HIGH|MEDIUM|LOW|CRITICAL)\s+SEVERITY', markdown, re.IGNORECASE)
+        if match:
+            metadata["severity"] = match.group(0).split()[0]
 
     # Extract validation status
     match = re.search(r'\*\*Validation Status:\*\*\s*[✅❌⚠️]*\s*\*\*(.+?)\*\*', markdown)
