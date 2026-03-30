@@ -1,0 +1,28 @@
+{
+  "launchpad_project": "octavia",
+  "triages_output_dir": "~/octavia_bug_triages",
+  "devstack_path": "/opt/stack",
+  "max_bugs_per_run": 5,
+  "bug_statuses": [
+    "New",
+    "Confirmed",
+    "Triaged",
+    "In Progress"
+  ],
+  "bug_importance": [
+    "Critical",
+    "High",
+    "Medium",
+    "Low",
+    "Undecided"
+  ],
+  "triage_tracking_file": "~/.octavia_bug_triages.json",
+  "launchpad_api_url": "https://api.launchpad.net/1.0",
+  "search_repos": [
+    "openstack/octavia",
+    "openstack/octavia-lib",
+    "openstack/octavia-tempest-plugin",
+    "openstack/python-octaviaclient"
+  ],
+  "gerrit_base_url": "https://review.opendev.org"
+}

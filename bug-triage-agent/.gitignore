@@ -1,0 +1,29 @@
+# Configuration
+config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Triage outputs (optional - comment out if you want to commit triages)
+triages/
+*.md
+!README.md
+!QUICK_START.md
+
+# Tracking file
+.octavia_bug_triages.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

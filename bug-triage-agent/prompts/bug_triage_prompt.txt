@@ -1,0 +1,183 @@
+You are performing bug triage for an OpenStack Octavia bug from Launchpad.
+
+**Bug Information:**
+- Bug Number: {bug_number}
+- Title: {bug_title}
+- Status: {bug_status}
+- Importance: {bug_importance}
+- Launchpad URL: {launchpad_url}
+- Date Created: {date_created}
+- Last Updated: {date_updated}
+- Reporter: {reporter}
+{sequence_note}{previous_triage_section}
+**Your Task:**
+Perform comprehensive bug triage following these steps:
+
+## Step 1: Analyze Bug Report
+Read and analyze the bug description:
+```
+{bug_description}
+```
+
+Key aspects to identify:
+- What is the reported issue?
+- What is the expected behavior vs actual behavior?
+- What environment/configuration is mentioned?
+- Are there error messages, logs, or stack traces?
+- Is there enough information to understand the bug?
+
+## Step 2: Validate the Bug
+Determine if this is a valid bug:
+- Is this a real issue or a configuration problem?
+- Is this actually a bug or a feature request?
+- Is the expected behavior correct according to Octavia specifications?
+- Are there obvious user errors in the report?
+
+Conclusion: **Valid Bug** or **Invalid** (with reason)
+
+## Step 3: Check for Duplicates
+Search for similar bugs that might be duplicates:
+- Search Launchpad for bugs with similar keywords
+- Look for bugs describing the same symptoms
+- Check if this is a variation of a known issue
+
+If you find potential duplicates, list them with bug numbers and brief descriptions.
+
+## Step 4: Search for Related Fixes
+Check if this bug might already be fixed in recent code changes:
+- Search Git history for related commits in {devstack_path}
+- Look for Gerrit changes that address similar issues
+- Check release notes for relevant fixes
+- Search code for error messages mentioned in the bug
+
+Commands to run:
+```bash
+cd {devstack_path}/octavia
+git log --all --grep="{search_keywords}" --oneline | head -20
+git log --all --since="6 months ago" --grep="error\|fix\|bug" -- {relevant_files} | head -20
+```
+
+## Step 5: Determine Affected Components
+Identify which Octavia components are affected:
+- API (octavia/api/)
+- Controller/Worker (octavia/controller/)
+- Amphora Agent (octavia/amphorae/)
+- Driver (octavia/api/drivers/)
+- Database (octavia/db/)
+- Network (octavia/network/)
+- Other
+
+List the affected components and files.
+
+## Step 6: Assess Severity and Impact
+Evaluate the bug's severity:
+- **Critical**: Data loss, security issue, service unavailable
+- **High**: Major functionality broken, affects many users
+- **Medium**: Feature partially broken, workaround exists
+- **Low**: Minor issue, cosmetic problem, rare edge case
+
+Provide your assessment and reasoning.
+
+## Step 7: Reproduce in DevStack
+Create a detailed reproduction strategy for DevStack:
+
+**Prerequisites:**
+- DevStack setup requirements
+- Specific services needed (Octavia, Neutron, etc.)
+- Configuration changes needed
+
+**Step-by-step reproduction:**
+1. Environment setup commands
+2. Resource creation (load balancer, listener, pool, etc.)
+3. Actions to trigger the bug
+4. Expected vs actual results
+5. How to verify the bug occurred
+
+**Example commands:**
+```bash
+# 1. Setup
+source /opt/stack/devstack/openrc admin admin
+
+# 2. Create resources
+openstack loadbalancer create --name test-lb --vip-subnet-id private-subnet
+
+# 3. Trigger bug
+[specific commands based on bug report]
+
+# 4. Verify
+[commands to check for the bug]
+```
+
+## Step 8: Suggest Investigation Areas
+Based on the bug description, suggest where to investigate:
+- Specific code files to examine
+- Log files to check
+- Database queries to run
+- API endpoints to test
+- Configuration options to review
+
+## Step 9: Propose Fix Strategy
+Suggest potential approaches to fix the bug:
+- What needs to be changed (high-level)
+- Potential challenges or complications
+- Testing strategy to verify the fix
+- Impact on existing functionality
+
+## Step 10: Generate Triage Report
+Create a comprehensive triage document with:
+
+### Bug Summary
+- Brief description of the issue
+- Validation status (Valid/Invalid)
+- Severity assessment
+- Affected components
+
+### Duplicate Check
+- List of potential duplicate bugs
+- Related issues found
+
+### Fix Status
+- Is this already fixed? (Yes/No/Possibly)
+- Related commits/changes if found
+
+### Reproduction Strategy
+- Detailed DevStack reproduction steps
+- Prerequisites and setup
+- Expected vs actual results
+
+### Investigation Guide
+- Files to examine
+- Logs to check
+- Areas to investigate
+
+### Fix Proposal
+- Suggested approach to fix
+- Testing recommendations
+- Potential risks
+
+### Priority Recommendation
+- Recommended priority level
+- Justification for priority
+- Suggested assignee expertise level
+
+### Next Steps
+- Immediate actions needed
+- Additional information required
+- Stakeholders to notify
+
+### Triage Comments
+Provide specific, actionable feedback:
+```
+Component: [API/Controller/Amphora/etc.]
+Severity: [Critical/High/Medium/Low]
+Finding: [Detailed finding]
+Recommendation: [Specific recommendation]
+```
+
+**IMPORTANT:**
+- Be thorough and analytical
+- Provide specific file paths and line numbers when possible
+- Suggest concrete commands and code to investigate
+- Consider edge cases and potential side effects
+- Focus on helping developers understand and fix the bug quickly
+- Save the complete triage to: {triage_file}
