@@ -3,19 +3,8 @@ Configuration management for the bug triage agent.
 
 Loads configuration from config.json or environment variables.
 """
-import json
-import os
 from pathlib import Path
-from datetime import datetime, timedelta
-
-
-def expand_path(path_str: str) -> str:
-    """Expand ~ and environment variables in path."""
-    if not path_str:
-        return path_str
-    expanded = os.path.expanduser(path_str)
-    expanded = os.path.expandvars(expanded)
-    return expanded
+from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths
 
 
 def load_config():
@@ -27,52 +16,35 @@ def load_config():
     - DEVSTACK_PATH: Override devstack_path
     - LAUNCHPAD_PROJECT: Override launchpad_project
     - MAX_BUGS: Override max_bugs_per_run
+    - CUTOFF_DATE: Override cutoff_date
 
     Returns:
         dict: Configuration dictionary
     """
     config_dir = Path(__file__).parent
 
-    # Try to load config.json, fallback to config.sample.json
-    config_file = config_dir / "config.json"
-    if not config_file.exists():
-        config_file = config_dir / "config.sample.json"
+    # Define environment variable overrides
+    env_overrides = {
+        "TRIAGES_OUTPUT_DIR": "triages_output_dir",
+        "DEVSTACK_PATH": "devstack_path",
+        "LAUNCHPAD_PROJECT": "launchpad_project",
+        "MAX_BUGS": "max_bugs_per_run",
+        "CUTOFF_DATE": "cutoff_date",
+    }
 
-    if not config_file.exists():
-        raise FileNotFoundError(
-            "No config.json or config.sample.json found. "
-            "Please create config.json from config.sample.json"
-        )
+    # Load config using shared library
+    config = load_agent_config(config_dir, env_overrides)
 
-    with open(config_file, 'r') as f:
-        config = json.load(f)
-
-    # Apply environment variable overrides
-    if os.getenv('TRIAGES_OUTPUT_DIR'):
-        config['triages_output_dir'] = os.getenv('TRIAGES_OUTPUT_DIR')
-
-    if os.getenv('DEVSTACK_PATH'):
-        config['devstack_path'] = os.getenv('DEVSTACK_PATH')
-
-    if os.getenv('LAUNCHPAD_PROJECT'):
-        config['launchpad_project'] = os.getenv('LAUNCHPAD_PROJECT')
-
-    if os.getenv('MAX_BUGS'):
-        config['max_bugs_per_run'] = int(os.getenv('MAX_BUGS'))
-
-    if os.getenv('CUTOFF_DATE'):
-        config['cutoff_date'] = os.getenv('CUTOFF_DATE')
-
-    # Handle cutoff_date: default to 30 days ago if not specified or null
-    if not config.get('cutoff_date'):
-        # Default to 30 days ago
-        default_cutoff = datetime.now() - timedelta(days=30)
-        config['cutoff_date'] = default_cutoff.strftime('%Y-%m-%d')
+    # Apply cutoff date logic (default to 30 days ago)
+    config = apply_cutoff_date(config, "cutoff_date", default_days=30)
 
     # Expand paths
-    config['triages_output_dir'] = expand_path(config['triages_output_dir'])
-    config['devstack_path'] = expand_path(config['devstack_path'])
-    config['triage_tracking_file'] = expand_path(config['triage_tracking_file'])
+    path_keys = [
+        "triages_output_dir",
+        "devstack_path",
+        "triage_tracking_file",
+    ]
+    config = expand_config_paths(config, path_keys)
 
     return config
 

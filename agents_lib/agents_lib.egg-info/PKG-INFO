@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: agents-lib
+Version: 1.0.0
+Summary: Shared utilities for Claude-based automation agents
+Author: Richard Cruise
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
+Dynamic: author
+Dynamic: classifier
+Dynamic: requires-python
+Dynamic: summary

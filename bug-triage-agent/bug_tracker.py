@@ -4,58 +4,31 @@ Bug triage tracking functionality.
 Tracks which bugs have been triaged, when, and with what sequence number.
 Prevents re-triaging bugs that haven't been updated since last review.
 """
-import json
 from pathlib import Path
-from datetime import datetime
 from typing import Dict, Optional, Tuple
-import re
+from agents_lib import (
+    load_tracking_file,
+    save_tracking_file,
+    should_process_item,
+    record_processed_item,
+    create_output_filename,
+)
 
 
-def slugify(text: str, max_length: int = 50) -> str:
-    """
-    Convert text to a filesystem-safe slug.
-
-    Args:
-        text: Text to slugify
-        max_length: Maximum length of slug
-
-    Returns:
-        Slugified text suitable for filenames
-    """
-    # Remove special characters, keep alphanumeric and spaces
-    slug = re.sub(r'[^\w\s-]', '', text.lower())
-    # Replace spaces with underscores
-    slug = re.sub(r'[\s]+', '_', slug)
-    # Remove consecutive underscores
-    slug = re.sub(r'_+', '_', slug)
-    # Trim to max length
-    slug = slug[:max_length].strip('_')
-    return slug
-
-
+# Wrapper functions for backward compatibility
 def load_triage_history(tracking_file: Path) -> Dict:
     """
     Load triage history from tracking file.
 
     Returns:
         dict: Triage history with bug numbers as keys
-              Each entry contains: {
-                  "last_triaged": "ISO timestamp",
-                  "last_updated": "ISO timestamp from Launchpad",
-                  "sequence": int
-              }
     """
-    if tracking_file.exists():
-        with open(tracking_file, 'r') as f:
-            return json.load(f)
-    return {}
+    return load_tracking_file(tracking_file)
 
 
 def save_triage_history(tracking_file: Path, history: Dict):
     """Save triage history to tracking file."""
-    tracking_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(tracking_file, 'w') as f:
-        json.dump(history, f, indent=2)
+    save_tracking_file(tracking_file, history)
 
 
 def should_triage_bug(
@@ -74,23 +47,7 @@ def should_triage_bug(
     Returns:
         Tuple of (should_triage: bool, sequence_number: int)
     """
-    bug_key = f"bug_{bug_number}"
-
-    if bug_key not in history:
-        # Never triaged before
-        return (True, 1)
-
-    last_triage = history[bug_key]
-    last_updated_tracked = last_triage.get('last_updated', '')
-
-    # Compare timestamps
-    # If bug has been updated since last triage, re-triage with incremented sequence
-    if bug_last_updated > last_updated_tracked:
-        next_sequence = last_triage.get('sequence', 0) + 1
-        return (True, next_sequence)
-
-    # Bug hasn't been updated since last triage
-    return (False, last_triage.get('sequence', 1))
+    return should_process_item(bug_number, bug_last_updated, history, id_prefix="bug_")
 
 
 def record_triage(
@@ -108,16 +65,13 @@ def record_triage(
         bug_last_updated: ISO timestamp when bug was last updated
         sequence: Sequence number for this triage
     """
-    history = load_triage_history(tracking_file)
-    bug_key = f"bug_{bug_number}"
-
-    history[bug_key] = {
-        "last_triaged": datetime.now().isoformat(),
-        "last_updated": bug_last_updated,
-        "sequence": sequence
-    }
-
-    save_triage_history(tracking_file, history)
+    record_processed_item(
+        tracking_file,
+        bug_number,
+        bug_last_updated,
+        sequence,
+        id_prefix="bug_"
+    )
 
 
 def create_triage_filename(
@@ -140,10 +94,13 @@ def create_triage_filename(
     Returns:
         Path to the triage file
     """
-    title_slug = slugify(bug_title)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"bug_{bug_number}_{title_slug}_{timestamp}_{sequence}.md"
-    return output_dir / filename
+    return create_output_filename(
+        output_dir,
+        bug_number,
+        bug_title,
+        sequence,
+        prefix="bug"
+    )
 
 
 def find_previous_triages(
