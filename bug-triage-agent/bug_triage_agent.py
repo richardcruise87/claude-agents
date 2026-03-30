@@ -305,16 +305,30 @@ async def monitor_and_triage(project: str, max_bugs: int = 5):
         return
 
     print(f"\n📋 Checking which bugs need triage...")
+    print(f"📅 Cutoff date: {CONFIG['cutoff_date']} (ignoring bugs created before this date)")
 
     triaged_count = 0
+    skipped_count = 0
     output_dir = Path(CONFIG['triages_output_dir'])
+    cutoff_date = CONFIG['cutoff_date']
 
     for bug in bugs:
         if triaged_count >= max_bugs:
             break
 
         bug_number = bug['number']
+        bug_created = bug['date_created']
         bug_last_updated = bug['date_last_updated']
+
+        # Skip bugs created before cutoff date
+        if bug_created:
+            # Parse bug creation date (format: 2026-03-30T08:36:48.382279+00:00)
+            bug_created_date = bug_created.split('T')[0]  # Get YYYY-MM-DD part
+            if bug_created_date < cutoff_date:
+                skipped_count += 1
+                if skipped_count <= 5:  # Only show first 5 skipped bugs
+                    print(f"⏭️  Skipping Bug #{bug_number} - Created {bug_created_date} (before cutoff)")
+                continue
 
         # Check if we should triage this bug
         should_triage, sequence = should_triage_bug(
@@ -352,6 +366,8 @@ async def monitor_and_triage(project: str, max_bugs: int = 5):
             triaged_count += 1
 
     print(f"\n✅ Completed {triaged_count} triages for {project}")
+    if skipped_count > 5:
+        print(f"⏭️  Skipped {skipped_count} bugs created before cutoff date")
 
 
 async def main_single_bug(bug_data_file: str):
@@ -390,6 +406,7 @@ async def main():
     print(f"📁 Output directory: {CONFIG['triages_output_dir']}")
     print(f"🏠 DevStack path: {CONFIG['devstack_path']}")
     print(f"🐛 Project: {CONFIG['launchpad_project']}")
+    print(f"📅 Cutoff date: {CONFIG['cutoff_date']}")
 
     try:
         await monitor_and_triage(

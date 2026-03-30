@@ -3,6 +3,7 @@
   "triages_output_dir": "~/octavia_bug_triages",
   "devstack_path": "/opt/stack",
   "max_bugs_per_run": 5,
+  "cutoff_date": null,
   "bug_statuses": [
     "New",
     "Confirmed",

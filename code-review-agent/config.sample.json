@@ -57,8 +57,10 @@
     "skip_draft": true,
     "comment": "Skip Work-In-Progress and draft changes",
     "min_patchset": 1,
+    "cutoff_date": null,
+    "comment2": "Cutoff date (YYYY-MM-DD) - ignore changes created before this date. Defaults to 30 days ago if null.",
     "include_authors": [],
     "exclude_authors": [],
-    "comment2": "Leave arrays empty to include/exclude no one"
+    "comment3": "Leave arrays empty to include/exclude no one"
   }
 }

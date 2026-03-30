@@ -11,6 +11,7 @@ Loads configuration from:
 import json
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
 
 
 def expand_path(path_str):
@@ -69,6 +70,7 @@ def load_config():
         "GERRIT_URL": ("gerrit", "base_url"),
         "MAX_REVIEWS": ("monitoring", "max_reviews_per_cycle"),
         "REVIEWED_CHANGES_FILE": ("monitoring", "reviewed_changes_file"),
+        "CUTOFF_DATE": ("filters", "cutoff_date"),
     }
 
     for env_var, (section, key) in env_overrides.items():
@@ -80,6 +82,14 @@ def load_config():
             if value.isdigit():
                 value = int(value)
             config[section][key] = value
+
+    # Handle cutoff_date: default to 30 days ago if not specified or null
+    if "filters" not in config:
+        config["filters"] = {}
+    if not config["filters"].get("cutoff_date"):
+        # Default to 30 days ago
+        default_cutoff = datetime.now() - timedelta(days=30)
+        config["filters"]["cutoff_date"] = default_cutoff.strftime('%Y-%m-%d')
 
     # Expand paths
     config["devstack"]["path"] = expand_path(config["devstack"]["path"])
@@ -99,6 +109,8 @@ def load_config():
         "reviewed_changes_file": config["monitoring"]["reviewed_changes_file"],
         "max_reviews_per_cycle": config["monitoring"].get("max_reviews_per_cycle", 3),
         "testing": config.get("testing", {}),
+        "cutoff_date": config["filters"]["cutoff_date"],
+        "filters": config.get("filters", {}),
     }
 
     return flat_config

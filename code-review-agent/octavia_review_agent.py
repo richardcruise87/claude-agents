@@ -243,8 +243,10 @@ async def monitor_and_review(repo_name, max_reviews=5):
                 changes_list = [changes_list]
 
             print(f"✓ Found {len(changes_list)} change(s)")
+            print(f"📅 Cutoff date: {CONFIG['cutoff_date']} (ignoring changes created before this date)")
 
             reviewed_count = 0
+            skipped_count = 0
             for change in changes_list[:max_reviews]:
                 # Extract change info from Gerrit JSON structure
                 change_id = change.get('id') or change.get('change_id')
@@ -266,6 +268,17 @@ async def monitor_and_review(repo_name, max_reviews=5):
                 if not all([change_id, change_number]):
                     print(f"⚠️  Skipping incomplete change: {subject}")
                     continue
+
+                # Check cutoff date - skip changes created before cutoff
+                change_created = change.get('created', '')
+                if change_created:
+                    # Parse created date (format: "2026-03-30 10:20:30.000000000")
+                    change_created_date = change_created.split(' ')[0]  # Get YYYY-MM-DD part
+                    if change_created_date < CONFIG['cutoff_date']:
+                        skipped_count += 1
+                        if skipped_count <= 5:  # Only show first 5 skipped changes
+                            print(f"⏭️  Skipping change #{change_number} - Created {change_created_date} (before cutoff)")
+                        continue
 
                 # Check if this specific patchset has been reviewed
                 if patchset:
@@ -294,6 +307,8 @@ async def monitor_and_review(repo_name, max_reviews=5):
                 reviewed_count += 1
 
             print(f"\n✅ Completed {reviewed_count} reviews for {repo_name}")
+            if skipped_count > 5:
+                print(f"⏭️  Skipped {skipped_count} changes created before cutoff date")
 
     except json.JSONDecodeError as e:
         print(f"⚠️  Could not parse JSON: {e}")
@@ -312,6 +327,7 @@ async def main():
     print("🚀 Octavia Code Review Agent Starting...")
     print(f"📁 Output directory: {CONFIG['reviews_output_dir']}")
     print(f"🏠 DevStack path: {CONFIG['devstack_path']}")
+    print(f"📅 Cutoff date: {CONFIG['cutoff_date']}")
 
     # Review all configured repos
     for repo in CONFIG["octavia_repos"]:

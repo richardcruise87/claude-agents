@@ -6,6 +6,7 @@ Loads configuration from config.json or environment variables.
 import json
 import os
 from pathlib import Path
+from datetime import datetime, timedelta
 
 
 def expand_path(path_str: str) -> str:
@@ -59,6 +60,15 @@ def load_config():
     if os.getenv('MAX_BUGS'):
         config['max_bugs_per_run'] = int(os.getenv('MAX_BUGS'))
 
+    if os.getenv('CUTOFF_DATE'):
+        config['cutoff_date'] = os.getenv('CUTOFF_DATE')
+
+    # Handle cutoff_date: default to 30 days ago if not specified or null
+    if not config.get('cutoff_date'):
+        # Default to 30 days ago
+        default_cutoff = datetime.now() - timedelta(days=30)
+        config['cutoff_date'] = default_cutoff.strftime('%Y-%m-%d')
+
     # Expand paths
     config['triages_output_dir'] = expand_path(config['triages_output_dir'])
     config['devstack_path'] = expand_path(config['devstack_path'])
@@ -76,6 +86,7 @@ if __name__ == "__main__":
         print(f"  - Output directory: {cfg['triages_output_dir']}")
         print(f"  - DevStack path: {cfg['devstack_path']}")
         print(f"  - Max bugs per run: {cfg['max_bugs_per_run']}")
+        print(f"  - Cutoff date: {cfg['cutoff_date']}")
     except Exception as e:
         print(f"✗ Error loading configuration: {e}")
         exit(1)
