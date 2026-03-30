@@ -11,6 +11,7 @@ AI-powered bug triage agent for OpenStack Octavia. Monitors Launchpad for bugs, 
 ✅ **Reproduction Strategy**: Creates detailed DevStack reproduction steps
 ✅ **Sequence Tracking**: Tracks multiple triages of the same bug
 ✅ **Smart Skipping**: Only re-triages bugs that have been updated
+✅ **Multi-Bug Handling**: Subprocess isolation for reliable multi-bug triaging
 ✅ **Configurable**: Portable configuration for different environments
 
 ## Prerequisites
@@ -311,6 +312,15 @@ export CLAUDE_CODE_USE_VERTEX=1
 gcloud auth application-default login
 ```
 
+### Asyncio cleanup warnings
+You may see warnings like:
+```
+RuntimeError: Attempted to exit cancel scope in a different task
+RuntimeError: Event loop is closed
+```
+
+These are harmless cleanup warnings from the Claude Agent SDK and do not affect triage quality. The subprocess isolation architecture ensures these warnings are isolated and don't impact the agent's functionality. The triages complete successfully despite these warnings appearing in the logs.
+
 ## Architecture
 
 ```
@@ -328,10 +338,58 @@ bug-triage-agent/
 **Data Flow**:
 1. `bug_triage_agent.py` fetches bugs from Launchpad
 2. `bug_tracker.py` checks if triage is needed
-3. `prompts/` loads and formats triage prompt
-4. Claude Agent SDK performs AI analysis
-5. Results saved to output directory
-6. `bug_tracker.py` records triage completion
+3. For each bug requiring triage:
+   - When `max_bugs_per_run > 1`: Spawns subprocess with `--single-bug` mode
+   - When `max_bugs_per_run = 1`: Direct async triage call
+4. `prompts/` loads and formats triage prompt
+5. Claude Agent SDK performs AI analysis
+6. Results saved to output directory
+7. `bug_tracker.py` records triage completion
+
+### Multi-Bug Triage: Subprocess Isolation
+
+**Challenge**: The Claude Agent SDK has asyncio cleanup issues when calling `query()` multiple times sequentially in the same event loop, causing `RuntimeError: Attempted to exit cancel scope in a different task` errors.
+
+**Solution**: Each bug triage runs in its own subprocess when `max_bugs_per_run > 1`:
+
+```python
+# Main process (bug_triage_agent.py)
+monitor_and_triage()
+  ↓
+  fetches bugs from Launchpad
+  checks tracking history
+  ↓
+  for each bug needing triage:
+    ↓
+    triage_bug_subprocess()  # Spawns isolated subprocess
+      ↓
+      creates temporary JSON file with bug data
+      runs: python bug_triage_agent.py --single-bug /tmp/bug_data.json
+        ↓
+        subprocess: main_single_bug()
+          ↓
+          loads bug data from JSON
+          calls triage_bug() with fresh asyncio loop
+          performs AI triage
+          saves report
+          updates tracking file
+          exits cleanly
+      ↓
+      main process continues to next bug
+```
+
+**Benefits**:
+- ✅ Each triage gets a fresh Python interpreter and asyncio event loop
+- ✅ SDK cleanup issues are isolated to each subprocess (harmless)
+- ✅ No state sharing between triages
+- ✅ Parallel execution possible (future enhancement)
+- ✅ Robust error isolation - one failing triage doesn't crash the entire run
+
+**Implementation**:
+- `--single-bug <json-file>`: Internal subprocess mode
+- `triage_bug_subprocess()`: Spawns subprocess for isolated triage
+- `main_single_bug()`: Entry point for subprocess mode
+- Direct async call when `max_bugs_per_run = 1` (simpler for debugging)
 
 ## License
 

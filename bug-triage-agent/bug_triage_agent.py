@@ -7,6 +7,8 @@ strategies, checks for duplicates and potential fixes.
 """
 import asyncio
 import sys
+import json
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from claude_agent_sdk import query, ClaudeAgentOptions
@@ -234,6 +236,47 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         return None
 
 
+def triage_bug_subprocess(bug_info: dict, sequence: int, previous_summary: str = None, previous_seq: int = None):
+    """
+    Triage a bug in a subprocess to avoid asyncio cleanup issues.
+
+    Args:
+        bug_info: Bug information dictionary
+        sequence: Sequence number for this triage
+        previous_summary: Optional summary from previous triage
+        previous_seq: Previous sequence number
+
+    Returns:
+        True if successful, False otherwise
+    """
+    # Create a temporary file with bug info
+    import tempfile
+    bug_data = {
+        'bug_info': bug_info,
+        'sequence': sequence,
+        'previous_summary': previous_summary,
+        'previous_seq': previous_seq,
+    }
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(bug_data, f)
+        temp_file = f.name
+
+    try:
+        # Run this script in single-bug mode
+        # Use -u for unbuffered output
+        result = subprocess.run(
+            [sys.executable, '-u', __file__, '--single-bug', temp_file],
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            text=True,
+        )
+        return result.returncode == 0
+    finally:
+        # Clean up temp file
+        Path(temp_file).unlink(missing_ok=True)
+
+
 async def monitor_and_triage(project: str, max_bugs: int = 5):
     """
     Monitor Launchpad and triage bugs.
@@ -297,11 +340,45 @@ async def monitor_and_triage(project: str, max_bugs: int = 5):
         print(f"\n📌 Bug #{bug_number}: {bug['title'][:60]}")
         print(f"   Status: {bug['status']} | Importance: {bug['importance']} | Sequence: {sequence}")
 
-        # Triage the bug
-        await triage_bug(bug, sequence, previous_summary, previous_seq)
-        triaged_count += 1
+        # Triage the bug in a subprocess to avoid asyncio cleanup issues
+        if max_bugs > 1:
+            # Use subprocess for multiple bugs
+            success = triage_bug_subprocess(bug, sequence, previous_summary, previous_seq)
+            if success:
+                triaged_count += 1
+        else:
+            # Use direct async call for single bug (simpler for debugging)
+            await triage_bug(bug, sequence, previous_summary, previous_seq)
+            triaged_count += 1
 
     print(f"\n✅ Completed {triaged_count} triages for {project}")
+
+
+async def main_single_bug(bug_data_file: str):
+    """
+    Main entry point for single-bug triage mode (called from subprocess).
+
+    Args:
+        bug_data_file: Path to JSON file with bug data
+    """
+    # Load bug data
+    with open(bug_data_file, 'r') as f:
+        data = json.load(f)
+
+    bug_info = data['bug_info']
+    sequence = data['sequence']
+    previous_summary = data.get('previous_summary')
+    previous_seq = data.get('previous_seq')
+
+    # Triage the bug
+    try:
+        await triage_bug(bug_info, sequence, previous_summary, previous_seq)
+        return True
+    except Exception as e:
+        print(f"❌ Error during triage: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 async def main():
@@ -331,4 +408,17 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Octavia Bug Triage Agent')
+    parser.add_argument('--single-bug', metavar='BUG_DATA_FILE',
+                        help='Triage a single bug (used internally for subprocess mode)')
+    args = parser.parse_args()
+
+    if args.single_bug:
+        # Single-bug mode (called from subprocess)
+        success = asyncio.run(main_single_bug(args.single_bug))
+        sys.exit(0 if success else 1)
+    else:
+        # Normal mode
+        asyncio.run(main())
