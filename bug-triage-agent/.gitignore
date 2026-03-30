@@ -7,6 +7,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
+*.egg-info/
+dist/
+build/
 
 # Triage outputs (optional - comment out if you want to commit triages)
 triages/

@@ -343,5 +343,10 @@ async def main():
     print("="*80)
 
 
-if __name__ == "__main__":
+def cli_main():
+    """Main entry point for command-line usage."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli_main()

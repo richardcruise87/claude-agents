@@ -424,7 +424,8 @@ async def main():
     print("="*80)
 
 
-if __name__ == "__main__":
+def cli_main():
+    """Main entry point for command-line usage."""
     import argparse
 
     parser = argparse.ArgumentParser(description='Octavia Bug Triage Agent')
@@ -439,3 +440,7 @@ if __name__ == "__main__":
     else:
         # Normal mode
         asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli_main()

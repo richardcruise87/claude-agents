@@ -1,0 +1,5 @@
+include README.md
+include QUICK_START.md
+include OCTAVIA_REVIEW_README.md
+include config.sample.json
+recursive-include prompts *.txt

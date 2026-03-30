@@ -1,0 +1,4 @@
+include README.md
+include QUICK_START.md
+include config.sample.json
+recursive-include prompts *.txt

@@ -315,5 +315,10 @@ Examples:
     asyncio.run(review_specific_change(args.change, patchset))
 
 
-if __name__ == "__main__":
+def cli_main():
+    """Main entry point for command-line usage."""
     main()
+
+
+if __name__ == "__main__":
+    cli_main()

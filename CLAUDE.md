@@ -27,6 +27,55 @@ This repository contains Claude-based automation agents for OpenStack project ma
 
 ---
 
+## Installation
+
+### Package-based Installation (Recommended)
+
+All agents can be installed as Python packages using pip:
+
+```bash
+# Create virtual environment (recommended)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install shared library
+pip install -e agents_lib/
+
+# Install agents individually
+pip install -e bug-triage-agent/    # Provides: octavia-triage-bugs
+pip install -e code-review-agent/   # Provides: octavia-review-agent, octavia-review-change
+```
+
+**Installed Commands:**
+- `octavia-triage-bugs [--single-bug FILE]` - Bug triage agent
+- `octavia-review-agent` - Code review monitoring agent
+- `octavia-review-change <change_number> [patchset]` - Review specific change
+
+**Dependencies:**
+Each agent package automatically installs:
+- `claude-agent-sdk` - AI agent framework
+- `agents-lib` - Shared utilities library
+
+### Direct Execution (Development)
+
+```bash
+# Run agents directly without installation
+cd bug-triage-agent
+./bug_triage_agent.py
+
+cd code-review-agent
+./octavia_review_agent.py
+./review_single_change.py <change_number>
+```
+
+**Note:** Direct execution requires `agents_lib` to be installed separately:
+```bash
+cd agents_lib
+pip install -e .
+```
+
+---
+
 ## Repository Structure
 
 ```
@@ -45,6 +94,8 @@ claude-agents/
 │       └── utils.py             # Common utilities
 │
 ├── bug-triage-agent/            # Launchpad bug triage agent
+│   ├── setup.py                 # Package installation
+│   ├── MANIFEST.in              # Package data inclusion
 │   ├── bug_triage_agent.py      # Main agent (fetches bugs, orchestrates)
 │   ├── config.py                # Configuration loader
 │   ├── config.sample.json       # Template configuration
@@ -57,6 +108,8 @@ claude-agents/
 │   └── QUICK_START.md           # Quick start guide
 │
 └── code-review-agent/           # Gerrit code review agent
+    ├── setup.py                 # Package installation
+    ├── MANIFEST.in              # Package data inclusion
     ├── octavia_review_agent.py  # Main monitoring agent
     ├── review_single_change.py  # Single change review script
     ├── config.py                # Configuration loader
