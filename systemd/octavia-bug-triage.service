@@ -6,7 +6,6 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=%u
 WorkingDirectory=%h/git/claude-agents/bug-triage-agent
 
 # Virtual environment activation and execution
