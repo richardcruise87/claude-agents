@@ -60,8 +60,9 @@ async def fetch_pending_changes(repo_name):
 
     gerrit_query_url = (
         f"{CONFIG['gerrit_base_url']}/changes/"
-        f"?q=project:{repo_name}+status:open"
+        f"?q=project:{repo_name}+status:open+-age:180d"  # Only changes from last 180 days
         "&o=CURRENT_REVISION&o=CURRENT_COMMIT&o=DETAILED_ACCOUNTS"
+        "&n=50"  # Limit to 50 most recent changes
     )
 
     try:
@@ -245,9 +246,60 @@ async def monitor_and_review(repo_name, max_reviews=5):
             print(f"✓ Found {len(changes_list)} change(s)")
             print(f"📅 Cutoff date: {CONFIG['cutoff_date']} (ignoring changes created before this date)")
 
+            # Filter changes first, then sort by date (newest first), then take max_reviews
+            filtered_changes = []
+            skipped_old = 0
+            skipped_reviewed = 0
+
+            for change in changes_list:
+                # Extract basic info for filtering
+                change_id = change.get('id') or change.get('change_id')
+                change_number = str(change.get('_number', ''))
+
+                if not all([change_id, change_number]):
+                    continue
+
+                # Check cutoff date - skip changes created before cutoff
+                change_created = change.get('created', '')
+                if change_created:
+                    change_created_date = change_created.split(' ')[0]  # Get YYYY-MM-DD part
+                    if change_created_date < CONFIG['cutoff_date']:
+                        skipped_old += 1
+                        continue
+
+                # Get patchset for review tracking
+                current_revision = change.get('current_revision')
+                revisions = change.get('revisions', {})
+                patchset = None
+                if current_revision and current_revision in revisions:
+                    patchset = revisions[current_revision].get('_number')
+
+                # Check if this specific patchset has been reviewed
+                if patchset:
+                    patchset_review_id = f"{change_id}~ps{patchset}"
+                    if patchset_review_id in reviewed:
+                        skipped_reviewed += 1
+                        continue
+                else:
+                    if change_id in reviewed:
+                        skipped_reviewed += 1
+                        continue
+
+                # This change is eligible for review
+                filtered_changes.append(change)
+
+            # Sort by created date (newest first)
+            filtered_changes.sort(key=lambda c: c.get('created', ''), reverse=True)
+
+            print(f"✓ Filtered to {len(filtered_changes)} reviewable change(s)")
+            if skipped_old > 0:
+                print(f"⏭️  Skipped {skipped_old} changes created before cutoff date")
+            if skipped_reviewed > 0:
+                print(f"⏭️  Skipped {skipped_reviewed} already reviewed changes")
+
+            # Review up to max_reviews of the newest changes
             reviewed_count = 0
-            skipped_count = 0
-            for change in changes_list[:max_reviews]:
+            for change in filtered_changes[:max_reviews]:
                 # Extract change info from Gerrit JSON structure
                 change_id = change.get('id') or change.get('change_id')
                 change_number = str(change.get('_number', ''))
@@ -264,35 +316,11 @@ async def monitor_and_review(repo_name, max_reviews=5):
                     patchset = revisions[current_revision].get('_number')
 
                 subject = change.get('subject', 'No subject')
-
-                if not all([change_id, change_number]):
-                    print(f"⚠️  Skipping incomplete change: {subject}")
-                    continue
-
-                # Check cutoff date - skip changes created before cutoff
                 change_created = change.get('created', '')
-                if change_created:
-                    # Parse created date (format: "2026-03-30 10:20:30.000000000")
-                    change_created_date = change_created.split(' ')[0]  # Get YYYY-MM-DD part
-                    if change_created_date < CONFIG['cutoff_date']:
-                        skipped_count += 1
-                        if skipped_count <= 5:  # Only show first 5 skipped changes
-                            print(f"⏭️  Skipping change #{change_number} - Created {change_created_date} (before cutoff)")
-                        continue
-
-                # Check if this specific patchset has been reviewed
-                if patchset:
-                    patchset_review_id = f"{change_id}~ps{patchset}"
-                    if patchset_review_id in reviewed:
-                        print(f"⏭️  Skipping already reviewed: #{change_number} PS{patchset} - {subject}")
-                        continue
-                else:
-                    # Fallback: check if change was reviewed (backward compatibility)
-                    if change_id in reviewed:
-                        print(f"⏭️  Skipping already reviewed: #{change_number} - {subject}")
-                        continue
+                change_created_date = change_created.split(' ')[0] if change_created else 'unknown'
 
                 print(f"\n📌 Reviewing change #{change_number} PS{patchset if patchset else '?'}: {subject}")
+                print(f"   Created: {change_created_date}")
 
                 # If we don't have the ref, construct it
                 if not revision_ref and change_number:
@@ -307,8 +335,8 @@ async def monitor_and_review(repo_name, max_reviews=5):
                 reviewed_count += 1
 
             print(f"\n✅ Completed {reviewed_count} reviews for {repo_name}")
-            if skipped_count > 5:
-                print(f"⏭️  Skipped {skipped_count} changes created before cutoff date")
+            if len(filtered_changes) > max_reviews:
+                print(f"📋 {len(filtered_changes) - max_reviews} more reviewable changes remain (will process on next run)")
 
     except json.JSONDecodeError as e:
         print(f"⚠️  Could not parse JSON: {e}")
