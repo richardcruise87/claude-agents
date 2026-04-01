@@ -53,12 +53,15 @@ async def generate_initial_script(
         model="sonnet",  # Use Sonnet for script generation
     )
 
-    result = await query(prompt, options=options)
+    # Query returns an async generator of messages
+    async for message in query(prompt=prompt, options=options):
+        if hasattr(message, 'result'):
+            # Extract script from response (handle markdown code blocks)
+            script = extract_script_from_response(message.result)
+            return script
 
-    # Extract script from response (handle markdown code blocks)
-    script = extract_script_from_response(result)
-
-    return script
+    # Fallback if no result received
+    raise RuntimeError("No result received from AI agent")
 
 
 async def refine_script(
@@ -104,12 +107,15 @@ async def refine_script(
         model="sonnet",  # Use Sonnet for refinement
     )
 
-    result = await query(prompt, options=options)
+    # Query returns an async generator of messages
+    async for message in query(prompt=prompt, options=options):
+        if hasattr(message, 'result'):
+            # Extract script from response
+            script = extract_script_from_response(message.result)
+            return script
 
-    # Extract script from response
-    script = extract_script_from_response(result)
-
-    return script
+    # Fallback if no result received
+    raise RuntimeError("No result received from AI agent")
 
 
 def extract_script_from_response(response: str) -> str:

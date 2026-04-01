@@ -136,7 +136,7 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
 
     if not review_script.exists():
         print(f"❌ Error: review_single_change.py not found at {review_script}")
-        save_reviewed_change(change_id, patchset)
+        print(f"⚠️  Will retry on next pass")
         return None
 
     try:
@@ -166,37 +166,38 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
         if result.stderr:
             print(result.stderr, file=sys.stderr)
 
-        if result.returncode == 0:
-            print(f"\n✅ Review Complete!")
-            save_reviewed_change(change_id, patchset)
-
-            # Find the review file that was created
-            output_dir = Path(CONFIG["reviews_output_dir"])
-            if patchset:
-                pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_ps{patchset}_*.md"
-            else:
-                pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*.md"
-            review_files = list(output_dir.glob(pattern))
-
-            if review_files:
-                review_file = max(review_files, key=lambda p: p.stat().st_mtime)
-                print(f"📄 Review saved to: {review_file}")
-                return review_file
-            else:
-                print(f"📄 Review completed (check {output_dir})")
-                return None
+        # Find the review file that was created
+        output_dir = Path(CONFIG["reviews_output_dir"])
+        if patchset:
+            pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_ps{patchset}_*.md"
         else:
-            print(f"\n❌ Review failed with exit code {result.returncode}")
+            pattern = f"review_{repo_name.replace('/', '_')}_{change_number}_*.md"
+        review_files = list(output_dir.glob(pattern))
+
+        if review_files:
+            # Review file exists - mark as complete
+            review_file = max(review_files, key=lambda p: p.stat().st_mtime)
+            print(f"\n✅ Review Complete!")
+            print(f"📄 Review saved to: {review_file}")
             save_reviewed_change(change_id, patchset)
+            return review_file
+        else:
+            # No review file found - don't mark as complete so it retries
+            print(f"\n❌ Review file not found - will retry on next pass")
+            print(f"   Expected pattern: {pattern} in {output_dir}")
+            if result.returncode != 0:
+                print(f"   Exit code: {result.returncode}")
             return None
 
     except subprocess.TimeoutExpired:
         print(f"\n❌ Review timed out after 30 minutes")
-        save_reviewed_change(change_id, patchset)
+        print(f"⚠️  Will retry on next pass")
         return None
     except Exception as e:
         print(f"\n❌ Error during review: {e}")
-        save_reviewed_change(change_id, patchset)
+        print(f"⚠️  Will retry on next pass")
+        import traceback
+        traceback.print_exc()
         return None
 
 

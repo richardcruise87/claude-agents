@@ -53,12 +53,18 @@ tox -e py3
 If tox isn't available, try: `python -m pytest octavia/tests/unit` or similar.
 Capture all output, failures, and warnings.
 
-## Step 5: Run Functional Tests (if applicable)
-Try to run functional tests:
+## Step 5: Run Functional Tests
+Run functional tests using tox:
 ```bash
+cd {repo_path}
 tox -e functional
 ```
-If not available, document that functional tests were skipped.
+
+**IMPORTANT:** The functional tests will run without a DevStack setup. Run them and capture the results.
+- If the tox environment doesn't exist, check `tox.ini` for the correct environment name
+- Common environment names: `functional`, `func`, `api`
+- If tox fails to find the environment, document that functional tests are not available for this repository
+- Capture all output, failures, and warnings
 
 ## Step 6: Code Quality Checks
 Run linting/style checks:
@@ -121,7 +127,9 @@ Document:
    - Commands to verify
 
 ## Step 9: Generate Review Document
-Create a comprehensive markdown review saved to: {review_file}
+Use the Write tool to save a comprehensive markdown review to: {review_file}
+
+**IMPORTANT**: You MUST use the Write tool to save the review document. Do not just output the review - actually write it to the file.
 
 **Document Structure:**
 
@@ -194,8 +202,8 @@ Create a comprehensive markdown review saved to: {review_file}
 ```
 [Full test output or summary]
 ```
-**Status**: ✅ PASS / ❌ FAIL / ⏭️ SKIPPED
-**Details**: [Results or reason for skipping]
+**Status**: ✅ PASS / ❌ FAIL / ⚠️ NOT AVAILABLE
+**Details**: [Test results, failures, or note if repository doesn't have functional tests]
 
 ### Code Quality Checks (PEP8/Flake8)
 ```

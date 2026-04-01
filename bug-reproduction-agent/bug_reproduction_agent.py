@@ -232,7 +232,14 @@ async def process_triage(triage_file: Path) -> bool:
 
         print(f"   💾 Saved report: {report_file}")
 
-        # Record in tracking
+        # Verify report file was created before marking as complete
+        if not report_file.exists():
+            print(f"\n❌ ERROR: Report file not found after write!")
+            print(f"   Expected: {report_file}")
+            print(f"   Will retry on next pass")
+            return False
+
+        # Record in tracking (only after confirming file exists)
         triage_timestamp = get_triage_timestamp(triage_file)
         tracking_file = Path(CONFIG["reproduction_tracking_file"])
         record_reproduction(
@@ -244,6 +251,7 @@ async def process_triage(triage_file: Path) -> bool:
             len(attempts),
             str(script_path) if script_path else None
         )
+        print(f"   ✓ Recorded in tracking file")
 
         print(f"\n{'='*80}")
         if final_status == "REPRODUCED":

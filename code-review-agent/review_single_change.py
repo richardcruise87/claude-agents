@@ -241,6 +241,7 @@ This change has been reviewed before.
 
     print("🤖 Starting comprehensive code review...\n")
 
+    review_result = None
     try:
         async for message in query(
             prompt=prompt,
@@ -251,11 +252,23 @@ This change has been reviewed before.
             if hasattr(message, 'text'):
                 print(f"  {message.text}")
             elif hasattr(message, 'result'):
+                review_result = message.result
                 print(f"\n{'='*80}")
                 print(f"✅ Review Complete!")
                 print(f"{'='*80}")
                 print(f"\n📄 Review Document: {review_file}")
-                print(f"\nSummary:\n{message.result}")
+                print(f"\nSummary:\n{review_result[:500]}...")
+
+        # Ensure the review file was created
+        if not review_file.exists() and review_result:
+            print(f"\n⚠️  Review file not found - saving result now...")
+            review_file.write_text(review_result)
+            print(f"✓ Saved review to: {review_file}")
+        elif not review_file.exists():
+            print(f"\n❌ WARNING: Review file was not created and no result received!")
+            return
+        else:
+            print(f"\n✓ Review file confirmed at: {review_file}")
 
     except Exception as e:
         print(f"\n❌ Error during review: {e}")

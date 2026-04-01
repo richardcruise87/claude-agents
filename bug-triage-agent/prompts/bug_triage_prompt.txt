@@ -180,4 +180,5 @@ Recommendation: [Specific recommendation]
 - Suggest concrete commands and code to investigate
 - Consider edge cases and potential side effects
 - Focus on helping developers understand and fix the bug quickly
-- Save the complete triage to: {triage_file}
+- Use the Write tool to save the complete triage document to: {triage_file}
+- DO NOT just output the triage - you MUST actually write it to the file using the Write tool

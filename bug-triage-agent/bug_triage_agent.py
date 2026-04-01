@@ -73,36 +73,45 @@ async def fetch_bugs_from_launchpad(project: str, statuses: list, max_bugs: int 
                 if not bug_link:
                     continue
 
-                # Fetch bug details
-                bug_response = await client.get(bug_link)
-                bug_data = bug_response.json()
+                try:
+                    # Fetch bug details
+                    bug_response = await client.get(bug_link)
+                    bug_response.raise_for_status()
+                    bug_data = bug_response.json()
 
-                bug_info = {
-                    'number': str(bug_data.get('id', '')),
-                    'title': bug_data.get('title', 'No title'),
-                    'description': bug_data.get('description', 'No description'),
-                    'status': entry.get('status', 'Unknown'),
-                    'importance': entry.get('importance', 'Undecided'),
-                    'date_created': bug_data.get('date_created', ''),
-                    'date_last_updated': entry.get('date_last_updated', ''),
-                    'web_link': bug_data.get('web_link', ''),
-                    'owner_link': bug_data.get('owner_link', ''),
-                }
+                    bug_info = {
+                        'number': str(bug_data.get('id', '')),
+                        'title': bug_data.get('title', 'No title'),
+                        'description': bug_data.get('description', 'No description'),
+                        'status': entry.get('status', 'Unknown'),
+                        'importance': entry.get('importance', 'Undecided'),
+                        'date_created': bug_data.get('date_created', ''),
+                        'date_last_updated': entry.get('date_last_updated', ''),
+                        'web_link': bug_data.get('web_link', ''),
+                        'owner_link': bug_data.get('owner_link', ''),
+                    }
 
-                # Get reporter name
-                if bug_data.get('owner_link'):
-                    try:
-                        owner_response = await client.get(bug_data['owner_link'])
-                        owner_data = owner_response.json()
-                        bug_info['reporter'] = owner_data.get('display_name', 'Unknown')
-                    except:
+                    # Get reporter name
+                    if bug_data.get('owner_link'):
+                        try:
+                            owner_response = await client.get(bug_data['owner_link'])
+                            owner_response.raise_for_status()
+                            owner_data = owner_response.json()
+                            bug_info['reporter'] = owner_data.get('display_name', 'Unknown')
+                        except:
+                            bug_info['reporter'] = 'Unknown'
+                    else:
                         bug_info['reporter'] = 'Unknown'
-                else:
-                    bug_info['reporter'] = 'Unknown'
 
-                bugs.append(bug_info)
+                    bugs.append(bug_info)
 
-                print(f"  - Bug #{bug_info['number']}: {bug_info['title'][:60]}...")
+                    print(f"  - Bug #{bug_info['number']}: {bug_info['title'][:60]}...")
+
+                except Exception as e:
+                    # Skip this bug and continue with others
+                    bug_num = bug_link.split('/')[-1] if bug_link else 'unknown'
+                    print(f"  ⚠️  Skipping bug {bug_num}: {e}")
+                    continue
 
             return bugs
 
@@ -202,6 +211,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
 
     print("🤖 Starting bug triage analysis...\n")
 
+    triage_result = None
     try:
         async for message in query(
             prompt=prompt,
@@ -212,22 +222,37 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             if hasattr(message, 'text'):
                 print(f"  {message.text}")
             elif hasattr(message, 'result'):
+                triage_result = message.result
                 print(f"\n{'='*80}")
                 print(f"✅ Triage Complete!")
                 print(f"{'='*80}")
                 print(f"\n📄 Triage saved to: {triage_file}")
-                print(f"\nSummary:\n{message.result[:500]}...")
+                print(f"\nSummary:\n{triage_result[:500]}...")
 
-                # Record that we triaged this bug
-                tracking_file = Path(CONFIG['triage_tracking_file'])
-                record_triage(
-                    tracking_file,
-                    bug_number,
-                    bug_info['date_last_updated'],
-                    sequence
-                )
+        # Verify triage file was created before marking as complete
+        if not triage_file.exists() and triage_result:
+            print(f"\n⚠️  Triage file not found - saving result now...")
+            triage_file.write_text(triage_result)
+            print(f"✓ Saved triage to: {triage_file}")
+        elif not triage_file.exists():
+            print(f"\n❌ ERROR: Triage file not found and no result received!")
+            print(f"   Expected: {triage_file}")
+            print(f"   Will retry on next pass")
+            return None
+        else:
+            print(f"\n✓ Triage file confirmed at: {triage_file}")
 
-                return triage_file
+        # Record that we triaged this bug (only after confirming file exists)
+        tracking_file = Path(CONFIG['triage_tracking_file'])
+        record_triage(
+            tracking_file,
+            bug_number,
+            bug_info['date_last_updated'],
+            sequence
+        )
+        print(f"   ✓ Recorded in tracking file")
+
+        return triage_file
 
     except Exception as e:
         print(f"\n❌ Error during triage: {e}")
