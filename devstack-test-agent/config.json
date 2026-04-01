@@ -1,0 +1,31 @@
+{
+  "reviews_directory": "~/octavia_reviews",
+
+  "devstack": {
+    "path": "/opt/stack",
+    "openrc_file": "~/git/devstack/openrc",
+    "required_services": [
+      "devstack@o-api.service",
+      "devstack@o-cw.service",
+      "devstack@o-hm.service"
+    ],
+    "min_disk_space_gb": 10,
+    "lock_timeout": 300
+  },
+
+  "testing": {
+    "test_timeout": 600,
+    "cleanup_on_failure": true
+  },
+
+  "tracking": {
+    "tested_reviews_file": "~/.octavia_devstack_tests.json"
+  },
+
+  "filters": {
+    "only_test_repositories": [
+      "openstack/octavia"
+    ],
+    "skip_merged": true
+  }
+}
