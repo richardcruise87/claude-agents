@@ -252,6 +252,8 @@ Use the Write tool to save a comprehensive markdown review to: {review_file}
 2. ✅ Functional tests: `tox -e functional`
 3. ✅ Code style: `tox -e pep8`
 
+**Note**: DevStack integration testing is performed separately by the DevStack Test Agent and will be added to this review asynchronously.
+
 ### Recommended Additional Testing
 
 1. **Integration Testing**:
@@ -364,6 +366,7 @@ Use the Write tool to save a comprehensive markdown review to: {review_file}
 ```
 
 ## Step 10: Return to Original Branch
+
 Return to the original git branch:
 ```bash
 cd {repo_path}
@@ -377,3 +380,5 @@ git checkout <original_branch>
 - Balance criticism with recognition of good work
 - Consider OpenStack community standards
 - DO NOT post to Gerrit - only save locally
+
+**Note**: DevStack integration testing is performed asynchronously by a separate agent after code review completes.

@@ -24,7 +24,7 @@ pip install claude-agent-sdk httpx
 
 ### 2. Create Configuration
 ```bash
-cd /home/rcruise/git/claude-agents/bug-triage-agent
+cd ~/git/claude-agents/bug-triage-agent
 cp config.sample.json config.json
 
 # Edit config.json if needed (optional)
@@ -69,7 +69,7 @@ ls ~/octavia_bug_triages/*.md | wc -l
 $ ./bug_triage_agent.py
 
 🚀 Bug Triage Agent Starting...
-📁 Output directory: /home/rcruise/octavia_bug_triages
+📁 Output directory: ~/octavia_bug_triages
 🐛 Project: octavia
 
 🔍 Fetching bugs from Launchpad for octavia...
@@ -92,7 +92,7 @@ $ ./bug_triage_agent.py
 📄 Triage saved to: bug_2070819_octavia_fails_to_create_load_balancer_20260330_143052_1.md
 
 ✅ Completed 5 triages for octavia
-📊 Triages saved to: /home/rcruise/octavia_bug_triages
+📊 Triages saved to: ~/octavia_bug_triages
 ```
 
 ## Triage Report Contents
@@ -219,12 +219,12 @@ Edit `config.json`:
 crontab -e
 
 # Add this line:
-0 */6 * * * cd /home/rcruise/git/claude-agents/bug-triage-agent && ./bug_triage_agent.py >> ~/triage.log 2>&1
+0 */6 * * * cd ~/git/claude-agents/bug-triage-agent && ./bug_triage_agent.py >> ~/triage.log 2>&1
 ```
 
 ### Run Daily at 9 AM
 ```bash
-0 9 * * * cd /home/rcruise/git/claude-agents/bug-triage-agent && ./bug_triage_agent.py >> ~/triage.log 2>&1
+0 9 * * * cd ~/git/claude-agents/bug-triage-agent && ./bug_triage_agent.py >> ~/triage.log 2>&1
 ```
 
 ## Troubleshooting

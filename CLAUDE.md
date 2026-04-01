@@ -367,11 +367,11 @@ Example: reproduction_2146764_test_backup_member_randomly_fails_20260330_143022_
 {
   "bug_2146764": {
     "last_processed": "2026-03-30T14:30:22.123456",
-    "triage_file": "/home/rcruise/octavia_bug_triages/bug_2146764_..._1.md",
+    "triage_file": "~/octavia_bug_triages/bug_2146764_..._1.md",
     "sequence": 1,
     "reproduction_status": "REPRODUCED",
     "attempts": 2,
-    "final_script_path": "/home/rcruise/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh"
+    "final_script_path": "~/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh"
   }
 }
 ```
@@ -458,12 +458,12 @@ Services are installed to: `~/.config/systemd/user/`
 ```ini
 [Service]
 Type=oneshot
-User=rcruise
-WorkingDirectory=/home/rcruise/git/claude-agents/bug-triage-agent
-ExecStart=/home/rcruise/.venv/claude-agents/bin/octavia-triage-bugs
+WorkingDirectory=~/git/claude-agents/bug-triage-agent
+ExecStart=~/.venv/claude-agents/bin/octavia-triage-bugs
 Environment="CLAUDE_CODE_USE_VERTEX=1"
 StandardOutput=journal
 ```
+**Note:** User services don't need the `User=` directive - they run as the user automatically.
 
 ### Timer Schedules
 

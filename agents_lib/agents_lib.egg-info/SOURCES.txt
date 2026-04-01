@@ -1,6 +1,8 @@
 setup.py
 agents_lib/__init__.py
 agents_lib/config_loader.py
+agents_lib/devstack_checks.py
+agents_lib/devstack_lock.py
 agents_lib/prompt_loader.py
 agents_lib/tracking.py
 agents_lib/utils.py

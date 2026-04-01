@@ -60,11 +60,11 @@ python3 -m venv ~/.venv/claude-agents
 source ~/.venv/claude-agents/bin/activate
 
 # Install shared library
-cd /home/rcruise/git/claude-agents/agents_lib
+cd ~/git/claude-agents/agents_lib
 pip install -e .
 
 # Install bug-reproduction-agent
-cd /home/rcruise/git/claude-agents/bug-reproduction-agent
+cd ~/git/claude-agents/bug-reproduction-agent
 pip install -e .
 ```
 
@@ -95,7 +95,7 @@ vim config.json
 
 ```bash
 # Run setup script
-cd /home/rcruise/git/claude-agents/systemd
+cd ~/git/claude-agents/systemd
 ./setup-systemd.sh
 
 # Enable and start path watcher
@@ -243,11 +243,11 @@ Tracks which bugs have been processed to avoid duplicates.
 {
   "bug_2146764": {
     "last_processed": "2026-03-30T14:30:22.123456",
-    "triage_file": "/home/rcruise/octavia_bug_triages/bug_2146764_..._1.md",
+    "triage_file": "~/octavia_bug_triages/bug_2146764_..._1.md",
     "sequence": 1,
     "reproduction_status": "REPRODUCED",
     "attempts": 2,
-    "final_script_path": "/home/rcruise/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh"
+    "final_script_path": "~/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh"
   }
 }
 ```
@@ -515,7 +515,7 @@ TimeoutSec=3600       # 1 hour timeout
 
 ```bash
 # Test triage parsing
-cd /home/rcruise/git/claude-agents/bug-reproduction-agent
+cd ~/git/claude-agents/bug-reproduction-agent
 python3 -c "
 from triage_parser import parse_triage_file
 from pathlib import Path

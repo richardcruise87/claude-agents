@@ -71,12 +71,12 @@ Set up hourly monitoring:
 crontab -e
 
 # Add this line (runs every hour at :00)
-0 * * * * /usr/bin/python3 /home/rcruise/git/claude-agents/code-review-agent/octavia_review_agent.py >> /home/rcruise/octavia_reviews.log 2>&1
+0 * * * * python3 ~/git/claude-agents/code-review-agent/octavia_review_agent.py >> ~/octavia_reviews.log 2>&1
 ```
 
 Or every 4 hours:
 ```bash
-0 */4 * * * /usr/bin/python3 /home/rcruise/octavia_review_agent.py >> /home/rcruise/octavia_reviews.log 2>&1
+0 */4 * * * /usr/bin/python3 ~/octavia_review_agent.py >> ~/octavia_reviews.log 2>&1
 ```
 
 ---

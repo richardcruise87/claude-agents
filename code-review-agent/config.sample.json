@@ -10,7 +10,17 @@
 
   "devstack": {
     "path": "/opt/stack",
-    "comment": "Path to your DevStack installation. Change this to match your setup."
+    "openrc_file": "~/git/devstack/openrc",
+    "required_services": [
+      "devstack@o-api.service",
+      "devstack@o-cw.service",
+      "devstack@o-hm.service"
+    ],
+    "min_disk_space_gb": 10,
+    "verify_main_branch": true,
+    "test_in_devstack": true,
+    "cleanup_on_failure": true,
+    "comment": "DevStack configuration. test_in_devstack enables deploying and testing changes in DevStack. cleanup_on_failure removes test resources even if tests fail."
   },
 
   "output": {

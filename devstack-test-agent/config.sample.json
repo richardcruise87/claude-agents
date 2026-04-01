@@ -1,0 +1,39 @@
+{
+  "comment": "Copy this file to config.json and customize for your environment",
+
+  "reviews_directory": "~/octavia_reviews",
+  "comment_reviews": "Directory to watch for new code reviews",
+
+  "devstack": {
+    "path": "/opt/stack",
+    "openrc_file": "~/git/devstack/openrc",
+    "required_services": [
+      "devstack@o-api.service",
+      "devstack@o-cw.service",
+      "devstack@o-hm.service"
+    ],
+    "min_disk_space_gb": 10,
+    "lock_timeout": 300,
+    "comment": "DevStack configuration. lock_timeout in seconds to wait for exclusive access."
+  },
+
+  "testing": {
+    "test_timeout": 600,
+    "cleanup_on_failure": true,
+    "comment": "Test timeout in seconds. cleanup_on_failure removes test resources even if tests fail."
+  },
+
+  "tracking": {
+    "tested_reviews_file": "~/.octavia_devstack_tests.json",
+    "comment": "Tracks which reviews have been tested in DevStack"
+  },
+
+  "filters": {
+    "only_test_repositories": [
+      "openstack/octavia"
+    ],
+    "comment": "Only test changes from these repositories. Empty array = test all. Client libraries and tempest plugins don't need DevStack testing.",
+    "skip_merged": true,
+    "comment2": "Skip testing changes that are already merged"
+  }
+}

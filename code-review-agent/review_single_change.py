@@ -26,6 +26,10 @@ from patchset_tracker import (
     extract_patchset_from_review
 )
 from prompts import get_code_review_prompt
+from agents_lib import (
+    check_repo_on_main_branch,
+    checkout_main_branch,
+)
 
 # Load configuration
 CONFIG = load_config()
@@ -174,6 +178,29 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         print(f"❌ Repository not found at: {repo_path}")
         print(f"   Please ensure DevStack is set up correctly.")
         return
+
+    # Pre-flight checks
+    print("🔍 Running pre-flight checks...\n")
+
+    # Check repository is on main/master branch
+    devstack_config = CONFIG.get("devstack", {})
+    if devstack_config.get("verify_main_branch", True):
+        print(f"📋 Checking repository branch...")
+        branch_check = check_repo_on_main_branch(repo_path)
+        if not branch_check.on_main:
+            print(f"   ⚠️  {branch_check.error}")
+            print(f"   Current branch: {branch_check.current_branch}")
+            print(f"   Attempting to checkout main/master...")
+            success, message = checkout_main_branch(repo_path)
+            if success:
+                print(f"   ✅ {message}")
+            else:
+                print(f"   ❌ {message}")
+                print(f"   Review will proceed but may have issues")
+        else:
+            print(f"   ✅ On {branch_check.current_branch} branch")
+
+    print("\n" + "="*80 + "\n")
 
     # Build the prompt with previous review context if available
     previous_review_section = ""

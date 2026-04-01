@@ -5,7 +5,7 @@ The Octavia Code Review Agent has been successfully refactored and is now **read
 ## What Was Done
 
 ### 1. Made Completely Generic ✅
-- Removed all hardcoded paths (`/home/rcruise`, etc.)
+- Removed all hardcoded paths (`~`, etc.)
 - Configuration via `config.json` or environment variables
 - Works for any user, any DevStack location
 - Template files for easy setup
@@ -107,7 +107,7 @@ export REVIEWS_OUTPUT_DIR=~/reviews
 ### Option 1: New Repository
 
 ```bash
-cd /home/rcruise/git/claude-agents
+cd ~/git/claude-agents
 
 # Initialize (if not already)
 git init
@@ -136,7 +136,7 @@ git push -u origin main
 ### Option 2: Existing Repository
 
 ```bash
-cd /home/rcruise/git/claude-agents
+cd ~/git/claude-agents
 
 # Add and commit changes
 git add code-review-agent/
@@ -275,7 +275,7 @@ Next step: Push to GitHub! 🚀
 To verify everything works:
 
 ```bash
-cd /home/rcruise/git/claude-agents/code-review-agent
+cd ~/git/claude-agents/code-review-agent
 
 # 1. Verify setup
 ./setup_review_agent.sh
@@ -294,4 +294,4 @@ cat ~/octavia_reviews/review_*.md
 
 **Created:** March 26, 2026
 **Status:** Ready for public release ✅
-**Repository:** /home/rcruise/git/claude-agents/code-review-agent
+**Repository:** ~/git/claude-agents/code-review-agent

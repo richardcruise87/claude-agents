@@ -19,11 +19,11 @@ python3 -m venv ~/.venv/claude-agents
 source ~/.venv/claude-agents/bin/activate
 
 # Install shared library
-cd /home/rcruise/git/claude-agents/agents_lib
+cd ~/git/claude-agents/agents_lib
 pip install -e .
 
 # Install bug-reproduction-agent
-cd /home/rcruise/git/claude-agents/bug-reproduction-agent
+cd ~/git/claude-agents/bug-reproduction-agent
 pip install -e .
 ```
 
@@ -31,7 +31,7 @@ pip install -e .
 
 ```bash
 # Copy sample config
-cd /home/rcruise/git/claude-agents/bug-reproduction-agent
+cd ~/git/claude-agents/bug-reproduction-agent
 cp config.sample.json config.json
 
 # Edit if needed (defaults should work)
@@ -78,9 +78,9 @@ Octavia Bug Reproduction Agent
 ================================================================================
 
 Configuration:
-  Triage reports: /home/rcruise/octavia_bug_triages
-  Output directory: /home/rcruise/octavia_bug_reproductions
-  Tracking file: /home/rcruise/.octavia_bug_reproductions.json
+  Triage reports: ~/octavia_bug_triages
+  Output directory: ~/octavia_bug_reproductions
+  Tracking file: ~/.octavia_bug_reproductions.json
   Max attempts: 3
   Script timeout: 600s
 
@@ -109,8 +109,8 @@ Processing triage: bug_2146764_test_backup_member_randomly_fails_20260330_103423
    ✅ Bug reproduced successfully!
 
 📝 Generating reproduction report...
-   💾 Saved reproduction script: /home/rcruise/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh
-   💾 Saved report: /home/rcruise/octavia_bug_reproductions/reproduction_2146764_..._1.md
+   💾 Saved reproduction script: ~/octavia_bug_reproductions/scripts/bug_2146764_reproduction.sh
+   💾 Saved report: ~/octavia_bug_reproductions/reproduction_2146764_..._1.md
 
 ================================================================================
 ✅ Bug #2146764 successfully reproduced!
@@ -138,7 +138,7 @@ cat ~/octavia_bug_reproductions/scripts/bug_*.sh
 ### 6. Install systemd Units
 
 ```bash
-cd /home/rcruise/git/claude-agents/systemd
+cd ~/git/claude-agents/systemd
 ./setup-systemd.sh
 ```
 

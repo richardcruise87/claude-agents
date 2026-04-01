@@ -13,9 +13,15 @@ from datetime import datetime
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths
+from agents_lib import (
+    load_agent_config,
+    apply_cutoff_date,
+    expand_config_paths,
+    check_devstack_health,
+    check_repo_on_main_branch,
+    checkout_main_branch,
+)
 from triage_parser import parse_triage_file, get_triage_timestamp
-from devstack_health import check_devstack_health
 from script_generator import generate_initial_script, refine_script, generate_fallback_script
 from script_executor import execute_script
 from report_generator import generate_report
@@ -134,6 +140,26 @@ async def process_triage(triage_file: Path) -> bool:
             return False
 
         print("   ✅ DevStack is healthy")
+
+        # Check Octavia repos are on main branch
+        devstack_path = Path(CONFIG["devstack"]["path"])
+        octavia_repos = ["octavia", "octavia-lib", "python-octaviaclient"]
+
+        print("\n📋 Checking repository branches...")
+        for repo_name in octavia_repos:
+            repo_path = devstack_path / repo_name
+            if repo_path.exists():
+                branch_check = check_repo_on_main_branch(repo_path)
+                if not branch_check.on_main:
+                    print(f"   ⚠️  {repo_name}: {branch_check.error}")
+                    print(f"      Attempting to checkout main/master...")
+                    success, message = checkout_main_branch(repo_path)
+                    if success:
+                        print(f"      ✅ {message}")
+                    else:
+                        print(f"      ❌ {message}")
+                else:
+                    print(f"   ✅ {repo_name}: On {branch_check.current_branch} branch")
 
         # Attempt reproduction (up to max_attempts)
         max_attempts = CONFIG.get("reproduction", {}).get("max_attempts", 3)

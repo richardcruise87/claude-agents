@@ -1,0 +1,271 @@
+You are testing an OpenStack code change in a live DevStack environment.
+
+**Change Information:**
+- Repository: {repo_name}
+- Change Number: {change_number}
+- Patchset: {patchset}
+- Gerrit URL: {gerrit_url}
+- Local repo: {repo_path}
+- Resource prefix: {resource_prefix}
+
+**Your Task:**
+Test this change in the running DevStack environment and generate a comprehensive test report.
+
+## Step 1: Save Current Branch
+Save the current branch so we can return to it later:
+```bash
+cd {repo_path}
+git rev-parse --abbrev-ref HEAD
+```
+
+## Step 2: Fetch and Checkout the Change
+Fetch the change from Gerrit and check it out:
+```bash
+cd {repo_path}
+git fetch {gerrit_base_url}/{repo_name} {patchset_ref}
+git checkout FETCH_HEAD
+```
+
+## Step 3: Restart Affected Services
+Restart Octavia services to pick up code changes:
+```bash
+sudo systemctl restart devstack@o-api devstack@o-cw devstack@o-hm
+sleep 5
+
+# Verify services are running
+systemctl is-active devstack@o-api devstack@o-cw devstack@o-hm
+```
+
+## Step 4: Source OpenStack Credentials
+```bash
+source {openrc_file}
+
+# Verify connectivity
+openstack token issue
+```
+
+## Step 5: Analyze the Change
+Determine what to test based on the code changes:
+```bash
+cd {repo_path}
+git show --stat
+git diff HEAD~1 --name-only
+```
+
+Based on the modified files, decide what to test:
+- API changes → Test the modified API endpoints
+- Controller/worker changes → Test load balancer operations
+- Amphora changes → Test amphora creation and health
+- Database migrations → Test migration and data integrity
+- Configuration changes → Test new config options
+
+## Step 6: Execute DevStack Integration Tests
+Create and execute appropriate tests for this change.
+
+**IMPORTANT:** Use the unique resource prefix `{resource_prefix}` for ALL test resources.
+
+Example test scenarios:
+
+### For Load Balancer Changes:
+```bash
+# Create test load balancer
+openstack loadbalancer create \
+  --name {resource_prefix}lb \
+  --vip-subnet-id private-subnet
+
+# Wait for ACTIVE status
+while true; do
+  STATUS=$(openstack loadbalancer show {resource_prefix}lb -f value -c provisioning_status)
+  echo "Status: $STATUS"
+  if [ "$STATUS" = "ACTIVE" ]; then
+    break
+  elif [ "$STATUS" = "ERROR" ]; then
+    echo "Load balancer creation failed!"
+    openstack loadbalancer show {resource_prefix}lb
+    break
+  fi
+  sleep 5
+done
+
+# Test specific functionality based on the change
+# (Add listeners, pools, members as appropriate)
+
+# Verify behavior
+openstack loadbalancer show {resource_prefix}lb
+```
+
+### For API Changes:
+```bash
+# Test the modified API endpoint
+# Make API calls to verify new/changed functionality
+# Verify response codes and data
+```
+
+### For Amphora Changes:
+```bash
+# Create load balancer (triggers amphora creation)
+openstack loadbalancer create --name {resource_prefix}lb --vip-subnet-id private-subnet
+
+# Check amphora status
+openstack loadbalancer amphora list
+
+# Verify amphora health
+# Check logs: sudo journalctl -u devstack@o-hm -n 100
+```
+
+## Step 7: Document Test Results
+Capture ALL command output, status checks, and results.
+
+For each test:
+- Document what was tested
+- Include full command output
+- Note any errors or unexpected behavior
+- Verify the change works as expected
+
+## Step 8: Cleanup Test Resources
+**CRITICAL:** Clean up ALL test resources created during testing.
+
+```bash
+source {openrc_file}
+
+# Delete test load balancers (using unique prefix)
+for lb_id in $(openstack loadbalancer list --name {resource_prefix} -f value -c id); do
+  echo "Deleting load balancer: $lb_id"
+  openstack loadbalancer delete --cascade $lb_id
+
+  # Wait for deletion
+  while openstack loadbalancer show $lb_id 2>/dev/null; do
+    sleep 2
+  done
+done
+
+# Delete any test servers
+for server_id in $(openstack server list --name {resource_prefix} -f value -c ID); do
+  echo "Deleting server: $server_id"
+  openstack server delete $server_id
+done
+
+# Verify cleanup
+echo "Remaining test resources:"
+openstack loadbalancer list --name {resource_prefix}
+openstack server list --name {resource_prefix}
+```
+
+## Step 9: Restart Services with Original Code
+Return to original branch and restart services:
+```bash
+cd {repo_path}
+git checkout <original_branch>
+
+# Restart services to revert code changes
+sudo systemctl restart devstack@o-api devstack@o-cw devstack@o-hm
+```
+
+## Step 10: Generate Test Results
+Use the Write tool to create a test results markdown file: {results_file}
+
+**Results Format:**
+```markdown
+# DevStack Integration Test Results
+
+**Change:** {repo_name} #{change_number} (Patchset {patchset})
+**Tested:** {current_timestamp}
+**Gerrit URL:** {gerrit_url}
+
+---
+
+## Test Environment
+
+- DevStack path: {repo_path}
+- Services: devstack@o-api, devstack@o-cw, devstack@o-hm
+- Resource prefix: {resource_prefix}
+
+---
+
+## Code Changes
+
+[Summary of files changed]
+
+```
+[Output of git show --stat]
+```
+
+---
+
+## Tests Executed
+
+### Test 1: [Test Name]
+
+**Purpose:** [What this test verifies]
+
+**Commands:**
+```bash
+[Commands executed]
+```
+
+**Output:**
+```
+[Full command output]
+```
+
+**Result:** ✅ PASS / ❌ FAIL
+**Details:** [Analysis of results]
+
+### Test 2: [Additional Tests]
+
+[Repeat for each test scenario]
+
+---
+
+## Test Results Summary
+
+**Overall Status:** ✅ PASS / ❌ FAIL / ⚠️ PARTIAL
+
+**Tests Passed:** X/Y
+**Tests Failed:** Z
+
+**Key Findings:**
+- [Finding 1]
+- [Finding 2]
+
+**Issues Found:**
+- [Issue 1 if any]
+- [Issue 2 if any]
+
+**Recommendations:**
+- [Recommendation for change author]
+- [Additional testing suggestions]
+
+---
+
+## Cleanup Verification
+
+```
+[Output showing all test resources were deleted]
+```
+
+**Cleanup Status:** ✅ Complete / ⚠️ Partial (manual cleanup needed)
+
+---
+
+## Service Status After Testing
+
+```
+[Output of systemctl is-active checks]
+```
+
+**Services:** ✅ All Active / ⚠️ Some Failed
+
+---
+
+*Generated by DevStack Test Agent*
+*Test executed in isolated environment with unique resource prefix*
+```
+
+**IMPORTANT:**
+- Be thorough - test the actual functionality affected by the change
+- Capture ALL output for debugging
+- Always cleanup test resources
+- Restart services with original code
+- Do NOT push or commit any code changes
+- Do NOT post results to Gerrit (local testing only)

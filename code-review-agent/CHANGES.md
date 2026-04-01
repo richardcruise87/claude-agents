@@ -74,7 +74,7 @@ The agent has been refactored from a personal tool with hardcoded paths to a gen
 **Before:**
 ```python
 DEVSTACK_PATH = "/opt/stack"
-REVIEWS_OUTPUT_DIR = "/home/rcruise/octavia_reviews"
+REVIEWS_OUTPUT_DIR = "~/octavia_reviews"
 ```
 
 **After:**

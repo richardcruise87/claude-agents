@@ -26,7 +26,7 @@ AI-powered bug triage agent for OpenStack Octavia. Monitors Launchpad for bugs, 
 
 1. **Clone the repository**:
 ```bash
-cd /home/rcruise/git/claude-agents/bug-triage-agent
+cd ~/git/claude-agents/bug-triage-agent
 ```
 
 2. **Install dependencies**:

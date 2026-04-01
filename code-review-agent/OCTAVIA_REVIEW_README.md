@@ -63,7 +63,7 @@ Edit `octavia_review_config.json` or modify the CONFIG dictionary in the Python 
     "path": "/opt/stack"  // ← Update this to your DevStack location
   },
   "output": {
-    "reviews_directory": "/home/rcruise/octavia_reviews"
+    "reviews_directory": "~/octavia_reviews"
   }
 }
 ```
@@ -121,12 +121,12 @@ Set up automatic monitoring every hour:
 crontab -e
 
 # Add this line (runs every hour):
-0 * * * * /usr/bin/python3 /home/rcruise/git/claude-agents/code-review-agent/octavia_review_agent.py >> /home/rcruise/octavia_reviews.log 2>&1
+0 * * * * python3 ~/git/claude-agents/code-review-agent/octavia_review_agent.py >> ~/octavia_reviews.log 2>&1
 ```
 
 Or every 30 minutes:
 ```bash
-*/30 * * * * /usr/bin/python3 /home/rcruise/octavia_review_agent.py >> /home/rcruise/octavia_reviews.log 2>&1
+*/30 * * * * /usr/bin/python3 ~/octavia_review_agent.py >> ~/octavia_reviews.log 2>&1
 ```
 
 ### Option 4: Run as a Systemd Service
@@ -140,10 +140,10 @@ After=network.target
 
 [Service]
 Type=simple
-User=rcruise
-WorkingDirectory=/home/rcruise/git/claude-agents/code-review-agent
+User=YOUR_USERNAME
+WorkingDirectory=/home/YOUR_USERNAME/git/claude-agents/code-review-agent
 Environment="CLAUDE_CODE_USE_VERTEX=1"
-ExecStart=/usr/bin/python3 /home/rcruise/git/claude-agents/code-review-agent/octavia_review_agent.py
+ExecStart=/usr/bin/python3 /home/YOUR_USERNAME/git/claude-agents/code-review-agent/octavia_review_agent.py
 Restart=on-failure
 RestartSec=3600
 
