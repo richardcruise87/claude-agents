@@ -71,6 +71,9 @@
     "comment2": "Cutoff date (YYYY-MM-DD) - ignore changes created before this date. Defaults to 30 days ago if null.",
     "include_authors": [],
     "exclude_authors": [],
-    "comment3": "Leave arrays empty to include/exclude no one"
+    "comment3": "Leave arrays empty to include/exclude no one",
+    "exclude_branches": [],
+    "include_branches": ["master", "main"],
+    "comment4": "Branch filtering. Wildcards (*) supported. Exclude processed first, then include. Examples: exclude=['*'] + include=['master'] = only master; exclude=['stable/*'] = skip all stable branches; exclude=[] + include=[] = all branches"
   }
 }

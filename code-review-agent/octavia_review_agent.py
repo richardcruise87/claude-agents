@@ -21,6 +21,84 @@ from config import load_config
 CONFIG = load_config()
 
 
+def matches_wildcard(text, pattern):
+    """
+    Check if text matches a wildcard pattern.
+
+    Args:
+        text: String to check
+        pattern: Pattern with * wildcards
+
+    Returns:
+        True if matches, False otherwise
+
+    Examples:
+        matches_wildcard("master", "master") -> True
+        matches_wildcard("stable/2024.1", "stable/*") -> True
+        matches_wildcard("feature/foo", "*") -> True
+        matches_wildcard("master", "stable/*") -> False
+    """
+    import re
+    # Escape special regex chars except *
+    escaped = re.escape(pattern).replace(r'\*', '.*')
+    # Match full string
+    regex = f'^{escaped}$'
+    return bool(re.match(regex, text))
+
+
+def should_review_branch(branch_name, exclude_list, include_list):
+    """
+    Determine if a branch should be reviewed based on include/exclude lists.
+
+    Processing order:
+    1. Apply exclude list first (default: allow all)
+    2. Apply include list second (override excludes)
+
+    Args:
+        branch_name: Name of the branch (e.g., "master", "stable/2024.1")
+        exclude_list: List of patterns to exclude (wildcards supported)
+        include_list: List of patterns to include (wildcards supported)
+
+    Returns:
+        True if branch should be reviewed, False otherwise
+
+    Examples:
+        # Exclude all except master
+        should_review_branch("master", ["*"], ["master"]) -> True
+        should_review_branch("feature/x", ["*"], ["master"]) -> False
+
+        # Exclude stable branches
+        should_review_branch("stable/2024.1", ["stable/*"], []) -> False
+        should_review_branch("master", ["stable/*"], []) -> True
+
+        # Include only master and main
+        should_review_branch("master", [], ["master", "main"]) -> True
+        should_review_branch("feature/x", [], ["master", "main"]) -> False
+    """
+    # Start with allowed by default
+    allowed = True
+
+    # Apply exclude list first
+    if exclude_list:
+        for pattern in exclude_list:
+            if matches_wildcard(branch_name, pattern):
+                allowed = False
+                break
+
+    # Apply include list second (overrides excludes)
+    if include_list:
+        # If include list is specified, default to not allowed unless matched
+        if not exclude_list:  # Only if we didn't apply excludes
+            allowed = False
+
+        for pattern in include_list:
+            if matches_wildcard(branch_name, pattern):
+                allowed = True
+                break
+
+    return allowed
+
+
 def load_reviewed_changes():
     """Load the set of already reviewed change IDs."""
     reviewed_file = Path(CONFIG["reviewed_changes_file"])
@@ -247,10 +325,19 @@ async def monitor_and_review(repo_name, max_reviews=5):
             print(f"✓ Found {len(changes_list)} change(s)")
             print(f"📅 Cutoff date: {CONFIG['cutoff_date']} (ignoring changes created before this date)")
 
+            # Get branch filters from config
+            exclude_branches = CONFIG.get('filters', {}).get('exclude_branches', [])
+            include_branches = CONFIG.get('filters', {}).get('include_branches', ['master', 'main'])
+
+            # Show branch filter configuration
+            if exclude_branches or include_branches:
+                print(f"🌿 Branch filters: exclude={exclude_branches}, include={include_branches}")
+
             # Filter changes first, then sort by date (newest first), then take max_reviews
             filtered_changes = []
             skipped_old = 0
             skipped_reviewed = 0
+            skipped_branch = 0
 
             for change in changes_list:
                 # Extract basic info for filtering
@@ -259,6 +346,13 @@ async def monitor_and_review(repo_name, max_reviews=5):
 
                 if not all([change_id, change_number]):
                     continue
+
+                # Check branch filter - skip changes on excluded branches
+                branch_name = change.get('branch', '')
+                if branch_name:
+                    if not should_review_branch(branch_name, exclude_branches, include_branches):
+                        skipped_branch += 1
+                        continue
 
                 # Check cutoff date - skip changes created before cutoff
                 change_created = change.get('created', '')
@@ -293,6 +387,8 @@ async def monitor_and_review(repo_name, max_reviews=5):
             filtered_changes.sort(key=lambda c: c.get('created', ''), reverse=True)
 
             print(f"✓ Filtered to {len(filtered_changes)} reviewable change(s)")
+            if skipped_branch > 0:
+                print(f"⏭️  Skipped {skipped_branch} changes on excluded branches")
             if skipped_old > 0:
                 print(f"⏭️  Skipped {skipped_old} changes created before cutoff date")
             if skipped_reviewed > 0:

@@ -7,6 +7,7 @@ Automatically monitors OpenDev for new changes, downloads them to your local Dev
 ## Features
 
 - 🔍 **Monitors OpenDev** for new Octavia changes
+- 🌿 **Branch filtering**: Include/exclude branches with wildcard support (see [BRANCH_FILTERING.md](BRANCH_FILTERING.md))
 - ⬇️ **Downloads changes** to local DevStack environment
 - 🧪 **Runs tests**: Unit tests, functional tests, PEP8 linting
 - 📊 **Code analysis**: Security, performance, breaking changes, documentation
