@@ -212,6 +212,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
     print("🤖 Starting bug triage analysis...\n")
 
     triage_result = None
+    usage_info = None
     try:
         async for message in query(
             prompt=prompt,
@@ -223,11 +224,26 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
                 print(f"  {message.text}")
             elif hasattr(message, 'result'):
                 triage_result = message.result
+
+                # Capture usage information if available
+                if hasattr(message, 'usage') or hasattr(message, 'total_cost_usd'):
+                    from agents_lib import format_usage_info
+                    usage_info = format_usage_info(
+                        usage_data=getattr(message, 'usage', None),
+                        cost_usd=getattr(message, 'total_cost_usd', None),
+                        model=getattr(message, 'model', None),
+                        duration_ms=getattr(message, 'duration_ms', None)
+                    )
+
                 print(f"\n{'='*80}")
                 print(f"✅ Triage Complete!")
                 print(f"{'='*80}")
                 print(f"\n📄 Triage saved to: {triage_file}")
                 print(f"\nSummary:\n{triage_result[:500]}...")
+
+        # Append usage info to triage if available
+        if triage_result and usage_info:
+            triage_result = triage_result + "\n\n---\n\n" + usage_info
 
         # Verify triage file was created before marking as complete
         if not triage_file.exists() and triage_result:
@@ -240,6 +256,12 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             print(f"   Will retry on next pass")
             return None
         else:
+            # If file exists but we have usage info, append it
+            if usage_info:
+                existing_content = triage_file.read_text()
+                # Only append if not already present
+                if "## Token Usage & Cost" not in existing_content:
+                    triage_file.write_text(existing_content + "\n\n---\n\n" + usage_info)
             print(f"\n✓ Triage file confirmed at: {triage_file}")
 
         # Record that we triaged this bug (only after confirming file exists)

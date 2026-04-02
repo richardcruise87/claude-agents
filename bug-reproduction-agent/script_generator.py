@@ -15,7 +15,7 @@ from script_executor import ExecutionResult
 async def generate_initial_script(
     triage: TriageReport,
     config: Dict
-) -> str:
+) -> tuple:
     """
     Generate initial reproduction script from triage report.
 
@@ -24,7 +24,7 @@ async def generate_initial_script(
         config: Configuration dictionary
 
     Returns:
-        Complete bash script as string
+        Tuple of (script, usage_dict) where usage_dict contains usage/cost info
     """
     devstack_config = config.get("devstack", {})
     openrc_file = devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")
@@ -54,11 +54,20 @@ async def generate_initial_script(
     )
 
     # Query returns an async generator of messages
+    usage_dict = {}
     async for message in query(prompt=prompt, options=options):
         if hasattr(message, 'result'):
+            # Capture usage information
+            usage_dict = {
+                'usage': getattr(message, 'usage', None),
+                'cost_usd': getattr(message, 'total_cost_usd', None),
+                'model': getattr(message, 'model', None),
+                'duration_ms': getattr(message, 'duration_ms', None),
+            }
+
             # Extract script from response (handle markdown code blocks)
             script = extract_script_from_response(message.result)
-            return script
+            return script, usage_dict
 
     # Fallback if no result received
     raise RuntimeError("No result received from AI agent")
@@ -70,7 +79,7 @@ async def refine_script(
     attempt_number: int,
     triage: TriageReport,
     config: Dict
-) -> str:
+) -> tuple:
     """
     AI-powered script refinement after failure.
 
@@ -82,7 +91,7 @@ async def refine_script(
         config: Configuration dictionary
 
     Returns:
-        Refined bash script as string
+        Tuple of (script, usage_dict) where usage_dict contains usage/cost info
     """
     # Load prompt template
     prompts_dir = Path(__file__).parent / "prompts"
@@ -108,11 +117,20 @@ async def refine_script(
     )
 
     # Query returns an async generator of messages
+    usage_dict = {}
     async for message in query(prompt=prompt, options=options):
         if hasattr(message, 'result'):
+            # Capture usage information
+            usage_dict = {
+                'usage': getattr(message, 'usage', None),
+                'cost_usd': getattr(message, 'total_cost_usd', None),
+                'model': getattr(message, 'model', None),
+                'duration_ms': getattr(message, 'duration_ms', None),
+            }
+
             # Extract script from response
             script = extract_script_from_response(message.result)
-            return script
+            return script, usage_dict
 
     # Fallback if no result received
     raise RuntimeError("No result received from AI agent")

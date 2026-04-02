@@ -6,7 +6,7 @@ Shared utilities for Claude-based automation agents.
 
 __version__ = "1.0.0"
 
-from .utils import expand_path, slugify
+from .utils import expand_path, slugify, format_usage_info
 from .config_loader import (
     load_agent_config,
     apply_cutoff_date,
@@ -39,6 +39,7 @@ from .devstack_lock import (
 __all__ = [
     "expand_path",
     "slugify",
+    "format_usage_info",
     "load_agent_config",
     "apply_cutoff_date",
     "expand_config_paths",

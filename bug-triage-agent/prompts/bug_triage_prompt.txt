@@ -182,3 +182,4 @@ Recommendation: [Specific recommendation]
 - Focus on helping developers understand and fix the bug quickly
 - Use the Write tool to save the complete triage document to: {triage_file}
 - DO NOT just output the triage - you MUST actually write it to the file using the Write tool
+- NOTE: Token usage and cost information will be automatically appended to the report after completion

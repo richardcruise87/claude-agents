@@ -14,9 +14,10 @@ from devstack_health import DevStackHealth, format_health_report
 def generate_report(
     triage: TriageReport,
     health: DevStackHealth,
-    attempts: List[tuple],  # List of (script, ExecutionResult)
+    attempts: List[tuple],  # List of (script, ExecutionResult, usage_dict)
     final_status: str,
-    final_script_path: Optional[Path] = None
+    final_script_path: Optional[Path] = None,
+    total_usage: Optional[dict] = None
 ) -> str:
     """
     Generate comprehensive reproduction report.
@@ -24,9 +25,10 @@ def generate_report(
     Args:
         triage: Parsed triage report
         health: DevStack health check results
-        attempts: List of (script_content, ExecutionResult) tuples
+        attempts: List of (script_content, ExecutionResult, usage_dict) tuples
         final_status: Final status (REPRODUCED, NOT_REPRODUCED, ENVIRONMENT_ERROR)
         final_script_path: Path to final successful script (if reproduced)
+        total_usage: Combined usage information across all attempts
 
     Returns:
         Complete markdown report as string
@@ -84,9 +86,31 @@ def generate_report(
     lines.append("## Reproduction Attempts")
     lines.append("")
 
-    for i, (script, result) in enumerate(attempts, 1):
+    for i, attempt_data in enumerate(attempts, 1):
+        # Handle both old format (script, result) and new format (script, result, usage_dict)
+        if len(attempt_data) == 3:
+            script, result, usage_dict = attempt_data
+        else:
+            script, result = attempt_data
+            usage_dict = None
+
         lines.append(format_execution_report(result, i))
         lines.append("")
+
+        # Add usage info for this attempt if available
+        if usage_dict and (usage_dict.get('usage') or usage_dict.get('cost_usd') is not None):
+            from agents_lib import format_usage_info
+            attempt_usage = format_usage_info(
+                usage_data=usage_dict.get('usage'),
+                cost_usd=usage_dict.get('cost_usd'),
+                model=usage_dict.get('model'),
+                duration_ms=usage_dict.get('duration_ms')
+            )
+            # Use smaller heading for attempt-specific usage
+            attempt_usage = attempt_usage.replace("## Token Usage & Cost", f"### Token Usage (Attempt {i})")
+            lines.append(attempt_usage)
+            lines.append("")
+
         lines.append("**Script Used:**")
         lines.append("```bash")
         lines.append(script)
@@ -125,6 +149,21 @@ def generate_report(
     lines.append("")
     lines.append(generate_recommendations(triage, attempts, final_status))
     lines.append("")
+
+    # Total usage across all attempts
+    if total_usage:
+        from agents_lib import format_usage_info
+        lines.append("---")
+        lines.append("")
+        total_usage_section = format_usage_info(
+            usage_data=total_usage.get('usage'),
+            cost_usd=total_usage.get('cost_usd'),
+            model=total_usage.get('model'),
+            duration_ms=total_usage.get('duration_ms')
+        )
+        total_usage_section = total_usage_section.replace("## Token Usage & Cost", "## Total Token Usage & Cost")
+        lines.append(total_usage_section)
+        lines.append("")
 
     # Footer
     lines.append("---")

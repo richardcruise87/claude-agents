@@ -116,6 +116,7 @@ async def process_triage(triage_file: Path) -> bool:
                 health,
                 [],
                 "ENVIRONMENT_ERROR",
+                None,
                 None
             )
 
@@ -164,28 +165,42 @@ async def process_triage(triage_file: Path) -> bool:
         # Attempt reproduction (up to max_attempts)
         max_attempts = CONFIG.get("reproduction", {}).get("max_attempts", 3)
         script_timeout = CONFIG.get("reproduction", {}).get("script_timeout", 600)
-        attempts = []  # List of (script, ExecutionResult)
+        attempts = []  # List of (script, ExecutionResult, usage_dict)
         final_status = "NOT_REPRODUCED"
         successful_script = None
+
+        # Track total usage across all attempts
+        total_usage = {
+            'usage': {
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'cache_creation_input_tokens': 0,
+                'cache_read_input_tokens': 0,
+            },
+            'cost_usd': 0.0,
+            'duration_ms': 0,
+            'model': None,
+        }
 
         for attempt in range(1, max_attempts + 1):
             print(f"\n🔧 Attempt {attempt}/{max_attempts}")
 
+            usage_dict = {}
             if attempt == 1:
                 # Generate initial script from triage
                 print("   Generating initial script from triage...")
                 try:
-                    script = await generate_initial_script(triage, CONFIG)
+                    script, usage_dict = await generate_initial_script(triage, CONFIG)
                 except Exception as e:
                     print(f"   ⚠️ AI generation failed: {e}")
                     print("   Using fallback script...")
                     script = generate_fallback_script(triage, CONFIG)
             else:
                 # Refine previous script
-                previous_script, previous_result = attempts[-1]
+                previous_script, previous_result, _ = attempts[-1]
                 print(f"   Refining script (previous attempt: {previous_result.error_type})...")
                 try:
-                    script = await refine_script(
+                    script, usage_dict = await refine_script(
                         previous_script,
                         previous_result,
                         attempt,
@@ -197,11 +212,23 @@ async def process_triage(triage_file: Path) -> bool:
                     print("   Using previous script with minor adjustments...")
                     script = previous_script  # Fallback to previous
 
+            # Accumulate usage stats
+            if usage_dict:
+                if usage_dict.get('usage'):
+                    for key in ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']:
+                        total_usage['usage'][key] += usage_dict['usage'].get(key, 0)
+                if usage_dict.get('cost_usd') is not None:
+                    total_usage['cost_usd'] += usage_dict['cost_usd']
+                if usage_dict.get('duration_ms'):
+                    total_usage['duration_ms'] += usage_dict['duration_ms']
+                if usage_dict.get('model') and not total_usage['model']:
+                    total_usage['model'] = usage_dict['model']
+
             # Execute script
             print(f"   Executing script (timeout: {script_timeout}s)...")
             result = execute_script(script, timeout=script_timeout)
 
-            attempts.append((script, result))
+            attempts.append((script, result, usage_dict))
 
             print(f"   Exit code: {result.exit_code}")
             print(f"   Error type: {result.error_type}")
@@ -250,7 +277,8 @@ async def process_triage(triage_file: Path) -> bool:
             health,
             attempts,
             final_status,
-            script_path
+            script_path,
+            total_usage
         )
 
         with open(report_file, 'w') as f:

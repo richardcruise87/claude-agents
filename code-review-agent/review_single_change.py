@@ -269,6 +269,7 @@ This change has been reviewed before.
     print("🤖 Starting comprehensive code review...\n")
 
     review_result = None
+    usage_info = None
     try:
         async for message in query(
             prompt=prompt,
@@ -280,11 +281,26 @@ This change has been reviewed before.
                 print(f"  {message.text}")
             elif hasattr(message, 'result'):
                 review_result = message.result
+
+                # Capture usage information if available
+                if hasattr(message, 'usage') or hasattr(message, 'total_cost_usd'):
+                    from agents_lib import format_usage_info
+                    usage_info = format_usage_info(
+                        usage_data=getattr(message, 'usage', None),
+                        cost_usd=getattr(message, 'total_cost_usd', None),
+                        model=getattr(message, 'model', None),
+                        duration_ms=getattr(message, 'duration_ms', None)
+                    )
+
                 print(f"\n{'='*80}")
                 print(f"✅ Review Complete!")
                 print(f"{'='*80}")
                 print(f"\n📄 Review Document: {review_file}")
                 print(f"\nSummary:\n{review_result[:500]}...")
+
+        # Append usage info to review if available
+        if review_result and usage_info:
+            review_result = review_result + "\n\n---\n\n" + usage_info
 
         # Ensure the review file was created
         if not review_file.exists() and review_result:
@@ -295,6 +311,12 @@ This change has been reviewed before.
             print(f"\n❌ WARNING: Review file was not created and no result received!")
             return
         else:
+            # If file exists but we have usage info, append it
+            if usage_info:
+                existing_content = review_file.read_text()
+                # Only append if not already present
+                if "## Token Usage & Cost" not in existing_content:
+                    review_file.write_text(existing_content + "\n\n---\n\n" + usage_info)
             print(f"\n✓ Review file confirmed at: {review_file}")
 
     except Exception as e:
