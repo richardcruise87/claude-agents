@@ -1,4 +1,5 @@
 {
+  "model": "claude-sonnet-4-6",
   "launchpad_project": "octavia",
   "triages_output_dir": "~/octavia_bug_triages",
   "devstack_path": "/opt/stack",

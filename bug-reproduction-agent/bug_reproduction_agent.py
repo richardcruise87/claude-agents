@@ -49,10 +49,12 @@ def load_config():
         "MAX_ATTEMPTS": ("reproduction", "max_attempts"),
         "SCRIPT_TIMEOUT": ("reproduction", "script_timeout"),
         "CUTOFF_DATE": "cutoff_date",
+        "CLAUDE_MODEL": "model",
     }
 
     # Load config using shared library
-    CONFIG = load_agent_config(config_dir, env_overrides)
+    defaults = {"model": "claude-sonnet-4-6"}
+    CONFIG = load_agent_config(config_dir, env_overrides, defaults)
 
     # Apply cutoff date logic (default to 30 days ago)
     CONFIG = apply_cutoff_date(CONFIG, "cutoff_date", default_days=30)
@@ -339,6 +341,7 @@ async def main():
     print(f"  Triage reports: {CONFIG['triage_reports_dir']}")
     print(f"  Output directory: {CONFIG['reproductions_output_dir']}")
     print(f"  Tracking file: {CONFIG['reproduction_tracking_file']}")
+    print(f"  Model: {CONFIG.get('model', 'claude-sonnet-4-6')}")
     print(f"  Max attempts: {CONFIG.get('reproduction', {}).get('max_attempts', 3)}")
     print(f"  Script timeout: {CONFIG.get('reproduction', {}).get('script_timeout', 600)}s")
     print()

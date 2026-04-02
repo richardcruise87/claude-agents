@@ -218,6 +218,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             prompt=prompt,
             options=ClaudeAgentOptions(
                 allowed_tools=["Bash", "Read", "Write", "Grep", "Glob"],
+                model=CONFIG.get("model", "claude-sonnet-4-6"),
             ),
         ):
             if hasattr(message, 'text'):
@@ -453,6 +454,7 @@ async def main():
     print(f"📁 Output directory: {CONFIG['triages_output_dir']}")
     print(f"🏠 DevStack path: {CONFIG['devstack_path']}")
     print(f"🐛 Project: {CONFIG['launchpad_project']}")
+    print(f"🤖 Model: {CONFIG.get('model', 'claude-sonnet-4-6')}")
     print(f"📅 Cutoff date: {CONFIG['cutoff_date']}")
 
     try:

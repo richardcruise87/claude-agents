@@ -50,7 +50,7 @@ async def generate_initial_script(
 
     # Use Claude Agent SDK to generate script
     options = ClaudeAgentOptions(
-        model="sonnet",  # Use Sonnet for script generation
+        model=config.get("model", "claude-sonnet-4-6"),
     )
 
     # Query returns an async generator of messages

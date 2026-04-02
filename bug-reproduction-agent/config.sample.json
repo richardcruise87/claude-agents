@@ -1,5 +1,6 @@
 {
   "comment": "Copy this file to config.json and customize for your environment",
+  "model": "claude-sonnet-4-6",
   "triage_reports_dir": "~/octavia_bug_triages",
   "reproductions_output_dir": "~/octavia_bug_reproductions",
   "reproduction_tracking_file": "~/.octavia_bug_reproductions.json",

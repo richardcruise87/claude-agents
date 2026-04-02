@@ -40,7 +40,8 @@ def load_config():
             "max_reviews_per_cycle": 3,
             "reviewed_changes_file": "~/.octavia_reviewed_changes.json"
         },
-        "filters": {}
+        "filters": {},
+        "model": "claude-sonnet-4-6",
     }
 
     # Environment variable overrides
@@ -51,6 +52,7 @@ def load_config():
         "MAX_REVIEWS": ("monitoring", "max_reviews_per_cycle"),
         "REVIEWED_CHANGES_FILE": ("monitoring", "reviewed_changes_file"),
         "CUTOFF_DATE": ("filters", "cutoff_date"),
+        "CLAUDE_MODEL": "model",
     }
 
     # Load config using shared library
@@ -78,6 +80,7 @@ def load_config():
         "testing": config.get("testing", {}),
         "cutoff_date": config["filters"]["cutoff_date"],
         "filters": config.get("filters", {}),
+        "model": config.get("model", "claude-sonnet-4-6"),
     }
 
     return flat_config

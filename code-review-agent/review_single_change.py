@@ -72,7 +72,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             Return ONLY the repository name in format: openstack/project-name
             Note: Gerrit prepends ")]]}}'" to JSON - strip it.
             """,
-            options=ClaudeAgentOptions(allowed_tools=["WebFetch"]),
+            options=ClaudeAgentOptions(allowed_tools=["WebFetch"], model=CONFIG.get("model", "claude-sonnet-4-6")),
         ):
             if hasattr(message, 'result'):
                 # Extract repo name from result
@@ -129,7 +129,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             Note: Gerrit prepends ")]]}}'" to JSON - strip it.
             The patchset number is under revisions -> _number field.
             """,
-            options=ClaudeAgentOptions(allowed_tools=["WebFetch"]),
+            options=ClaudeAgentOptions(allowed_tools=["WebFetch"], model=CONFIG.get("model", "claude-sonnet-4-6")),
         ):
             if hasattr(message, 'result'):
                 # Try to parse the patchset info
@@ -275,6 +275,7 @@ This change has been reviewed before.
             prompt=prompt,
             options=ClaudeAgentOptions(
                 allowed_tools=["Bash", "Read", "Write", "Grep", "Glob"],
+                model=CONFIG.get("model", "claude-sonnet-4-6"),
             ),
         ):
             if hasattr(message, 'text'):

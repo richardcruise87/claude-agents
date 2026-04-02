@@ -30,10 +30,12 @@ def load_config():
         "LAUNCHPAD_PROJECT": "launchpad_project",
         "MAX_BUGS": "max_bugs_per_run",
         "CUTOFF_DATE": "cutoff_date",
+        "CLAUDE_MODEL": "model",
     }
 
     # Load config using shared library
-    config = load_agent_config(config_dir, env_overrides)
+    defaults = {"model": "claude-sonnet-4-6"}
+    config = load_agent_config(config_dir, env_overrides, defaults)
 
     # Apply cutoff date logic (default to 30 days ago)
     config = apply_cutoff_date(config, "cutoff_date", default_days=30)

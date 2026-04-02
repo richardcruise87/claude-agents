@@ -452,6 +452,7 @@ async def main():
     print("🚀 Octavia Code Review Agent Starting...")
     print(f"📁 Output directory: {CONFIG['reviews_output_dir']}")
     print(f"🏠 DevStack path: {CONFIG['devstack_path']}")
+    print(f"🤖 Model: {CONFIG.get('model', 'claude-sonnet-4-6')}")
     print(f"📅 Cutoff date: {CONFIG['cutoff_date']}")
 
     # Review all configured repos
