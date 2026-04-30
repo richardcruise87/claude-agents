@@ -700,20 +700,21 @@ __all__ = [..., "new_function"]
 
 ### Git Commit Guidelines
 
+**Before every commit, review these two files and update them if the commit warrants it:**
+
+1. **[CHANGELOG.md](CHANGELOG.md)** — Add an entry for any new feature, behaviour change, or notable bug fix. Use the existing date-based format. Do not add entries for trivial fixes, typos, or refactors that don't affect behaviour.
+
+2. **[README.md](README.md)** — Update if the commit adds or removes an agent, changes any command name or output location, changes the installation steps, or modifies the systemd schedule.
+
+If neither file needs updating, note this explicitly in the commit message body (e.g., `No README/CHANGELOG changes needed — internal refactor only.`).
+
 **Commit Message Format:**
 ```
 <action> <component>: <brief description>
 
 <detailed description>
 
-Changes:
-- Bullet points of changes
-
-Testing:
-✅ What was tested
-✅ Test results
-
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Sonnet 4.6 (1M context) <noreply@anthropic.com>
 ```
 
 **Common Actions:**
@@ -721,7 +722,6 @@ Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
 - `Fix` - Bug fix
 - `Refactor` - Code restructuring
 - `Update` - Modify existing feature
-- `Create` - New file/module
 
 ---
 

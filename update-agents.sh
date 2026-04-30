@@ -48,6 +48,16 @@ echo "   Installing bug-reproduction-agent..."
 cd "$SCRIPT_DIR/bug-reproduction-agent"
 pip install -e . --quiet
 
+echo "   Installing ci-failure-agent..."
+cd "$SCRIPT_DIR/ci-failure-agent"
+pip install -e . --quiet
+
+if [ -d "$SCRIPT_DIR/devstack-test-agent" ]; then
+    echo "   Installing devstack-test-agent..."
+    cd "$SCRIPT_DIR/devstack-test-agent"
+    pip install -e . --quiet
+fi
+
 echo "✓ All packages reinstalled"
 echo ""
 
@@ -69,6 +79,10 @@ if systemctl --user is-active --quiet octavia-code-review.timer; then
     RUNNING_SERVICES+=("octavia-code-review.timer")
 fi
 
+if systemctl --user is-active --quiet octavia-ci-failure.timer; then
+    RUNNING_SERVICES+=("octavia-ci-failure.timer")
+fi
+
 if systemctl --user is-active --quiet octavia-bug-reproduction.path; then
     RUNNING_SERVICES+=("octavia-bug-reproduction.path")
 fi
@@ -83,6 +97,7 @@ if [ ${#RUNNING_SERVICES[@]} -eq 0 ]; then
     echo "To start services, run:"
     echo "  systemctl --user start octavia-bug-triage.timer"
     echo "  systemctl --user start octavia-code-review.timer"
+    echo "  systemctl --user start octavia-ci-failure.timer"
     echo "  systemctl --user start octavia-bug-reproduction.path"
     exit 0
 fi
@@ -123,7 +138,9 @@ echo "Updated packages:"
 echo "  ✓ agents-lib (shared utilities)"
 echo "  ✓ octavia-bug-triage-agent"
 echo "  ✓ octavia-code-review-agent"
+echo "  ✓ octavia-ci-failure-agent"
 echo "  ✓ octavia-bug-reproduction-agent"
+echo "  ✓ octavia-devstack-test-agent"
 echo ""
 echo "Changes are now active in $VENV_PATH"
 echo ""
