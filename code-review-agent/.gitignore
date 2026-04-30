@@ -25,7 +25,13 @@ config.json
 *.log
 .octavia_reviewed_changes.json
 
-# Keep sample/example configs
+# Review output files (generated reports — stored in ~/octavia_reviews/ normally,
+# but may land here during development/testing)
+review_*.md
+octavia-*.md
+code_review_*.md
+
+# Keep documentation and sample configs
 !config.sample.json
 !.env.example
 
