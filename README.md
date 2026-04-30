@@ -141,20 +141,28 @@ octavia-devstack-test
 
 ### Quick Setup (Recommended)
 
-The setup script creates a shared virtual environment, installs all packages, and deploys systemd services:
-
 ```bash
-cd ~/git/claude-agents/systemd
-./setup-systemd.sh
+cd ~/git/claude-agents
+./setup-agents.sh
 ```
 
-This installs the `~/.venv/claude-agents/` virtual environment and provides all commands below.
+The setup script walks you through each step interactively:
+- Creates `~/.venv/claude-agents/` and installs all agent packages
+- Optionally deploys systemd unit files for automated scheduling
+- Optionally configures notifications (email, Slack, ntfy.sh, desktop)
+
+Install specific agents or add flags to skip prompts:
+```bash
+./setup-agents.sh bug-triage code-review   # specific agents only
+./setup-agents.sh --systemd --notifications # skip prompts, enable both
+./setup-agents.sh --update                  # update all agents
+```
 
 ### Manual Package Installation
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv ~/.venv/claude-agents
+source ~/.venv/claude-agents/bin/activate
 
 pip install -e agents_lib/
 pip install -e bug-triage-agent/
@@ -195,6 +203,75 @@ Key settings common to all agents:
 
 ---
 
+## Notifications
+
+Agents can notify you when they produce a new report. Four channels are supported — all use Python stdlib, no extra packages needed.
+
+### Supported channels
+
+| Channel | Mechanism | Best for |
+|---------|-----------|----------|
+| **Email** | SMTP (smtplib) | Full report in body |
+| **Slack** | Incoming webhook | Team visibility |
+| **ntfy.sh** | HTTP push | Personal phone alerts |
+| **Desktop** | `notify-send` | Local machine use |
+
+### Setup
+
+**1. Create `notifications.json` from the sample:**
+
+```bash
+cp notifications.sample.json notifications.json
+```
+
+**2. Edit `notifications.json` to configure your channels:**
+
+```json
+{
+  "channels": {
+    "email": {
+      "enabled": true,
+      "smtp_host": "smtp.company.com",
+      "smtp_port": 587,
+      "smtp_user": "you@company.com",
+      "smtp_password_env": "SMTP_PASSWORD",
+      "from": "claude-agents@company.com",
+      "to": ["you@company.com"],
+      "use_tls": true,
+      "include_report_body": true
+    },
+    "ntfy": {
+      "enabled": true,
+      "url": "https://ntfy.sh/your-unique-topic"
+    }
+  }
+}
+```
+
+Sensitive values use `*_env` keys — the agent reads the credential from that environment variable at runtime rather than storing it in the file.
+
+**3. Enable notifications in each agent's `config.json`:**
+
+```json
+{
+  "notifications": { "enabled": true }
+}
+```
+
+`setup-agents.sh` can handle steps 1–3 automatically when you answer **y** to the notifications prompt.
+
+### ntfy.sh quick start (simplest option)
+
+[ntfy.sh](https://ntfy.sh) requires no account for basic use — just pick a unique topic name:
+
+```json
+{ "channels": { "ntfy": { "enabled": true, "url": "https://ntfy.sh/my-agents-abc123" } } }
+```
+
+Subscribe in a browser or the ntfy app and you'll get a push notification whenever a report is saved.
+
+---
+
 ## Automation with Systemd
 
 All agents run as systemd user services (no root required).
@@ -203,7 +280,7 @@ All agents run as systemd user services (no root required).
 
 ```bash
 # Run setup first (if not already done)
-cd systemd && ./setup-systemd.sh
+./setup-agents.sh --systemd
 
 # Bug triage — daily at 09:00
 systemctl --user enable octavia-bug-triage.timer
@@ -254,84 +331,51 @@ journalctl --user -u octavia-ci-failure.service -n 50
 journalctl --user -u octavia-bug-reproduction.service -f
 ```
 
-See [systemd/README.md](systemd/README.md) for full documentation including resource limits, environment variables, and advanced scheduling.
+See the `systemd/` directory inside each agent folder for the unit files. Schedules and environment variables can be customised by editing the installed copies in `~/.config/systemd/user/`.
 
 ---
 
 ## Keeping Agents Up To Date
 
-### One-Shot Update Script
-
 ```bash
 cd ~/git/claude-agents
-./update-agents.sh
+./setup-agents.sh --update
 ```
 
-This script:
-1. Pulls the latest code from git
-2. Reinstalls all packages in `~/.venv/claude-agents/`
-3. Reloads the systemd daemon
-4. Optionally restarts running services
-
-### Manual Update
+This pulls the latest code, reinstalls all packages, reloads the systemd daemon, and offers to restart any running services. Update a single agent:
 
 ```bash
-cd ~/git/claude-agents
-git pull
-
-source ~/.venv/claude-agents/bin/activate
-pip install -e agents_lib/ -e bug-triage-agent/ -e code-review-agent/ \
-            -e ci-failure-agent/ -e bug-reproduction-agent/ -e devstack-test-agent/
-
-systemctl --user daemon-reload
-
-# Restart services to apply changes immediately (optional)
-systemctl --user restart octavia-bug-triage.timer
-systemctl --user restart octavia-code-review.timer
-systemctl --user restart octavia-ci-failure.timer
-systemctl --user restart octavia-bug-reproduction.path
-```
-
-### After Updating
-
-```bash
-# Confirm services are running
-systemctl --user list-timers octavia-*
-
-# Check for recent errors
-journalctl --user -u octavia-code-review.service -n 20
+./setup-agents.sh --update ci-failure
 ```
 
 ### Configuration Changes
 
-The update script only updates code, not your `config.json` files. After an update:
+The update script does not touch your `config.json` files. After an update, compare with the sample to spot new options:
 
 ```bash
-# Compare your config with the new sample to find new options
 diff bug-triage-agent/config.json bug-triage-agent/config.sample.json
-diff code-review-agent/config.json code-review-agent/config.sample.json
-diff ci-failure-agent/config.json ci-failure-agent/config.sample.json
+diff notifications.json notifications.sample.json
 ```
 
 ### Rollback
 
 ```bash
 cd ~/git/claude-agents
-git log --oneline -5          # find the previous commit hash
-git checkout <commit-hash>    # revert to that version
-./update-agents.sh            # reinstall
+git log --oneline -5           # find the previous commit hash
+git checkout <commit-hash>     # revert to that version
+./setup-agents.sh --update     # reinstall
 
 # Return to latest
-git checkout main && git pull && ./update-agents.sh
+git checkout main && git pull && ./setup-agents.sh --update
 ```
 
 ### Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| `Virtual environment not found` | Run `systemd/setup-systemd.sh` first |
+| `Virtual environment not found` | Run `./setup-agents.sh` first |
 | `Unit not found` when restarting | Enable the service: `systemctl --user enable <service>` |
-| Git pull fails with conflict | `git stash && ./update-agents.sh && git stash pop` |
+| Git pull fails with conflict | `git stash && ./setup-agents.sh --update && git stash pop` |
 | Service runs but produces no output | Check `journalctl --user -u <service> -n 50` |
 
 ---
@@ -348,6 +392,7 @@ Common utilities used by all agents:
 | `prompt_loader.py` | `load_prompt_template()` |
 | `devstack_checks.py` | `check_devstack_health()`, `check_repo_on_main_branch()` |
 | `devstack_lock.py` | `DevStackLock`, `check_devstack_available()`, `get_unique_resource_prefix()` |
+| `notifications.py` | `notify_report()`, `load_notifications_config()` |
 
 ---
 
@@ -355,17 +400,27 @@ Common utilities used by all agents:
 
 ```
 claude-agents/
-├── agents_lib/              Shared utilities package
-├── bug-triage-agent/        Launchpad bug triage
-├── code-review-agent/       Gerrit code review
-├── ci-failure-agent/        Zuul CI failure analysis
-├── bug-reproduction-agent/  DevStack bug reproduction
-├── devstack-test-agent/     DevStack integration testing
-├── systemd/                 Service/timer files and setup script
-├── CHANGELOG.md             Full change history
-├── CLAUDE.md                Context for AI instances
-├── update-agents.sh         One-shot update script
-└── README.md                This file
+├── agents_lib/                  Shared utilities package
+├── bug-triage-agent/            Launchpad bug triage
+│   ├── install.sh               Per-agent installer
+│   └── systemd/                 Unit files for this agent
+├── code-review-agent/           Gerrit code review
+│   ├── install.sh
+│   └── systemd/
+├── ci-failure-agent/            Zuul CI failure analysis
+│   ├── install.sh
+│   └── systemd/
+├── bug-reproduction-agent/      DevStack bug reproduction
+│   ├── install.sh
+│   └── systemd/
+├── devstack-test-agent/         DevStack integration testing
+│   ├── install.sh
+│   └── systemd/
+├── setup-agents.sh              Install / update all agents
+├── notifications.sample.json    Notification channel config template
+├── CHANGELOG.md                 Full change history
+├── CLAUDE.md                    Context for AI instances
+└── README.md                    This file
 ```
 
 ---
