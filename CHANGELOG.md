@@ -6,6 +6,19 @@ All notable changes to the claude-agents project are documented here.
 
 ## 2026-04-30
 
+### Added: AGENTS.md and Claude Code sub-agent definitions
+
+Makes all five agents discoverable and invokable from AI coding assistants:
+
+- **`AGENTS.md`** (repo root) — follows the open `agents.md` standard.
+  Describes each agent's purpose, CLI commands, key configuration, output
+  locations, and common multi-agent workflows.
+
+- **`.claude/agents/*.md`** — Claude Code sub-agent definitions for all five
+  agents.  Each file has YAML front matter (`name`, `description`, `tools`)
+  and a prompt that tells Claude Code how to invoke the agent and summarise
+  its output.  Accessible via the `/agents` command in a Claude Code session.
+
 ### Added: Provider-agnostic model client (`agents_lib/model_client.py`)
 
 Agents no longer import `claude_agent_sdk` directly.  A new abstraction layer
