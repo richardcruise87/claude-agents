@@ -6,6 +6,26 @@ All notable changes to the claude-agents project are documented here.
 
 ## 2026-04-30
 
+### Changed: Unified agent installation scripts
+
+Consolidated `update-agents.sh`, `systemd/setup-systemd.sh`, and the old
+`code-review-agent/install.sh` into a single, consistent approach:
+
+- **New `setup-agents.sh`** (repo root) — installs or updates any combination
+  of agents; accepts `--update`, `--systemd`/`--no-systemd`, `--venv PATH`, and
+  individual agent names as arguments.  Replaces both `update-agents.sh` and
+  `systemd/setup-systemd.sh`.
+- **Per-agent `install.sh`** — each agent directory now has its own `install.sh`
+  that can be run standalone or called by `setup-agents.sh`.  Handles venv
+  creation, `agents_lib` bootstrapping, package install, config copy, and
+  optional systemd file installation.
+- **Per-agent `systemd/` directories** — unit files (`*.service`, `*.timer`,
+  `*.path`) now live alongside the agent code instead of in a shared `systemd/`
+  directory.  Covers all five agents including `devstack-test-agent`.
+- Removed the root-level `systemd/` directory, `update-agents.sh`, and
+  `code-review-agent/setup_review_agent.sh`.
+- Updated Installation sections in all agent READMEs.
+
 ### Added: CI Failure Analysis Agent (`ci-failure-agent/`)
 
 New agent that monitors Zuul CI for failures across configured OpenStack

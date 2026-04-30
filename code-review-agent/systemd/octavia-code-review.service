@@ -8,26 +8,19 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=%h/git/claude-agents/code-review-agent
 
-# Virtual environment activation and execution
 ExecStart=%h/.venv/claude-agents/bin/octavia-review-agent
 
-# Environment variables
 Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="CLAUDE_MODEL=claude-opus-4-6"
 # Environment="CUTOFF_DATE=2026-03-01"
 # Environment="MAX_REVIEWS=3"
-Environment="CLAUDE_MODEL=claude-opus-4-6"
 
-# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=octavia-code-review
 
-# Resource limits (optional)
 # MemoryMax=2G
 # CPUQuota=50%
 
-# Restart policy for oneshot is not typical, but can catch transient failures
-# RestartSec=5m
-
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

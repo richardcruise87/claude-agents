@@ -22,17 +22,35 @@ This separation improves throughput by **5-6x** - code reviews complete quickly 
 
 ## Installation
 
-```bash
-# Install package
-cd devstack-test-agent
-pip install -e .
+### Using setup-agents.sh (recommended)
 
-# Create config
+Run from the repository root:
+
+```bash
+cd ~/git/claude-agents
+./setup-agents.sh devstack-test             # install this agent only
+./setup-agents.sh --systemd devstack-test   # also install systemd path watcher
+./setup-agents.sh --update devstack-test    # update to latest version
+```
+
+### Standalone
+
+Run directly from the agent directory:
+
+```bash
+cd ~/git/claude-agents/devstack-test-agent
+./install.sh               # install package, prompt for systemd
+./install.sh --systemd     # install package + systemd path watcher
+./install.sh --no-systemd  # install package only
+```
+
+This installs the `octavia-devstack-test` command into `~/.venv/claude-agents`.
+
+### Configure
+
+```bash
 cp config.sample.json config.json
 vim config.json
-
-# Provides command
-octavia-devstack-test
 ```
 
 ## Configuration

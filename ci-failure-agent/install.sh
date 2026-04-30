@@ -14,7 +14,7 @@ NC='\033[0m'
 usage() {
     echo "Usage: $(basename "$0") [OPTIONS]"
     echo ""
-    echo "Install the Code Review Agent into the Claude Agents virtual environment."
+    echo "Install the CI Failure Agent into the Claude Agents virtual environment."
     echo ""
     echo "Options:"
     echo "  --venv PATH     Virtual environment path (default: ~/.venv/claude-agents)"
@@ -61,7 +61,7 @@ fi
 
 # Install this agent
 "$VENV_PATH/bin/pip" install -q -e "$SCRIPT_DIR/"
-echo -e "${GREEN}✓${NC} code-review-agent installed (octavia-review-agent, octavia-review-change)"
+echo -e "${GREEN}✓${NC} ci-failure-agent installed (octavia-ci-agent, octavia-analyze-ci)"
 
 # Copy config if missing
 if [ ! -f "$SCRIPT_DIR/config.json" ] && [ -f "$SCRIPT_DIR/config.sample.json" ]; then
@@ -71,7 +71,7 @@ fi
 
 # Systemd
 if [ -z "$INSTALL_SYSTEMD" ]; then
-    echo -n "Install systemd service files for the code review agent? [y/N] "
+    echo -n "Install systemd service files for the CI failure agent? [y/N] "
     read -r _response
     [[ "$_response" =~ ^[Yy]$ ]] && INSTALL_SYSTEMD=yes || INSTALL_SYSTEMD=no
 fi
@@ -86,6 +86,6 @@ if [ "$INSTALL_SYSTEMD" = "yes" ]; then
         echo -e "${GREEN}✓${NC} Installed $base"
     done
     echo ""
-    echo "To enable the code review agent:"
-    echo "  systemctl --user enable --now octavia-code-review.timer"
+    echo "To enable the CI failure agent:"
+    echo "  systemctl --user enable --now octavia-ci-failure.timer"
 fi

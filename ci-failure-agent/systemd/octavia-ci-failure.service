@@ -1,29 +1,24 @@
 [Unit]
 Description=OpenStack CI Failure Analysis Agent
 Documentation=https://github.com/richardcruise87/claude-agents
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 WorkingDirectory=%h/git/claude-agents/ci-failure-agent
+
 ExecStart=%h/.venv/claude-agents/bin/octavia-ci-agent
 
-# Vertex AI / Claude API credentials
 Environment="CLAUDE_CODE_USE_VERTEX=1"
 Environment="CLAUDE_MODEL=claude-sonnet-4-6"
-
-# Uncomment to override config settings:
 # Environment="HOURS_BACK=24"
 # Environment="MAX_CHANGES=5"
-# Environment="REPORTS_OUTPUT_DIR=%h/octavia_ci_failures"
-# Environment="ZUUL_BASE_URL=https://zuul.opendev.org"
-# Environment="ZUUL_TENANT=openstack"
 
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=octavia-ci-agent
 
-# Resource limits
 MemoryMax=4G
 CPUQuota=100%
 TimeoutSec=3600

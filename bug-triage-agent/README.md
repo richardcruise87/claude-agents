@@ -24,26 +24,42 @@ AI-powered bug triage agent for OpenStack Octavia. Monitors Launchpad for bugs, 
 
 ## Installation
 
-1. **Clone the repository**:
+### Using setup-agents.sh (recommended)
+
+Run from the repository root:
+
+```bash
+cd ~/git/claude-agents
+./setup-agents.sh bug-triage             # install this agent only
+./setup-agents.sh --systemd bug-triage   # also install systemd timer
+./setup-agents.sh --update bug-triage    # update to latest version
+```
+
+### Standalone
+
+Run directly from the agent directory:
+
 ```bash
 cd ~/git/claude-agents/bug-triage-agent
+./install.sh               # install package, prompt for systemd
+./install.sh --systemd     # install package + systemd timer
+./install.sh --no-systemd  # install package only
 ```
 
-2. **Install dependencies**:
-```bash
-pip install claude-agent-sdk httpx
-```
+This installs the `octavia-triage-bugs` command into `~/.venv/claude-agents`.
 
-3. **Configure Vertex AI**:
+### Configure Vertex AI
+
 ```bash
 export CLAUDE_CODE_USE_VERTEX=1
-# Ensure gcloud is authenticated
+gcloud auth application-default login
 ```
 
-4. **Create configuration**:
+### Automate with systemd
+
 ```bash
-cp config.sample.json config.json
-# Edit config.json with your settings
+systemctl --user enable --now octavia-bug-triage.timer
+journalctl --user -u octavia-bug-triage.service -f
 ```
 
 ## Configuration

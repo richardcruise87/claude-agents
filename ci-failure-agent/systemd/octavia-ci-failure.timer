@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenStack CI Failure Analysis Agent Timer
+Documentation=https://github.com/richardcruise87/claude-agents
+
+[Timer]
+# Run every 4 hours
+OnCalendar=00/4:00:00
+
+# Alternative schedules (uncomment one):
+# Every 2 hours:    OnCalendar=00/2:00:00
+# Weekdays at 9AM:  OnCalendar=Mon..Fri *-*-* 09:00:00
+
+# Run if the system was off at the scheduled time
+Persistent=true
+
+Unit=octavia-ci-failure.service
+
+[Install]
+WantedBy=timers.target

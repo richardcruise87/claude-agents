@@ -8,25 +8,18 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=%h/git/claude-agents/bug-triage-agent
 
-# Virtual environment activation and execution
 ExecStart=%h/.venv/claude-agents/bin/octavia-triage-bugs
 
-# Environment variables
 Environment="CLAUDE_CODE_USE_VERTEX=1"
 # Environment="CUTOFF_DATE=2026-03-01"
 # Environment="MAX_BUGS=5"
 
-# Logging
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=octavia-bug-triage
 
-# Resource limits (optional)
 # MemoryMax=2G
 # CPUQuota=50%
 
-# Restart policy for oneshot is not typical, but can catch transient failures
-# RestartSec=5m
-
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

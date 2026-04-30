@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for new Octavia code review files
+Documentation=https://github.com/richardcruise87/claude-agents
+
+[Path]
+PathChanged=%h/octavia_reviews
+Unit=octavia-devstack-test.service
+
+[Install]
+WantedBy=paths.target

@@ -52,32 +52,35 @@ Exit (systemd queues next trigger if needed)
 
 ## Installation
 
-### 1. Install as Python Package
+### Using setup-agents.sh (recommended)
+
+Run from the repository root:
 
 ```bash
-# Create virtual environment
-python3 -m venv ~/.venv/claude-agents
-source ~/.venv/claude-agents/bin/activate
-
-# Install shared library
-cd ~/git/claude-agents/agents_lib
-pip install -e .
-
-# Install bug-reproduction-agent
-cd ~/git/claude-agents/bug-reproduction-agent
-pip install -e .
+cd ~/git/claude-agents
+./setup-agents.sh bug-reproduction             # install this agent only
+./setup-agents.sh --systemd bug-reproduction   # also install systemd path watcher
+./setup-agents.sh --update bug-reproduction    # update to latest version
 ```
 
-This installs the `octavia-reproduce-bugs` command.
+### Standalone
 
-### 2. Configure
+Run directly from the agent directory:
 
 ```bash
-# Copy sample configuration
-cp config.sample.json config.json
+cd ~/git/claude-agents/bug-reproduction-agent
+./install.sh               # install package, prompt for systemd
+./install.sh --systemd     # install package + systemd path watcher
+./install.sh --no-systemd  # install package only
+```
 
+This installs the `octavia-reproduce-bugs` command into `~/.venv/claude-agents`.
+
+### Configure
+
+```bash
 # Edit configuration (set paths, parameters)
-vim config.json
+vim bug-reproduction-agent/config.json
 ```
 
 **Required Configuration:**
@@ -91,16 +94,11 @@ vim config.json
 - `reproduction.script_timeout`: Script execution timeout in seconds (default: 600)
 - `cutoff_date`: Only process triages for bugs created after this date (default: 30 days ago)
 
-### 3. Setup systemd Integration
+### Automate with systemd
 
 ```bash
-# Run setup script
-cd ~/git/claude-agents/systemd
-./setup-systemd.sh
-
-# Enable and start path watcher
-systemctl --user enable octavia-bug-reproduction.path
-systemctl --user start octavia-bug-reproduction.path
+# Enable path watcher (triggers on new triage reports)
+systemctl --user enable --now octavia-bug-reproduction.path
 
 # Enable persistence after logout
 loginctl enable-linger $USER

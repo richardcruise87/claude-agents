@@ -40,84 +40,66 @@ Automatically monitors OpenDev for new changes, downloads them to your local Dev
 
 ## Quick Start
 
-### 1. Clone the Repository
+### 1. Install
+
+**Using setup-agents.sh (recommended)** — run from the repository root:
 
 ```bash
-git clone <repository-url>
-cd code-review-agent
+cd ~/git/claude-agents
+./setup-agents.sh code-review             # install this agent only
+./setup-agents.sh --systemd code-review   # also install systemd timer
+./setup-agents.sh --update code-review    # update to latest version
 ```
 
-### 2. Run Installation Script
+**Standalone** — run from the agent directory:
 
 ```bash
-chmod +x install.sh
-./install.sh
+cd ~/git/claude-agents/code-review-agent
+./install.sh               # install package, prompt for systemd
+./install.sh --systemd     # install package + systemd timer
+./install.sh --no-systemd  # install package only
 ```
 
-This will:
-- Install the Claude Agent SDK
-- Create `config.json` from `config.sample.json`
-- Help you configure basic settings
-- Set up the output directory
+This installs `octavia-review-agent` and `octavia-review-change` into `~/.venv/claude-agents`.
 
-### 3. Configure Vertex AI
+### 2. Configure Vertex AI
 
-Set the environment variable:
 ```bash
 export CLAUDE_CODE_USE_VERTEX=1
-```
-
-Configure Google Cloud credentials (choose one):
-
-**Option A: Application Default Credentials** (Recommended)
-```bash
 gcloud auth application-default login
+# Add to ~/.bashrc to persist: echo 'export CLAUDE_CODE_USE_VERTEX=1' >> ~/.bashrc
 ```
 
-**Option B: Service Account**
-```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
-```
+### 3. Edit Configuration
 
-**Make it persistent** by adding to `~/.bashrc` or `~/.zshrc`:
-```bash
-echo 'export CLAUDE_CODE_USE_VERTEX=1' >> ~/.bashrc
-```
-
-### 4. Edit Configuration
-
-Edit `config.json` to match your environment:
+Edit `code-review-agent/config.json` to match your environment:
 
 ```json
 {
   "devstack": {
-    "path": "/opt/stack"  // ← Your DevStack location
+    "path": "/opt/stack"
   },
   "output": {
-    "reviews_directory": "~/octavia_reviews"  // ← Where to save reviews
-  },
-  "repositories": [
-    "openstack/octavia",
-    "openstack/octavia-lib",
-    // ... add or remove repos
-  ]
+    "reviews_directory": "~/octavia_reviews"
+  }
 }
 ```
 
-### 5. Verify Setup
+### 4. Review a Change
 
 ```bash
-./setup_review_agent.sh
-```
-
-### 6. Review a Change!
-
-```bash
-# By change number
-./review_single_change.py 912345
+# Review a specific change by number
+octavia-review-change 912345
 
 # Or by URL
-./review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345
+octavia-review-change https://review.opendev.org/c/openstack/octavia/+/912345
+```
+
+### 5. Automate with systemd
+
+```bash
+systemctl --user enable --now octavia-code-review.timer
+journalctl --user -u octavia-code-review.service -f
 ```
 
 ## Usage

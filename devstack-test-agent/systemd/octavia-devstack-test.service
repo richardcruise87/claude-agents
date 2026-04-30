@@ -1,0 +1,26 @@
+[Unit]
+Description=Octavia DevStack Test Agent
+Documentation=https://github.com/richardcruise87/claude-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/git/claude-agents/devstack-test-agent
+
+ExecStart=%h/.venv/claude-agents/bin/octavia-devstack-test
+
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+# Environment="LOCK_TIMEOUT=600"
+# Environment="TEST_TIMEOUT=900"
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=octavia-devstack-test
+
+MemoryMax=4G
+CPUQuota=100%
+TimeoutSec=1800
+
+[Install]
+WantedBy=default.target
