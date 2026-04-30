@@ -94,8 +94,6 @@ Assign exactly ONE category to each job:
 
 ### Step 3: Write the Report
 
-Write the complete report to {output_file} using the Write tool.
-
 Use EXACTLY this markdown format:
 
 ```markdown
@@ -188,5 +186,5 @@ recheck
 3. **Be conservative with CODE_ISSUE** — Only assign if you can clearly connect the failure to code in this specific patchset.
 4. **ENVIRONMENTAL is very common** — Network timeouts, package download failures, and mirror issues are extremely common in OpenStack CI and should be categorized as ENVIRONMENTAL.
 5. **Non-voting jobs still matter** — Analyze them fully, but note in the recommendation that they don't block the merge.
-6. **Write the file** — Use the Write tool to save the report to {output_file}. The report must be written to disk.
+6. **Complete the report** — Produce the full report as your response.
 7. **Complete all jobs** — Analyze every failing job listed, even if their logs are hard to fetch.

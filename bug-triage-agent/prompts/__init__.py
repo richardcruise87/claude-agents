@@ -5,28 +5,9 @@ Loads and formats prompt templates from external files.
 """
 from pathlib import Path
 
+from agents_lib import load_agent_prompt
 
-def load_prompt_template(template_name: str) -> str:
-    """
-    Load a prompt template from the prompts directory.
-
-    Args:
-        template_name: Name of the template file (without .txt extension)
-
-    Returns:
-        The template content as a string
-
-    Raises:
-        FileNotFoundError: If the template file doesn't exist
-    """
-    prompts_dir = Path(__file__).parent
-    template_file = prompts_dir / f"{template_name}.txt"
-
-    if not template_file.exists():
-        raise FileNotFoundError(f"Prompt template not found: {template_file}")
-
-    with open(template_file, 'r', encoding='utf-8') as f:
-        return f.read()
+_PROMPTS_DIR = Path(__file__).parent
 
 
 def get_bug_triage_prompt(
@@ -44,6 +25,7 @@ def get_bug_triage_prompt(
     sequence: int,
     previous_triage_summary: str = None,
     previous_sequence: int = None,
+    provider: str = "anthropic",
 ) -> str:
     """
     Get the formatted bug triage prompt.
@@ -67,7 +49,12 @@ def get_bug_triage_prompt(
     Returns:
         Formatted prompt ready to use with the agent
     """
-    template = load_prompt_template("bug_triage_prompt")
+    template = load_agent_prompt(
+        "bug_triage",
+        provider=provider,
+        prompts_dir=_PROMPTS_DIR,
+        save_path=str(triage_file),
+    )
 
     # Build sequence note
     sequence_note = ""
@@ -142,7 +129,6 @@ This bug was previously triaged.
     formatted_prompt = formatted_prompt.replace('{previous_triage_section}', previous_triage_section)
     formatted_prompt = formatted_prompt.replace('{bug_description}', bug_description)
     formatted_prompt = formatted_prompt.replace('{devstack_path}', devstack_path)
-    formatted_prompt = formatted_prompt.replace('{triage_file}', str(triage_file))
     formatted_prompt = formatted_prompt.replace('{search_keywords}', search_keywords)
     formatted_prompt = formatted_prompt.replace('{relevant_files}', relevant_files)
 

@@ -10,8 +10,6 @@ import sys
 import re
 from pathlib import Path
 from datetime import datetime
-from claude_agent_sdk import query, ClaudeAgentOptions
-
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -23,6 +21,8 @@ from agents_lib import (
     get_unique_resource_prefix,
     notify_report,
     load_notifications_config,
+    create_model_client,
+    format_usage_info,
 )
 from config import load_config
 from review_parser import parse_review_file, should_test_review, get_review_timestamp
@@ -78,9 +78,14 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
             # Results file (temp location, will be incorporated into review)
             results_file = Path(f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md")
 
-            # Load prompt template
-            prompt_file = Path(__file__).parent / "prompts" / "devstack_test_prompt.txt"
-            prompt_template = prompt_file.read_text()
+            # Load prompt template via provider-aware loader
+            _prompts_dir = Path(__file__).parent / "prompts"
+            _provider = config.get("model_provider", "anthropic")
+            from agents_lib import load_agent_prompt as _lap
+            prompt_template = _lap(
+                "devstack_test", provider=_provider,
+                prompts_dir=_prompts_dir, save_path=str(results_file),
+            )
 
             # Format prompt
             prompt = prompt_template.format(
@@ -102,19 +107,16 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
             # Run test with AI agent
             test_result = None
             try:
-                async for message in query(
+                _client = create_model_client(config)
+                _res = await _client.query(
                     prompt=prompt,
-                    options=ClaudeAgentOptions(
-                        allowed_tools=["Bash", "Read", "Write", "Grep"],
-                    ),
-                ):
-                    if hasattr(message, 'text'):
-                        print(f"  {message.text}")
-                    elif hasattr(message, 'result'):
-                        test_result = message.result
-                        print(f"\n{'='*80}")
-                        print(f"✅ Testing Complete!")
-                        print(f"{'='*80}")
+                    tools=["Bash", "Read", "Write", "Grep"],
+                    on_progress=lambda text: print(f"  {text}"),
+                )
+                test_result = _res.text
+                print(f"\n{'='*80}")
+                print(f"✅ Testing Complete!")
+                print(f"{'='*80}")
 
                 # Check if results file was created
                 if results_file.exists():

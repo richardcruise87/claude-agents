@@ -6,8 +6,7 @@ after failures.
 """
 from pathlib import Path
 from typing import Dict, List
-from claude_agent_sdk import query, ClaudeAgentOptions
-from agents_lib import load_prompt_template
+from agents_lib import load_prompt_template, create_model_client
 from triage_parser import TriageReport
 from script_executor import ExecutionResult
 
@@ -48,29 +47,17 @@ async def generate_initial_script(
         devstack_path=devstack_path
     )
 
-    # Use Claude Agent SDK to generate script
-    options = ClaudeAgentOptions(
-        model=config.get("model", "claude-sonnet-4-6"),
-    )
-
-    # Query returns an async generator of messages
-    usage_dict = {}
-    async for message in query(prompt=prompt, options=options):
-        if hasattr(message, 'result'):
-            # Capture usage information
-            usage_dict = {
-                'usage': getattr(message, 'usage', None),
-                'cost_usd': getattr(message, 'total_cost_usd', None),
-                'model': getattr(message, 'model', None),
-                'duration_ms': getattr(message, 'duration_ms', None),
-            }
-
-            # Extract script from response (handle markdown code blocks)
-            script = extract_script_from_response(message.result)
-            return script, usage_dict
-
-    # Fallback if no result received
-    raise RuntimeError("No result received from AI agent")
+    # Use model client to generate script (no tools needed — text-only task)
+    _client = create_model_client(config)
+    _res = await _client.query(prompt=prompt)
+    usage_dict = {
+        'usage': _res.usage,
+        'cost_usd': _res.cost_usd,
+        'model': _res.model,
+        'duration_ms': _res.duration_ms,
+    }
+    script = extract_script_from_response(_res.text)
+    return script, usage_dict
 
 
 async def refine_script(
@@ -111,29 +98,17 @@ async def refine_script(
         stderr=execution_result.stderr[-2000:]  # Last 2000 chars
     )
 
-    # Use Claude Agent SDK to refine script
-    options = ClaudeAgentOptions(
-        model="sonnet",  # Use Sonnet for refinement
-    )
-
-    # Query returns an async generator of messages
-    usage_dict = {}
-    async for message in query(prompt=prompt, options=options):
-        if hasattr(message, 'result'):
-            # Capture usage information
-            usage_dict = {
-                'usage': getattr(message, 'usage', None),
-                'cost_usd': getattr(message, 'total_cost_usd', None),
-                'model': getattr(message, 'model', None),
-                'duration_ms': getattr(message, 'duration_ms', None),
-            }
-
-            # Extract script from response
-            script = extract_script_from_response(message.result)
-            return script, usage_dict
-
-    # Fallback if no result received
-    raise RuntimeError("No result received from AI agent")
+    # Use model client to refine script (no tools needed — text-only task)
+    _client = create_model_client(config)
+    _res = await _client.query(prompt=prompt)
+    usage_dict = {
+        'usage': _res.usage,
+        'cost_usd': _res.cost_usd,
+        'model': _res.model,
+        'duration_ms': _res.duration_ms,
+    }
+    script = extract_script_from_response(_res.text)
+    return script, usage_dict
 
 
 def extract_script_from_response(response: str) -> str:

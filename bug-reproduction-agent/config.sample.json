@@ -1,10 +1,10 @@
 {
   "comment": "Copy this file to config.json and customize for your environment",
   "model": "claude-sonnet-4-6",
+  "model_provider": "anthropic",
   "triage_reports_dir": "~/octavia_bug_triages",
   "reproductions_output_dir": "~/octavia_bug_reproductions",
   "reproduction_tracking_file": "~/.octavia_bug_reproductions.json",
-
   "devstack": {
     "path": "/opt/stack",
     "openrc_file": "/opt/stack/devstack/openrc",
@@ -20,7 +20,6 @@
     "min_disk_space_gb": 10,
     "comment": "DevStack configuration and health check requirements"
   },
-
   "reproduction": {
     "max_attempts": 3,
     "script_timeout": 600,
@@ -28,10 +27,8 @@
     "working_directory": "/tmp/octavia-reproductions",
     "comment": "Reproduction attempt settings"
   },
-
   "cutoff_date": null,
   "comment2": "Cutoff date (YYYY-MM-DD) for processing triages. Defaults to 30 days ago if null.",
-
   "notifications": {
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"

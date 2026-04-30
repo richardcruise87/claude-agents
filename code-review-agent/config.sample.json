@@ -1,15 +1,13 @@
 {
   "comment": "Copy this file to config.json and customize for your environment",
-
   "model": "claude-sonnet-4-6",
-
+  "model_provider": "anthropic",
   "repositories": [
     "openstack/octavia",
     "openstack/octavia-lib",
     "openstack/octavia-tempest-plugin",
     "openstack/python-octaviaclient"
   ],
-
   "devstack": {
     "path": "/opt/stack",
     "openrc_file": "~/git/devstack/openrc",
@@ -24,7 +22,6 @@
     "cleanup_on_failure": true,
     "comment": "DevStack configuration. test_in_devstack enables deploying and testing changes in DevStack. cleanup_on_failure removes test resources even if tests fail."
   },
-
   "output": {
     "reviews_directory": "~/octavia_reviews",
     "comment": "Where to save review documents. Can use ~ for home directory.",
@@ -32,13 +29,11 @@
     "include_test_output": true,
     "include_code_snippets": true
   },
-
   "gerrit": {
     "base_url": "https://review.opendev.org",
     "api_version": "2.16",
     "comment": "Gerrit server configuration. Usually doesn't need to change."
   },
-
   "testing": {
     "run_unit_tests": true,
     "run_functional_tests": true,
@@ -48,14 +43,12 @@
     "pep8_command": "tox -e pep8",
     "test_timeout_seconds": 1800
   },
-
   "monitoring": {
     "check_interval_minutes": 60,
     "max_reviews_per_cycle": 3,
     "reviewed_changes_file": "~/.octavia_reviewed_changes.json",
     "comment": "Settings for automated monitoring mode"
   },
-
   "analysis": {
     "check_security": true,
     "check_performance": true,
@@ -63,7 +56,6 @@
     "check_documentation": true,
     "minimum_test_coverage": 80
   },
-
   "filters": {
     "skip_wip": true,
     "skip_draft": true,
@@ -75,7 +67,10 @@
     "exclude_authors": [],
     "comment3": "Leave arrays empty to include/exclude no one",
     "exclude_branches": [],
-    "include_branches": ["master", "main"],
+    "include_branches": [
+      "master",
+      "main"
+    ],
     "comment4": "Branch filtering. Wildcards (*) supported. Exclude processed first, then include. Examples: exclude=['*'] + include=['master'] = only master; exclude=['stable/*'] = skip all stable branches; exclude=[] + include=[] = all branches"
   },
   "notifications": {

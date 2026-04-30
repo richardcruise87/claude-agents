@@ -11,12 +11,10 @@ import json
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from claude_agent_sdk import query, ClaudeAgentOptions
-
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
-from agents_lib import notify_report, load_notifications_config
+from agents_lib import notify_report, load_notifications_config, create_model_client, format_usage_info
 from bug_tracker import (
     load_triage_history,
     should_triage_bug,
@@ -193,6 +191,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
     print(f"📄 Triage will be saved to: {triage_file.name}\n")
 
     # Get the prompt
+    _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_bug_triage_prompt(
         bug_number=bug_number,
         bug_title=bug_title,
@@ -208,6 +207,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         sequence=sequence,
         previous_triage_summary=previous_summary,
         previous_sequence=previous_seq,
+        provider=_provider,
     )
 
     print("🤖 Starting bug triage analysis...\n")
@@ -215,33 +215,25 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
     triage_result = None
     usage_info = None
     try:
-        async for message in query(
+        _client = create_model_client(CONFIG)
+        _result = await _client.query(
             prompt=prompt,
-            options=ClaudeAgentOptions(
-                allowed_tools=["Bash", "Read", "Write", "Grep", "Glob"],
-                model=CONFIG.get("model", "claude-sonnet-4-6"),
-            ),
-        ):
-            if hasattr(message, 'text'):
-                print(f"  {message.text}")
-            elif hasattr(message, 'result'):
-                triage_result = message.result
+            tools=["Bash", "Read", "Write", "Grep", "Glob"],
+            on_progress=lambda text: print(f"  {text}"),
+        )
+        triage_result = _result.text
+        usage_info = format_usage_info(
+            usage_data=_result.usage,
+            cost_usd=_result.cost_usd,
+            model=_result.model,
+            duration_ms=_result.duration_ms,
+        )
 
-                # Capture usage information if available
-                if hasattr(message, 'usage') or hasattr(message, 'total_cost_usd'):
-                    from agents_lib import format_usage_info
-                    usage_info = format_usage_info(
-                        usage_data=getattr(message, 'usage', None),
-                        cost_usd=getattr(message, 'total_cost_usd', None),
-                        model=getattr(message, 'model', None),
-                        duration_ms=getattr(message, 'duration_ms', None)
-                    )
-
-                print(f"\n{'='*80}")
-                print(f"✅ Triage Complete!")
-                print(f"{'='*80}")
-                print(f"\n📄 Triage saved to: {triage_file}")
-                print(f"\nSummary:\n{triage_result[:500]}...")
+        print(f"\n{'='*80}")
+        print(f"✅ Triage Complete!")
+        print(f"{'='*80}")
+        print(f"\n📄 Triage saved to: {triage_file}")
+        print(f"\nSummary:\n{(triage_result or '')[:500]}...")
 
         # Append usage info to triage if available
         if triage_result and usage_info:

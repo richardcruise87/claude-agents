@@ -1,39 +1,36 @@
 {
   "comment": "Copy this file to config.json and customize for your environment",
-
   "model": "claude-sonnet-4-6",
-
+  "model_provider": "anthropic",
   "repositories": [
     "openstack/octavia",
     "openstack/octavia-lib",
     "openstack/octavia-tempest-plugin",
     "openstack/python-octaviaclient"
   ],
-
   "zuul": {
     "base_url": "https://zuul.opendev.org",
     "tenant": "openstack",
-    "pipelines": ["check", "gate"],
+    "pipelines": [
+      "check",
+      "gate"
+    ],
     "hours_back": 24,
     "comment": "Zuul CI server configuration. pipelines: which pipelines to monitor for failures. hours_back: how many hours back to look for failures."
   },
-
   "gerrit": {
     "base_url": "https://review.opendev.org",
     "comment": "Gerrit server configuration. Usually does not need to change for OpenStack."
   },
-
   "output": {
     "reports_directory": "~/octavia_ci_failures",
     "comment": "Where to save CI failure analysis reports. Supports ~ for home directory."
   },
-
   "monitoring": {
     "max_changes_per_cycle": 5,
     "analyzed_failures_file": "~/.octavia_ci_failures.json",
     "comment": "Settings for automated monitoring. max_changes_per_cycle limits processing per run."
   },
-
   "filters": {
     "skip_non_voting": false,
     "comment": "skip_non_voting: if true, only analyze voting jobs. Non-voting jobs still appear in reports but are not analyzed."

@@ -36,6 +36,8 @@ from .devstack_lock import (
     get_unique_resource_prefix,
 )
 from .notifications import load_notifications_config, notify_report
+from .model_client import ModelResult, ModelClient, create_model_client
+from .prompt_loader import load_agent_prompt
 
 __all__ = [
     "expand_path",
@@ -64,4 +66,8 @@ __all__ = [
     "get_unique_resource_prefix",
     "load_notifications_config",
     "notify_report",
+    "ModelResult",
+    "ModelClient",
+    "create_model_client",
+    "load_agent_prompt",
 ]

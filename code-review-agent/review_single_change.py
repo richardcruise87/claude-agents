@@ -15,8 +15,6 @@ import re
 import argparse
 from datetime import datetime
 from pathlib import Path
-from claude_agent_sdk import query, ClaudeAgentOptions
-
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
@@ -29,6 +27,8 @@ from prompts import get_code_review_prompt
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
+    create_model_client,
+    format_usage_info,
 )
 
 # Load configuration
@@ -63,7 +63,8 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         print(f"🔍 Looking up change {change_number}...")
 
         # Fetch change details from Gerrit
-        async for message in query(
+        _client = create_model_client(CONFIG)
+        _r = await _client.query(
             prompt=f"""
             Fetch the change details from Gerrit API:
             {GERRIT_BASE_URL}/changes/{change_number}
@@ -72,22 +73,17 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             Return ONLY the repository name in format: openstack/project-name
             Note: Gerrit prepends ")]]}}'" to JSON - strip it.
             """,
-            options=ClaudeAgentOptions(allowed_tools=["WebFetch"], model=CONFIG.get("model", "claude-sonnet-4-6")),
-        ):
-            if hasattr(message, 'result'):
-                # Extract repo name from result
-                repo_name = None
-                result_text = message.result.strip()
-
-                # Try to find openstack/xxx pattern
-                match = re.search(r'(openstack/[\w-]+)', result_text)
-                if match:
-                    repo_name = match.group(1)
-
-                if not repo_name:
-                    print(f"❌ Could not determine repository for change {change_number}")
-                    print(f"Response: {message.result}")
-                    return
+            tools=["WebFetch"],
+        )
+        repo_name = None
+        result_text = _r.text.strip()
+        match = re.search(r'(openstack/[\w-]+)', result_text)
+        if match:
+            repo_name = match.group(1)
+        if not repo_name:
+            print(f"❌ Could not determine repository for change {change_number}")
+            print(f"Response: {_r.text}")
+            return
 
     print(f"\n{'='*80}")
     print(f"📋 Change Details:")
@@ -115,7 +111,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         current_patchset = None
         patchset_ref = None
 
-        async for message in query(
+        _r2 = await _client.query(
             prompt=f"""
             Fetch the change details from Gerrit API:
             {GERRIT_BASE_URL}/changes/{change_number}?o=CURRENT_REVISION&o=ALL_REVISIONS
@@ -129,35 +125,28 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             Note: Gerrit prepends ")]]}}'" to JSON - strip it.
             The patchset number is under revisions -> _number field.
             """,
-            options=ClaudeAgentOptions(allowed_tools=["WebFetch"], model=CONFIG.get("model", "claude-sonnet-4-6")),
-        ):
-            if hasattr(message, 'result'):
-                # Try to parse the patchset info
-                result_text = message.result.strip()
-                try:
-                    # Simple extraction - look for numbers
-                    import json
-                    # Try to extract JSON from result
-                    if 'patchset_number' in result_text:
-                        data = json.loads(result_text)
-                        current_patchset = data.get('patchset_number')
-                        patchset_ref = data.get('ref')
-                    else:
-                        # Try to find patchset number in text
-                        match = re.search(r'"_number":\s*(\d+)', result_text)
-                        if match:
-                            current_patchset = int(match.group(1))
-                        # Try to find ref
-                        match = re.search(r'"ref":\s*"([^"]+)"', result_text)
-                        if match:
-                            patchset_ref = match.group(1)
-                except:
-                    pass
-
-                if current_patchset:
-                    print(f"✓ Patchset: {current_patchset} (latest)")
-                if patchset_ref:
-                    print(f"✓ Ref: {patchset_ref}")
+            tools=["WebFetch"],
+        )
+        result_text = _r2.text.strip()
+        try:
+            import json as _json
+            if 'patchset_number' in result_text:
+                data = _json.loads(result_text)
+                current_patchset = data.get('patchset_number')
+                patchset_ref = data.get('ref')
+            else:
+                match = re.search(r'"_number":\s*(\d+)', result_text)
+                if match:
+                    current_patchset = int(match.group(1))
+                match = re.search(r'"ref":\s*"([^"]+)"', result_text)
+                if match:
+                    patchset_ref = match.group(1)
+        except Exception:
+            pass
+        if current_patchset:
+            print(f"✓ Patchset: {current_patchset} (latest)")
+        if patchset_ref:
+            print(f"✓ Ref: {patchset_ref}")
 
     # Check for previous reviews and prepare context
     previous_review_content, previous_patchset, old_review_file = prepare_review_context(
@@ -251,6 +240,7 @@ This change has been reviewed before.
         specific_patchset_note = f"\n**NOTE**: You are reviewing a SPECIFIC patchset (PS {requested_patchset}), which may not be the latest version of this change.\n"
 
     # Load and format the code review prompt from template
+    _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_code_review_prompt(
         repo_name=repo_name,
         change_number=change_number,
@@ -261,6 +251,8 @@ This change has been reviewed before.
         specific_patchset_note=specific_patchset_note,
         previous_review_section=previous_review_section,
         previous_patchset=previous_patchset,
+        provider=_provider,
+        save_path=str(review_file),
     )
 
     # Prompt loaded from prompts/code_review_prompt.txt
@@ -271,33 +263,24 @@ This change has been reviewed before.
     review_result = None
     usage_info = None
     try:
-        async for message in query(
+        _result = await _client.query(
             prompt=prompt,
-            options=ClaudeAgentOptions(
-                allowed_tools=["Bash", "Read", "Write", "Grep", "Glob"],
-                model=CONFIG.get("model", "claude-sonnet-4-6"),
-            ),
-        ):
-            if hasattr(message, 'text'):
-                print(f"  {message.text}")
-            elif hasattr(message, 'result'):
-                review_result = message.result
+            tools=["Bash", "Read", "Write", "Grep", "Glob"],
+            on_progress=lambda text: print(f"  {text}"),
+        )
+        review_result = _result.text
+        usage_info = format_usage_info(
+            usage_data=_result.usage,
+            cost_usd=_result.cost_usd,
+            model=_result.model,
+            duration_ms=_result.duration_ms,
+        )
 
-                # Capture usage information if available
-                if hasattr(message, 'usage') or hasattr(message, 'total_cost_usd'):
-                    from agents_lib import format_usage_info
-                    usage_info = format_usage_info(
-                        usage_data=getattr(message, 'usage', None),
-                        cost_usd=getattr(message, 'total_cost_usd', None),
-                        model=getattr(message, 'model', None),
-                        duration_ms=getattr(message, 'duration_ms', None)
-                    )
-
-                print(f"\n{'='*80}")
-                print(f"✅ Review Complete!")
-                print(f"{'='*80}")
-                print(f"\n📄 Review Document: {review_file}")
-                print(f"\nSummary:\n{review_result[:500]}...")
+        print(f"\n{'='*80}")
+        print(f"✅ Review Complete!")
+        print(f"{'='*80}")
+        print(f"\n📄 Review Document: {review_file}")
+        print(f"\nSummary:\n{(review_result or '')[:500]}...")
 
         # Append usage info to review if available
         if review_result and usage_info:

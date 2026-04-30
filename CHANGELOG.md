@@ -6,6 +6,30 @@ All notable changes to the claude-agents project are documented here.
 
 ## 2026-04-30
 
+### Added: Provider-agnostic model client (`agents_lib/model_client.py`)
+
+Agents no longer import `claude_agent_sdk` directly.  A new abstraction layer
+lets them run on Anthropic (Claude), OpenAI (GPT-4o, o3…), or Google (Gemini)
+by changing two config values.
+
+**New in `agents_lib`:**
+- `model_client.py` — `ModelResult` dataclass, `ModelClient`, `create_model_client(config)`
+- Three provider backends: Anthropic (delegates to claude-agent-sdk, unchanged
+  behaviour), OpenAI (`openai` package, optional dep), Google Gemini
+  (`google-generativeai` package, optional dep)
+- Tool execution loop for OpenAI/Gemini implements: `bash`, `read_file`,
+  `write_file`, `grep`, `glob`, `web_fetch`
+- `load_agent_prompt(name, provider, prompts_dir, save_path)` added to
+  `prompt_loader.py` — selects provider-specific prompt file if present, appends
+  template file, and injects the Write-tool save instruction only for Anthropic
+
+**Config:** `"model_provider": "anthropic"` added to all `config.sample.json`
+files.  Switching providers: set `"model": "gpt-4o", "model_provider": "openai"`.
+
+**Prompt changes:** Write-tool save instructions removed from prompt files and
+injected dynamically by `load_agent_prompt()`.  Bug triage prompt split into
+analysis instructions + `bug_triage_template.txt` (output format).
+
 ### Added: Multi-channel notification system
 
 All agents now call `notify_report()` after saving each report, dispatching
