@@ -92,7 +92,8 @@ def check_services(required_services: List[str]) -> Dict[str, bool]:
                 ["systemctl", "is-active", service],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
+                check=False,
             )
             # is-active returns 'active' if running, 0 exit code
             is_running = result.returncode == 0 and result.stdout.strip() == "active"
@@ -125,7 +126,8 @@ def check_api_connectivity(openrc_file: Path) -> bool:
             executable="/bin/bash",
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
+            check=False,
         )
         # Success if command exits 0 (even if list is empty)
         return result.returncode == 0
@@ -178,7 +180,8 @@ def check_repo_on_main_branch(repo_path: Path) -> BranchCheck:
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -225,7 +228,8 @@ def checkout_main_branch(repo_path: Path) -> Tuple[bool, str]:
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
+            check=False,
         )
 
         if result.returncode == 0:
@@ -237,7 +241,8 @@ def checkout_main_branch(repo_path: Path) -> Tuple[bool, str]:
             cwd=repo_path,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
+            check=False,
         )
 
         if result.returncode == 0:
@@ -291,7 +296,8 @@ def cleanup_test_environment(config: Dict, cleanup_commands: Optional[List[str]]
                 executable="/bin/bash",
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
+                check=False,
             )
 
             if result.returncode == 0:

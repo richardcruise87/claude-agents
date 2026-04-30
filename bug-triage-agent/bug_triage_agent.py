@@ -6,8 +6,8 @@ Monitors Launchpad for Octavia bugs, performs triage, suggests reproduction
 strategies, checks for duplicates and potential fixes.
 """
 import asyncio
-import sys
 import json
+import sys
 import subprocess
 from pathlib import Path
 # Add current directory to path
@@ -117,7 +117,6 @@ async def fetch_bugs_from_launchpad(project: str, statuses: list, max_bugs: int 
         print("⚠️  httpx not available, using urllib...")
         import urllib.request
         import urllib.parse
-        import json
 
         try:
             with urllib.request.urlopen(launchpad_url, timeout=30) as response:
@@ -322,6 +321,7 @@ def triage_bug_subprocess(bug_info: dict, sequence: int, previous_summary: str =
             stdout=sys.stdout,
             stderr=sys.stderr,
             text=True,
+            check=False,
         )
         return result.returncode == 0
     finally:
@@ -430,7 +430,7 @@ async def main_single_bug(bug_data_file: str):
         bug_data_file: Path to JSON file with bug data
     """
     # Load bug data
-    with open(bug_data_file, 'r') as f:
+    with open(bug_data_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     bug_info = data['bug_info']

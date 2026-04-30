@@ -120,15 +120,14 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
                 if results_file.exists():
                     print(f"\n✓ Test results saved to: {results_file}")
                     return (True, str(results_file))
-                elif test_result:
+                if test_result:
                     # Save result manually if AI didn't write file
                     print("\n⚠️  Results file not found - saving manually...")
-                    results_file.write_text(test_result)
+                    results_file.write_text(test_result, encoding="utf-8")
                     print(f"✓ Saved results to: {results_file}")
                     return (True, str(results_file))
-                else:
-                    print("\n❌ No test results generated")
-                    return (False, "")
+                print("\n❌ No test results generated")
+                return (False, "")
 
             except Exception as e:
                 print(f"\n❌ Error during testing: {e}")
@@ -159,8 +158,8 @@ def update_review_with_test_results(review_file: Path, test_results_file: Path) 
 
     try:
         # Read both files
-        review_content = review_file.read_text()
-        test_results = Path(test_results_file).read_text()
+        review_content = review_file.read_text(encoding="utf-8")
+        test_results = Path(test_results_file).read_text(encoding="utf-8")
 
         # Extract just the relevant sections from test results
         # (skip the header as review already has change info)

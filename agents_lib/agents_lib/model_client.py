@@ -72,15 +72,14 @@ class ModelClient:
         """
         if self.provider == "anthropic":
             return await _query_anthropic(self.model, prompt, tools, on_progress)
-        elif self.provider == "openai":
+        if self.provider == "openai":
             return await _query_openai(self.model, prompt, tools, on_progress)
-        elif self.provider == "google":
+        if self.provider == "google":
             return await _query_google(self.model, prompt, tools, on_progress)
-        else:
-            raise ValueError(
-                f"Unknown model provider: {self.provider!r}. "
-                "Expected 'anthropic', 'openai', or 'google'."
-            )
+        raise ValueError(
+            f"Unknown model provider: {self.provider!r}. "
+            "Expected 'anthropic', 'openai', or 'google'."
+        )
 
 
 def create_model_client(config: dict) -> ModelClient:
@@ -191,35 +190,36 @@ def _execute_tool(func_name: str, args: dict) -> str:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,
             )
             output = result.stdout
             if result.returncode != 0 and result.stderr:
                 output += f"\n[stderr]: {result.stderr}"
             return output or "(no output)"
 
-        elif func_name == "read_file":
-            return Path(args["path"]).read_text(errors="replace")
+        if func_name == "read_file":
+            return Path(args["path"]).read_text(errors="replace", encoding="utf-8")
 
-        elif func_name == "write_file":
+        if func_name == "write_file":
             path = Path(args["path"])
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(args["content"])
+            path.write_text(args["content"], encoding="utf-8")
             return f"Written {len(args['content'])} chars to {args['path']}"
 
-        elif func_name == "grep":
+        if func_name == "grep":
             cmd = ["grep", "-r", "--include=*.py", args.get("pattern", "")]
             if "path" in args:
                 cmd.append(args["path"])
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
             return result.stdout or "(no matches)"
 
-        elif func_name == "glob":
+        if func_name == "glob":
             root = args.get("root", ".")
             pattern = args.get("pattern", "*")
             matches = [str(p) for p in Path(root).glob(pattern)]
             return "\n".join(matches) or "(no matches)"
 
-        elif func_name == "web_fetch":
+        if func_name == "web_fetch":
             url = args["url"]
             with urllib.request.urlopen(url, timeout=15) as resp:
                 return resp.read().decode(errors="replace")[:8000]
@@ -332,11 +332,11 @@ async def _query_openai(
 ) -> ModelResult:
     try:
         from openai import AsyncOpenAI  # noqa: PLC0415
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
             "openai package is required for model_provider=openai.\n"
             "Install it with: pip install openai"
-        )
+        ) from exc
 
     client = AsyncOpenAI()  # reads OPENAI_API_KEY from environment
     messages = [{"role": "user", "content": prompt}]
@@ -460,11 +460,11 @@ async def _query_google(
     try:
         import google.generativeai as genai  # noqa: PLC0415
         import google.generativeai.protos as protos  # noqa: PLC0415
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
             "google-generativeai package is required for model_provider=google.\n"
             "Install it with: pip install google-generativeai"
-        )
+        ) from exc
 
     # genai.configure() reads GOOGLE_API_KEY from environment automatically
     func_decls = _build_gemini_tools(tools or [])

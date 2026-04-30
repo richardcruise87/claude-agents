@@ -175,7 +175,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
                     report_file.write_text(existing + "\n\n---\n\n" + usage_info)
             print(f"\n  Report saved: {report_file}")
             return report_file
-        elif result:
+        if result:  # file not found — save result text directly
             print("\n  Warning: Report file not found — saving AI result directly...")
             content = result
             if usage_info:
@@ -183,9 +183,8 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
             report_file.write_text(content)
             print(f"  Saved to: {report_file}")
             return report_file
-        else:
-            print(f"\n  Warning: No report was generated for change #{change_number}")
-            return None
+        print(f"\n  Warning: No report was generated for change #{change_number}")
+        return None
 
     except Exception as e:
         print(f"\n  Error during analysis: {e}")
@@ -258,7 +257,7 @@ Failure data JSON format:
         print(f"Error: failure data file not found: {failure_data_file}", file=sys.stderr)
         sys.exit(1)
 
-    with open(failure_data_file) as f:
+    with open(failure_data_file, encoding='utf-8') as f:
         failure_data = json.load(f)
 
     asyncio.run(analyze_failure(

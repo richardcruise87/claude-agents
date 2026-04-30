@@ -148,7 +148,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             print(f"✓ Ref: {patchset_ref}")
 
     # Check for previous reviews and prepare context
-    previous_review_content, previous_patchset, old_review_file = prepare_review_context(
+    previous_review_content, previous_patchset, _old_review_file = prepare_review_context(
         output_dir, repo_name, change_number, current_patchset
     )
 

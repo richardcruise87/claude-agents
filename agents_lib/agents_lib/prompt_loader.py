@@ -34,7 +34,7 @@ def load_prompt_template(template_name, prompts_dir=None):
             f"Expected location: {template_file.absolute()}"
         )
 
-    with open(template_file, 'r') as f:
+    with open(template_file, 'r', encoding='utf-8') as f:
         return f.read()
 
 

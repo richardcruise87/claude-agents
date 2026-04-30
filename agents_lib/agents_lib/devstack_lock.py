@@ -98,7 +98,7 @@ class DevStackLock:
     def _read_lock_owner(self) -> str:
         """Read who currently holds the lock."""
         try:
-            with open(self.lock_file, 'r') as f:
+            with open(self.lock_file, 'r', encoding='utf-8') as f:
                 content = f.read().strip()
                 if content:
                     parts = content.split(':')
@@ -166,8 +166,7 @@ def check_devstack_available(timeout: int = 0) -> Tuple[bool, str]:
     if success:
         lock.release()
         return (True, "DevStack is available")
-    else:
-        return (False, message)
+    return (False, message)
 
 
 def get_unique_resource_prefix(agent_name: str) -> str:

@@ -221,6 +221,7 @@ def _send_desktop(subject: str, summary: str) -> None:
     result = subprocess.run(
         ["notify-send", subject, summary],
         capture_output=True,
+        check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr.decode().strip() or "notify-send failed")

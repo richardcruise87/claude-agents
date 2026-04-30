@@ -77,7 +77,7 @@ def parse_review_file(review_file: Path) -> Optional[ReviewInfo]:
 
     # Read file to extract Gerrit URL and check if already tested
     try:
-        content = review_file.read_text()
+        content = review_file.read_text(encoding="utf-8")
 
         # Find Gerrit URL
         gerrit_url_match = re.search(r'\*\*Gerrit URL\*\*:\s*(\S+)', content)
@@ -156,7 +156,6 @@ def should_test_review(review_info: ReviewInfo, allowed_repos: list) -> bool:
 if __name__ == "__main__":
     # Test the parser
     import sys
-    from pathlib import Path
 
     print("Testing review file parser...")
     print()
@@ -197,7 +196,7 @@ if __name__ == "__main__":
 
 ## Change Summary
 Test change
-""")
+""", encoding="utf-8")
 
             print(f"Testing: {filename}")
             info = parse_review_file(test_file)
