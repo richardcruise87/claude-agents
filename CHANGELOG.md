@@ -6,6 +6,33 @@ All notable changes to the claude-agents project are documented here.
 
 ## 2026-04-30
 
+### Added: Multi-channel notification system
+
+All agents now call `notify_report()` after saving each report, dispatching
+to any combination of configured channels.
+
+**New in `agents_lib`:**
+- `agents_lib/notifications.py` — `notify_report()` and `load_notifications_config()`
+  exported from `agents_lib.__init__`
+- Four channel backends, all using Python stdlib (no new pip dependencies):
+  - **Email** — SMTP with STARTTLS/SSL; optionally includes full report body
+  - **Slack** — incoming webhook; sends subject, summary, and a report excerpt
+  - **ntfy.sh** — HTTP push; configurable priority; works with self-hosted instances
+  - **Desktop** — `notify-send`; skipped gracefully when no display is available
+- Channel failures are caught per-channel and logged to stderr; they never
+  crash or interrupt the agent
+
+**Configuration:**
+- `notifications.sample.json` (repo root) — shared channel credentials template;
+  copy to `notifications.json` (gitignored) and fill in your credentials
+- Each agent's `config.sample.json` gains `"notifications": {"enabled": false}`;
+  set `enabled: true` in your local `config.json` to activate
+
+**Sensitive values** use `*_env` keys (e.g. `smtp_password_env: "SMTP_PASSWORD"`)
+so credentials stay in environment variables rather than config files.
+
+## 2026-04-30
+
 ### Changed: Unified agent installation scripts
 
 Consolidated `update-agents.sh`, `systemd/setup-systemd.sh`, and the old

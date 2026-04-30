@@ -20,6 +20,8 @@ from agents_lib import (
     check_devstack_health,
     check_repo_on_main_branch,
     checkout_main_branch,
+    notify_report,
+    load_notifications_config,
 )
 from triage_parser import parse_triage_file, get_triage_timestamp
 from script_generator import generate_initial_script, refine_script, generate_fallback_script
@@ -308,6 +310,14 @@ async def process_triage(triage_file: Path) -> bool:
             str(script_path) if script_path else None
         )
         print(f"   ✓ Recorded in tracking file")
+
+        notify_report(
+            report_path=report_file,
+            subject=f"Bug Reproduction: #{triage.bug_number} – {triage.bug_title}",
+            summary=f"Result: {final_status} | Attempts: {len(attempts)}",
+            agent_config=CONFIG,
+            notifications_config=load_notifications_config(),
+        )
 
         print(f"\n{'='*80}")
         if final_status == "REPRODUCED":

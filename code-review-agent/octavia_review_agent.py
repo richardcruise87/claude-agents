@@ -16,6 +16,7 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
+from agents_lib import notify_report, load_notifications_config
 
 # Load configuration from config.json or environment variables
 CONFIG = load_config()
@@ -258,6 +259,13 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
             print(f"\n✅ Review Complete!")
             print(f"📄 Review saved to: {review_file}")
             save_reviewed_change(change_id, patchset)
+            notify_report(
+                report_path=review_file,
+                subject=f"Code Review: {repo_name} #{change_number} PS{patchset}",
+                summary=f"Review complete for {repo_name} change {change_number} patchset {patchset}",
+                agent_config=CONFIG,
+                notifications_config=load_notifications_config(),
+            )
             return review_file
         else:
             # No review file found - don't mark as complete so it retries

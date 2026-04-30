@@ -16,6 +16,7 @@ from claude_agent_sdk import query, ClaudeAgentOptions
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
+from agents_lib import notify_report, load_notifications_config
 from bug_tracker import (
     load_triage_history,
     should_triage_bug,
@@ -274,6 +275,18 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             sequence
         )
         print(f"   ✓ Recorded in tracking file")
+
+        notify_report(
+            report_path=triage_file,
+            subject=f"Bug Triage: #{bug_number} – {bug_title}",
+            summary=(
+                f"Sequence {sequence} | "
+                f"Status: {bug_info.get('status', 'unknown')} | "
+                f"Importance: {bug_info.get('importance', 'unknown')}"
+            ),
+            agent_config=CONFIG,
+            notifications_config=load_notifications_config(),
+        )
 
         return triage_file
 

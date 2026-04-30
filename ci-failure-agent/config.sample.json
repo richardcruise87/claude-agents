@@ -37,5 +37,9 @@
   "filters": {
     "skip_non_voting": false,
     "comment": "skip_non_voting: if true, only analyze voting jobs. Non-voting jobs still appear in reports but are not analyzed."
+  },
+  "notifications": {
+    "enabled": false,
+    "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
   }
 }
