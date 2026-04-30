@@ -57,13 +57,17 @@ echo "Installing bug-reproduction-agent..."
 pip install -q -e "$REPO_DIR/bug-reproduction-agent/"
 echo -e "${GREEN}✓${NC} bug-reproduction-agent installed"
 
+echo "Installing ci-failure-agent..."
+pip install -q -e "$REPO_DIR/ci-failure-agent/"
+echo -e "${GREEN}✓${NC} ci-failure-agent installed"
+
 deactivate
 
 # Step 3: Check configuration files
 echo ""
 echo -e "${BLUE}Step 3: Checking configuration files${NC}"
 
-for agent_dir in "bug-triage-agent" "code-review-agent" "bug-reproduction-agent"; do
+for agent_dir in "bug-triage-agent" "code-review-agent" "bug-reproduction-agent" "ci-failure-agent"; do
     config_file="$REPO_DIR/$agent_dir/config.json"
     sample_file="$REPO_DIR/$agent_dir/config.sample.json"
 
@@ -94,14 +98,14 @@ echo -e "${GREEN}✓${NC} Created $SYSTEMD_USER_DIR"
 echo ""
 echo -e "${BLUE}Step 5: Installing systemd service and timer files${NC}"
 
-for service_file in octavia-bug-triage.service octavia-code-review.service octavia-bug-reproduction.service; do
+for service_file in octavia-bug-triage.service octavia-code-review.service octavia-bug-reproduction.service octavia-ci-failure.service; do
     # Copy and update paths
     sed "s|%h|$HOME|g; s|%u|$USER|g" \
         "$SCRIPT_DIR/$service_file" > "$SYSTEMD_USER_DIR/$service_file"
     echo -e "${GREEN}✓${NC} Installed $service_file"
 done
 
-for timer_file in octavia-bug-triage.timer octavia-code-review.timer; do
+for timer_file in octavia-bug-triage.timer octavia-code-review.timer octavia-ci-failure.timer; do
     cp "$SCRIPT_DIR/$timer_file" "$SYSTEMD_USER_DIR/$timer_file"
     echo -e "${GREEN}✓${NC} Installed $timer_file"
 done
@@ -142,6 +146,9 @@ echo "3. Enable and start bug reproduction path watcher:"
 echo "   ${BLUE}systemctl --user enable octavia-bug-reproduction.path${NC}"
 echo "   ${BLUE}systemctl --user start octavia-bug-reproduction.path${NC}"
 echo ""
+echo "   ${BLUE}systemctl --user enable octavia-ci-failure.timer${NC}"
+echo "   ${BLUE}systemctl --user start octavia-ci-failure.timer${NC}"
+echo ""
 echo "4. Check timer/path status:"
 echo "   ${BLUE}systemctl --user list-timers${NC}"
 echo "   ${BLUE}systemctl --user status octavia-bug-reproduction.path${NC}"
@@ -150,11 +157,13 @@ echo "5. Run services manually (for testing):"
 echo "   ${BLUE}systemctl --user start octavia-bug-triage.service${NC}"
 echo "   ${BLUE}systemctl --user start octavia-code-review.service${NC}"
 echo "   ${BLUE}systemctl --user start octavia-bug-reproduction.service${NC}"
+echo "   ${BLUE}systemctl --user start octavia-ci-failure.service${NC}"
 echo ""
 echo "6. View logs:"
 echo "   ${BLUE}journalctl --user -u octavia-bug-triage.service -f${NC}"
 echo "   ${BLUE}journalctl --user -u octavia-code-review.service -f${NC}"
 echo "   ${BLUE}journalctl --user -u octavia-bug-reproduction.service -f${NC}"
+echo "   ${BLUE}journalctl --user -u octavia-ci-failure.service -f${NC}"
 echo ""
 echo "6. Enable user services to start at boot:"
 echo "   ${BLUE}loginctl enable-linger $USER${NC}"

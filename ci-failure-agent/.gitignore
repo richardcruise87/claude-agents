@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Agent specific - User configuration (not committed)
+config.json
+.env
+*.log
+.octavia_ci_failures.json
+
+# Keep sample/example configs
+!config.sample.json
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,3 @@
+include prompts/*.txt
+include config.sample.json
+include README.md
