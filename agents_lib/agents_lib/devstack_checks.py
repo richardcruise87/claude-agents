@@ -272,11 +272,14 @@ def cleanup_test_environment(config: Dict, cleanup_commands: Optional[List[str]]
     if cleanup_commands is None:
         cleanup_commands = [
             # Delete test load balancers
-            "openstack loadbalancer list --format value --column id --name test- 2>/dev/null | xargs -r -n1 openstack loadbalancer delete --cascade",
+            "openstack loadbalancer list --format value --column id --name test- 2>/dev/null"
+            " | xargs -r -n1 openstack loadbalancer delete --cascade",
             # Delete test servers
-            "openstack server list --format value --column ID --name test- 2>/dev/null | xargs -r -n1 openstack server delete",
+            "openstack server list --format value --column ID --name test- 2>/dev/null"
+            " | xargs -r -n1 openstack server delete",
             # Delete test networks (if orphaned)
-            "openstack network list --format value --column ID --name test- 2>/dev/null | xargs -r -n1 openstack network delete",
+            "openstack network list --format value --column ID --name test- 2>/dev/null"
+            " | xargs -r -n1 openstack network delete",
         ]
 
     try:

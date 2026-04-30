@@ -128,7 +128,7 @@ def list_recent_failures(projects, pipelines, hours_back):
                 continue
 
             grouped = group_failures_by_change(builds, skip_non_voting=CONFIG["skip_non_voting"])
-            for (change, patchset, proj, pip), jobs in sorted(grouped.items()):
+            for (change, patchset, _proj, _pip), jobs in sorted(grouped.items()):
                 max_end = max(b.get("end_time", "") for b in jobs)
                 job_names = [b.get("job_name", "?") for b in jobs]
                 print(f"    Change #{change} PS{patchset}  ({max_end})")
@@ -163,14 +163,14 @@ def process_repo(project, pipeline, hours_back, output_dir, analyzed_count, max_
     )
 
     if not builds:
-        print(f"    No failures found.")
+        print("    No failures found.")
         return analyzed_count
 
     print(f"    Found {len(builds)} failed builds.")
 
     grouped = group_failures_by_change(builds, skip_non_voting=CONFIG["skip_non_voting"])
     if not grouped:
-        print(f"    No failures to process after filtering.")
+        print("    No failures to process after filtering.")
         return analyzed_count
 
     print(f"    Grouped into {len(grouped)} unique change/patchset combinations.")
@@ -182,7 +182,7 @@ def process_repo(project, pipeline, hours_back, output_dir, analyzed_count, max_
         reverse=True,
     )
 
-    for (change_number, patchset, proj, pip), jobs in sorted_groups:
+    for (change_number, patchset, proj, _pip), jobs in sorted_groups:
         if analyzed_count >= max_changes:
             print(f"\n    Reached max_changes_per_cycle ({max_changes}), stopping.")
             break
@@ -211,7 +211,7 @@ def process_repo(project, pipeline, hours_back, output_dir, analyzed_count, max_
             "change_number": change_number,
             "patchset": patchset,
             "project": proj,
-            "pipeline": pip,
+            "pipeline": pipeline,
             "gerrit_url": gerrit_url,
             "sequence": sequence,
             "jobs": [
@@ -306,14 +306,14 @@ def analyze_by_change(change_number, pipeline=None):
     if not builds:
         print(f"\n  No failed builds found for change #{change_number}.")
         if not pipeline:
-            print(f"  Tip: try --pipeline check or --pipeline gate if you expect failures.")
+            print("  Tip: try --pipeline check or --pipeline gate if you expect failures.")
         return
 
     print(f"  Found {len(builds)} failed build(s).")
 
     latest_patchset, grouped = get_latest_patchset_failures(builds)
     if not grouped:
-        print(f"  Could not group failures — check the build data.")
+        print("  Could not group failures — check the build data.")
         return
 
     pipeline_names = sorted({pip for (_, _, pip) in grouped.keys()})
@@ -323,8 +323,7 @@ def analyze_by_change(change_number, pipeline=None):
     output_dir = Path(CONFIG["reports_output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for (ps, proj, pip), jobs in sorted(grouped.items()):
-        last_updated = max(b.get("end_time", "1970-01-01T00:00:00") for b in jobs)
+    for (ps, proj, pipeline), jobs in sorted(grouped.items()):
         gerrit_url = f"{CONFIG['gerrit_base_url']}/c/{proj}/+/{change_number}"
         if jobs and jobs[0].get("ref_url"):
             gerrit_url = jobs[0]["ref_url"]
@@ -333,19 +332,19 @@ def analyze_by_change(change_number, pipeline=None):
             "change_number": change_number,
             "patchset": ps,
             "project": proj,
-            "pipeline": pip,
+            "pipeline": pipeline,
             "gerrit_url": gerrit_url,
             "sequence": 1,
             "jobs": [_build_to_job_dict(b) for b in jobs],
         }
 
-        print(f"\n  Analyzing PS{ps} / {pip}  ({len(jobs)} failing job(s))...")
+        print(f"\n  Analyzing PS{ps} / {pipeline}  ({len(jobs)} failing job(s))...")
         report_file = run_analysis_subprocess(failure_data, output_dir)
 
         if report_file:
             print(f"  Report saved: {report_file}")
         else:
-            print(f"  Warning: No report generated for {pip}.")
+            print(f"  Warning: No report generated for {pipeline}.")
 
 
 def analyze_by_build(build_uuid):
@@ -362,7 +361,7 @@ def analyze_by_build(build_uuid):
     print(f"  Zuul: {CONFIG['zuul_base_url']}")
     print(f"{'='*80}")
 
-    print(f"\n  Fetching build details from Zuul...")
+    print("\n  Fetching build details from Zuul...")
     build = get_build_by_uuid(
         uuid=build_uuid,
         zuul_base_url=CONFIG["zuul_base_url"],
@@ -407,13 +406,13 @@ def analyze_by_build(build_uuid):
     output_dir = Path(CONFIG["reports_output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n  Running analysis...")
+    print("\n  Running analysis...")
     report_file = run_analysis_subprocess(failure_data, output_dir)
 
     if report_file:
         print(f"\n  Report saved: {report_file}")
     else:
-        print(f"\n  Warning: No report was generated.")
+        print("\n  Warning: No report was generated.")
 
 
 def main_loop(projects=None, pipelines=None, hours_back=None, list_only=False):
@@ -436,7 +435,7 @@ def main_loop(projects=None, pipelines=None, hours_back=None, list_only=False):
         hours_back = CONFIG["hours_back"]
 
     print(f"\n{'='*80}")
-    print(f"  OpenStack CI Failure Analysis Agent")
+    print("  OpenStack CI Failure Analysis Agent")
     print(f"{'='*80}")
     print(f"  Projects:    {', '.join(projects)}")
     print(f"  Pipelines:   {', '.join(pipelines)}")
@@ -472,7 +471,7 @@ def main_loop(projects=None, pipelines=None, hours_back=None, list_only=False):
     duration = (datetime.now() - start_time).total_seconds()
 
     print(f"\n{'='*80}")
-    print(f"  Run complete")
+    print("  Run complete")
     print(f"  Duration:         {duration:.1f}s")
     print(f"  Changes analyzed: {analyzed_count}")
     print(f"  Reports in:       {output_dir}")

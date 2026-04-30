@@ -67,7 +67,7 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
         return []
 
     if not isinstance(builds, list):
-        print(f"  Warning: Unexpected response format from Zuul API")
+        print("  Warning: Unexpected response format from Zuul API")
         return []
 
     cutoff_time = datetime.now(timezone.utc) - timedelta(hours=hours_back)
@@ -158,7 +158,7 @@ def get_builds_for_change(change_number, zuul_base_url, tenant, pipeline=None, r
         return []
 
     if not isinstance(builds, list):
-        print(f"  Warning: Unexpected response format from Zuul API")
+        print("  Warning: Unexpected response format from Zuul API")
         return []
 
     for build in builds:
@@ -188,7 +188,7 @@ def get_build_by_uuid(uuid, zuul_base_url, tenant):
     except HTTPError as e:
         if e.code == 404:
             print(f"  Error: Build {uuid[:12]}... not found in Zuul tenant '{tenant}'")
-            print(f"  Check the UUID and that you are using the correct --zuul-base-url / tenant")
+            print("  Check the UUID and that you are using the correct --zuul-base-url / tenant")
         else:
             print(f"  Warning: HTTP {e.code} fetching build {uuid[:12]}...: {e}")
         return None

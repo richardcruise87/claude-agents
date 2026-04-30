@@ -8,7 +8,6 @@ and generates reproduction scripts with comprehensive analysis.
 import asyncio
 import sys
 from pathlib import Path
-from datetime import datetime
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -157,7 +156,7 @@ async def process_triage(triage_file: Path) -> bool:
                 branch_check = check_repo_on_main_branch(repo_path)
                 if not branch_check.on_main:
                     print(f"   ⚠️  {repo_name}: {branch_check.error}")
-                    print(f"      Attempting to checkout main/master...")
+                    print("      Attempting to checkout main/master...")
                     success, message = checkout_main_branch(repo_path)
                     if success:
                         print(f"      ✅ {message}")
@@ -219,7 +218,9 @@ async def process_triage(triage_file: Path) -> bool:
             # Accumulate usage stats
             if usage_dict:
                 if usage_dict.get('usage'):
-                    for key in ['input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens']:
+                    usage_keys = ['input_tokens', 'output_tokens',
+                                  'cache_creation_input_tokens', 'cache_read_input_tokens']
+                    for key in usage_keys:
                         total_usage['usage'][key] += usage_dict['usage'].get(key, 0)
                 if usage_dict.get('cost_usd') is not None:
                     total_usage['cost_usd'] += usage_dict['cost_usd']
@@ -255,7 +256,7 @@ async def process_triage(triage_file: Path) -> bool:
             print(f"   ❌ Attempt {attempt} failed, will {'retry' if attempt < max_attempts else 'stop'}")
 
         # Generate reproduction report
-        print(f"\n📝 Generating reproduction report...")
+        print("\n📝 Generating reproduction report...")
         output_dir = Path(CONFIG["reproductions_output_dir"])
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -292,9 +293,9 @@ async def process_triage(triage_file: Path) -> bool:
 
         # Verify report file was created before marking as complete
         if not report_file.exists():
-            print(f"\n❌ ERROR: Report file not found after write!")
+            print("\n❌ ERROR: Report file not found after write!")
             print(f"   Expected: {report_file}")
-            print(f"   Will retry on next pass")
+            print("   Will retry on next pass")
             return False
 
         # Record in tracking (only after confirming file exists)
@@ -309,7 +310,7 @@ async def process_triage(triage_file: Path) -> bool:
             len(attempts),
             str(script_path) if script_path else None
         )
-        print(f"   ✓ Recorded in tracking file")
+        print("   ✓ Recorded in tracking file")
 
         notify_report(
             report_path=report_file,
@@ -347,7 +348,7 @@ async def main():
     global CONFIG
     CONFIG = load_config()
 
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"  Triage reports: {CONFIG['triage_reports_dir']}")
     print(f"  Output directory: {CONFIG['reproductions_output_dir']}")
     print(f"  Tracking file: {CONFIG['reproduction_tracking_file']}")

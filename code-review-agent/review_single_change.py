@@ -21,7 +21,6 @@ from config import load_config
 from patchset_tracker import (
     prepare_review_context,
     create_review_filename,
-    extract_patchset_from_review
 )
 from prompts import get_code_review_prompt
 from agents_lib import (
@@ -65,7 +64,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         # Fetch change details from Gerrit
         _client = create_model_client(CONFIG)
         _r = await _client.query(
-            prompt=f"""
+            prompt="""
             Fetch the change details from Gerrit API:
             {GERRIT_BASE_URL}/changes/{change_number}
 
@@ -86,7 +85,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             return
 
     print(f"\n{'='*80}")
-    print(f"📋 Change Details:")
+    print("📋 Change Details:")
     print(f"  Repository: {repo_name}")
     print(f"  Change Number: {change_number}")
     print(f"  URL: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}")
@@ -112,7 +111,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         patchset_ref = None
 
         _r2 = await _client.query(
-            prompt=f"""
+            prompt="""
             Fetch the change details from Gerrit API:
             {GERRIT_BASE_URL}/changes/{change_number}?o=CURRENT_REVISION&o=ALL_REVISIONS
 
@@ -133,12 +132,12 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             if 'patchset_number' in result_text:
                 data = _json.loads(result_text)
                 current_patchset = data.get('patchset_number')
-                patchset_ref = data.get('ref')
+                patchset_ref = data.get('re')
             else:
                 match = re.search(r'"_number":\s*(\d+)', result_text)
                 if match:
                     current_patchset = int(match.group(1))
-                match = re.search(r'"ref":\s*"([^"]+)"', result_text)
+                match = re.search(r'"re":\s*"([^"]+)"', result_text)
                 if match:
                     patchset_ref = match.group(1)
         except Exception:
@@ -165,7 +164,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
 
     if not repo_path.exists():
         print(f"❌ Repository not found at: {repo_path}")
-        print(f"   Please ensure DevStack is set up correctly.")
+        print("   Please ensure DevStack is set up correctly.")
         return
 
     # Pre-flight checks
@@ -174,18 +173,18 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
     # Check repository is on main/master branch
     devstack_config = CONFIG.get("devstack", {})
     if devstack_config.get("verify_main_branch", True):
-        print(f"📋 Checking repository branch...")
+        print("📋 Checking repository branch...")
         branch_check = check_repo_on_main_branch(repo_path)
         if not branch_check.on_main:
             print(f"   ⚠️  {branch_check.error}")
             print(f"   Current branch: {branch_check.current_branch}")
-            print(f"   Attempting to checkout main/master...")
+            print("   Attempting to checkout main/master...")
             success, message = checkout_main_branch(repo_path)
             if success:
                 print(f"   ✅ {message}")
             else:
                 print(f"   ❌ {message}")
-                print(f"   Review will proceed but may have issues")
+                print("   Review will proceed but may have issues")
         else:
             print(f"   ✅ On {branch_check.current_branch} branch")
 
@@ -194,7 +193,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
     # Build the prompt with previous review context if available
     previous_review_section = ""
     if previous_review_content and previous_patchset:
-        previous_review_section = f"""
+        previous_review_section = """
 
 ## IMPORTANT: Previous Review Context
 
@@ -215,7 +214,7 @@ This change has been reviewed before. You previously reviewed **Patchset {previo
 
 """
     elif previous_review_content:
-        previous_review_section = f"""
+        previous_review_section = """
 
 ## IMPORTANT: Previous Review Context
 
@@ -237,7 +236,10 @@ This change has been reviewed before.
     # Add note if reviewing a specific (potentially not latest) patchset
     specific_patchset_note = ""
     if requested_patchset:
-        specific_patchset_note = f"\n**NOTE**: You are reviewing a SPECIFIC patchset (PS {requested_patchset}), which may not be the latest version of this change.\n"
+        specific_patchset_note = (
+            f"\n**NOTE**: You are reviewing a SPECIFIC patchset (PS {requested_patchset}), "
+            "which may not be the latest version of this change.\n"
+        )
 
     # Load and format the code review prompt from template
     _provider = CONFIG.get("model_provider", "anthropic")
@@ -277,7 +279,7 @@ This change has been reviewed before.
         )
 
         print(f"\n{'='*80}")
-        print(f"✅ Review Complete!")
+        print("✅ Review Complete!")
         print(f"{'='*80}")
         print(f"\n📄 Review Document: {review_file}")
         print(f"\nSummary:\n{(review_result or '')[:500]}...")
@@ -288,11 +290,11 @@ This change has been reviewed before.
 
         # Ensure the review file was created
         if not review_file.exists() and review_result:
-            print(f"\n⚠️  Review file not found - saving result now...")
+            print("\n⚠️  Review file not found - saving result now...")
             review_file.write_text(review_result)
             print(f"✓ Saved review to: {review_file}")
         elif not review_file.exists():
-            print(f"\n❌ WARNING: Review file was not created and no result received!")
+            print("\n❌ WARNING: Review file was not created and no result received!")
             return
         else:
             # If file exists but we have usage info, append it

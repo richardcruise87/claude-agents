@@ -45,7 +45,7 @@ import asyncio
 import json
 import sys
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -99,7 +99,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
     report_file = create_report_filename(output_dir, project, change_number, patchset, sequence)
 
     print(f"\n{'='*80}")
-    print(f"  CI Failure Analysis")
+    print("  CI Failure Analysis")
     print(f"{'='*80}")
     print(f"  Project:      {project}")
     print(f"  Change:       #{change_number}")
@@ -176,7 +176,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
             print(f"\n  Report saved: {report_file}")
             return report_file
         elif result:
-            print(f"\n  Warning: Report file not found — saving AI result directly...")
+            print("\n  Warning: Report file not found — saving AI result directly...")
             content = result
             if usage_info:
                 content += "\n\n---\n\n" + usage_info

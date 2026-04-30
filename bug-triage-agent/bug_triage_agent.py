@@ -10,7 +10,6 @@ import sys
 import json
 import subprocess
 from pathlib import Path
-from datetime import datetime
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
@@ -97,7 +96,7 @@ async def fetch_bugs_from_launchpad(project: str, statuses: list, max_bugs: int 
                             owner_response.raise_for_status()
                             owner_data = owner_response.json()
                             bug_info['reporter'] = owner_data.get('display_name', 'Unknown')
-                        except:
+                        except Exception:
                             bug_info['reporter'] = 'Unknown'
                     else:
                         bug_info['reporter'] = 'Unknown'
@@ -230,7 +229,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         )
 
         print(f"\n{'='*80}")
-        print(f"✅ Triage Complete!")
+        print("✅ Triage Complete!")
         print(f"{'='*80}")
         print(f"\n📄 Triage saved to: {triage_file}")
         print(f"\nSummary:\n{(triage_result or '')[:500]}...")
@@ -241,13 +240,13 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
 
         # Verify triage file was created before marking as complete
         if not triage_file.exists() and triage_result:
-            print(f"\n⚠️  Triage file not found - saving result now...")
+            print("\n⚠️  Triage file not found - saving result now...")
             triage_file.write_text(triage_result)
             print(f"✓ Saved triage to: {triage_file}")
         elif not triage_file.exists():
-            print(f"\n❌ ERROR: Triage file not found and no result received!")
+            print("\n❌ ERROR: Triage file not found and no result received!")
             print(f"   Expected: {triage_file}")
-            print(f"   Will retry on next pass")
+            print("   Will retry on next pass")
             return None
         else:
             # If file exists but we have usage info, append it
@@ -266,7 +265,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             bug_info['date_last_updated'],
             sequence
         )
-        print(f"   ✓ Recorded in tracking file")
+        print("   ✓ Recorded in tracking file")
 
         notify_report(
             report_path=triage_file,
@@ -357,7 +356,7 @@ async def monitor_and_triage(project: str, max_bugs: int = 5):
         print(f"\n✓ No bugs found for {project}")
         return
 
-    print(f"\n📋 Checking which bugs need triage...")
+    print("\n📋 Checking which bugs need triage...")
     print(f"📅 Cutoff date: {CONFIG['cutoff_date']} (ignoring bugs created before this date)")
 
     triaged_count = 0

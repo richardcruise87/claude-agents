@@ -25,7 +25,6 @@ Optional dependencies (imported lazily, not in install_requires):
 import asyncio
 import json
 import subprocess
-import sys
 import time
 import urllib.request
 from dataclasses import dataclass, field

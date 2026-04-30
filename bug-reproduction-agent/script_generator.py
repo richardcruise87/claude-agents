@@ -5,7 +5,7 @@ Generates reproduction scripts from triage reports and refines them using AI
 after failures.
 """
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
 from agents_lib import load_prompt_template, create_model_client
 from triage_parser import TriageReport
 from script_executor import ExecutionResult

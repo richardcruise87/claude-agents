@@ -7,11 +7,8 @@ runs tests, analyzes code, and prepares review documents.
 """
 import asyncio
 import json
-import os
 import sys
-from datetime import datetime
 from pathlib import Path
-from claude_agent_sdk import query, ClaudeAgentOptions
 
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
@@ -157,7 +154,7 @@ async def fetch_pending_changes(repo_name):
             if text.startswith(")]}"):
                 text = text[4:]  # Remove ")]}'"
 
-            print(f"✓ Fetched changes from Gerrit API")
+            print("✓ Fetched changes from Gerrit API")
             return text
 
     except ImportError:
@@ -179,7 +176,7 @@ async def fetch_pending_changes(repo_name):
                 if text.startswith(")]}"):
                     text = text[4:]
 
-                print(f"✓ Fetched changes from Gerrit API")
+                print("✓ Fetched changes from Gerrit API")
                 return text
         except Exception as e:
             print(f"❌ Error fetching from Gerrit: {e}")
@@ -215,7 +212,7 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
 
     if not review_script.exists():
         print(f"❌ Error: review_single_change.py not found at {review_script}")
-        print(f"⚠️  Will retry on next pass")
+        print("⚠️  Will retry on next pass")
         return None
 
     try:
@@ -256,7 +253,7 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
         if review_files:
             # Review file exists - mark as complete
             review_file = max(review_files, key=lambda p: p.stat().st_mtime)
-            print(f"\n✅ Review Complete!")
+            print("\n✅ Review Complete!")
             print(f"📄 Review saved to: {review_file}")
             save_reviewed_change(change_id, patchset)
             notify_report(
@@ -269,19 +266,19 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
             return review_file
         else:
             # No review file found - don't mark as complete so it retries
-            print(f"\n❌ Review file not found - will retry on next pass")
+            print("\n❌ Review file not found - will retry on next pass")
             print(f"   Expected pattern: {pattern} in {output_dir}")
             if result.returncode != 0:
                 print(f"   Exit code: {result.returncode}")
             return None
 
     except subprocess.TimeoutExpired:
-        print(f"\n❌ Review timed out after 30 minutes")
-        print(f"⚠️  Will retry on next pass")
+        print("\n❌ Review timed out after 30 minutes")
+        print("⚠️  Will retry on next pass")
         return None
     except Exception as e:
         print(f"\n❌ Error during review: {e}")
-        print(f"⚠️  Will retry on next pass")
+        print("⚠️  Will retry on next pass")
         import traceback
         traceback.print_exc()
         return None
@@ -310,7 +307,7 @@ async def monitor_and_review(repo_name, max_reviews=5):
         return
 
     # Parse the Gerrit JSON response directly
-    print(f"\n📋 Parsing changes...")
+    print("\n📋 Parsing changes...")
 
     try:
         import json
@@ -441,7 +438,10 @@ async def monitor_and_review(repo_name, max_reviews=5):
 
             print(f"\n✅ Completed {reviewed_count} reviews for {repo_name}")
             if len(filtered_changes) > max_reviews:
-                print(f"📋 {len(filtered_changes) - max_reviews} more reviewable changes remain (will process on next run)")
+                print(
+                    f"📋 {len(filtered_changes) - max_reviews} more reviewable changes remain "
+                    "(will process on next run)"
+                )
 
     except json.JSONDecodeError as e:
         print(f"⚠️  Could not parse JSON: {e}")

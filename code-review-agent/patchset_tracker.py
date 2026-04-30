@@ -7,10 +7,9 @@ Handles:
 - Renaming old reviews with patchset numbers
 - Managing review history across patchsets
 """
-import json
 import re
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, List, Tuple
 
 
 def extract_patchset_number(change_number: str, gerrit_api_url: str) -> Optional[int]:
@@ -208,7 +207,7 @@ def prepare_review_context(
         # If we know the current patchset, we can rename the old review
         if current_patchset and current_patchset > previous_patchset:
             print(f"📝 Found previous review from PS {previous_patchset}")
-            print(f"   Renaming to preserve history...")
+            print("   Renaming to preserve history...")
             renamed_path = rename_review_with_patchset(latest_review, previous_patchset)
             print(f"   ✓ Renamed to: {renamed_path.name}")
 
@@ -218,8 +217,6 @@ def prepare_review_context(
 if __name__ == "__main__":
     # Test the module
     import sys
-    from datetime import datetime
-
     if len(sys.argv) < 3:
         print("Usage: python patchset_tracker.py <output_dir> <repo_name> <change_number>")
         sys.exit(1)
@@ -228,7 +225,7 @@ if __name__ == "__main__":
     repo_name = sys.argv[2] if len(sys.argv) > 2 else "openstack/octavia"
     change_number = sys.argv[3] if len(sys.argv) > 3 else "919846"
 
-    print(f"Checking for previous reviews...")
+    print("Checking for previous reviews...")
     print(f"  Output dir: {output_dir}")
     print(f"  Repository: {repo_name}")
     print(f"  Change: {change_number}")

@@ -67,7 +67,7 @@ if __name__ == "__main__":
     if config["filters"]["only_test_repositories"]:
         print(f"  Only testing: {', '.join(config['filters']['only_test_repositories'])}")
     else:
-        print(f"  Testing: All repositories")
+        print("  Testing: All repositories")
 
     print()
     print("✅ Configuration is valid")

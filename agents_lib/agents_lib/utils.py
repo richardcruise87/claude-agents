@@ -95,7 +95,8 @@ def format_usage_info(usage_data=None, cost_usd=None, model=None, duration_ms=No
         if cache_read_tokens > 0:
             lines.append(f"- **Cache read tokens:** {cache_read_tokens:,}")
         lines.append(f"- **Output tokens:** {output_tokens:,}")
-        lines.append(f"- **Total tokens:** {input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens:,}")
+        total = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
+        lines.append(f"- **Total tokens:** {total:,}")
 
     # Cost information
     if cost_usd is not None:
