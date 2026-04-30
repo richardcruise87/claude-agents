@@ -12,6 +12,7 @@ NC='\033[0m'
 
 UPDATE_MODE=false
 INSTALL_SYSTEMD=""
+SETUP_NOTIFICATIONS=""
 SELECTED_AGENTS=()
 
 ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test")
@@ -33,10 +34,12 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --update          Update mode: git pull + reinstall + reload services"
-    echo "  --systemd         Install systemd unit files without prompting"
-    echo "  --no-systemd      Skip systemd installation without prompting"
-    echo "  --venv PATH       Virtual environment path (default: ~/.venv/claude-agents)"
-    echo "  -h, --help        Show this help message"
+    echo "  --systemd           Install systemd unit files without prompting"
+    echo "  --no-systemd        Skip systemd installation without prompting"
+    echo "  --notifications     Set up notifications without prompting"
+    echo "  --no-notifications  Skip notification setup without prompting"
+    echo "  --venv PATH         Virtual environment path (default: ~/.venv/claude-agents)"
+    echo "  -h, --help          Show this help message"
     echo ""
     echo "Agents (default: all):"
     echo "  bug-triage        Bug Triage Agent"
@@ -50,16 +53,18 @@ usage() {
     echo "  $(basename "$0") bug-triage code-review       # Install specific agents"
     echo "  $(basename "$0") --update                     # Update all agents"
     echo "  $(basename "$0") --update ci-failure          # Update specific agent"
-    echo "  $(basename "$0") --systemd                    # Install all + systemd files"
+    echo "  $(basename "$0") --systemd --notifications    # Install all, enable both"
     echo "  $(basename "$0") --no-systemd bug-triage      # Install without systemd"
 }
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --update)         UPDATE_MODE=true; shift ;;
-        --systemd)        INSTALL_SYSTEMD=yes; shift ;;
-        --no-systemd)     INSTALL_SYSTEMD=no; shift ;;
-        --venv)           VENV_PATH="$2"; shift 2 ;;
+        --update)            UPDATE_MODE=true; shift ;;
+        --systemd)           INSTALL_SYSTEMD=yes; shift ;;
+        --no-systemd)        INSTALL_SYSTEMD=no; shift ;;
+        --notifications)     SETUP_NOTIFICATIONS=yes; shift ;;
+        --no-notifications)  SETUP_NOTIFICATIONS=no; shift ;;
+        --venv)              VENV_PATH="$2"; shift 2 ;;
         -h|--help)        usage; exit 0 ;;
         bug-triage|code-review|bug-reproduction|ci-failure|devstack-test)
                           SELECTED_AGENTS+=("$1"); shift ;;
@@ -156,6 +161,54 @@ done
 STEP=$((STEP + 1))
 echo ""
 
+# Step: Notifications (install mode only)
+if ! $UPDATE_MODE; then
+    NOTIF_JSON="$SCRIPT_DIR/notifications.json"
+    echo -e "${BLUE}Step ${STEP}: Notifications (optional)${NC}"
+
+    if [ "$SETUP_NOTIFICATIONS" = "yes" ]; then
+        : # Flag passed — proceed below
+    elif [ "$SETUP_NOTIFICATIONS" = "no" ]; then
+        : # Flag passed — skip below
+    elif [ -f "$NOTIF_JSON" ]; then
+        echo -e "${GREEN}✓${NC} notifications.json already exists"
+        SETUP_NOTIFICATIONS=existing
+    else
+        echo "Agents can notify you (email, Slack, ntfy.sh, desktop) when reports are ready."
+        echo -n "Set up notifications? [y/N] "
+        read -r _response
+        [[ "$_response" =~ ^[Yy]$ ]] && SETUP_NOTIFICATIONS=yes || SETUP_NOTIFICATIONS=no
+    fi
+
+    if [ "$SETUP_NOTIFICATIONS" = "yes" ]; then
+        cp "$SCRIPT_DIR/notifications.sample.json" "$NOTIF_JSON"
+        echo -e "${GREEN}✓${NC} Created notifications.json — edit it to configure channels"
+    fi
+
+    # Enable notifications in each agent's config.json when setting up or if already configured
+    if [ "$SETUP_NOTIFICATIONS" = "yes" ] || [ "$SETUP_NOTIFICATIONS" = "existing" ]; then
+        for agent in "${SELECTED_AGENTS[@]}"; do
+            agent_dir=$(get_agent_dir "$agent")
+            config_file="$SCRIPT_DIR/$agent_dir/config.json"
+            if [ -f "$config_file" ]; then
+                python3 - <<PYEOF
+import json
+with open('$config_file') as f:
+    cfg = json.load(f)
+if not cfg.get('notifications', {}).get('enabled'):
+    cfg.setdefault('notifications', {})['enabled'] = True
+    with open('$config_file', 'w') as f:
+        json.dump(cfg, f, indent=2)
+    print('    Enabled notifications in $agent_dir/config.json')
+PYEOF
+            fi
+        done
+    fi
+
+    STEP=$((STEP + 1))
+    echo ""
+fi
+
 # Reload systemd if files were installed or in update mode
 if [ "$INSTALL_SYSTEMD" = "yes" ] || $UPDATE_MODE; then
     echo -e "${BLUE}Step ${STEP}: Reloading systemd daemon${NC}"
@@ -218,8 +271,18 @@ if ! $UPDATE_MODE; then
     done
     echo ""
 
+    if [ "$SETUP_NOTIFICATIONS" = "yes" ]; then
+        echo "2. Edit notification channels:"
+        echo "     $SCRIPT_DIR/notifications.json"
+        echo ""
+        NEXT=3
+    else
+        NEXT=2
+    fi
+
     if [ "$INSTALL_SYSTEMD" = "yes" ]; then
-        echo "2. Enable and start services:"
+        echo "${NEXT}. Enable and start services:"
+        NEXT=$((NEXT + 1))
         for agent in "${SELECTED_AGENTS[@]}"; do
             case $agent in
                 bug-triage)
@@ -235,10 +298,10 @@ if ! $UPDATE_MODE; then
             esac
         done
         echo ""
-        echo "3. Persist services across logout:"
+        echo "${NEXT}. Persist services across logout:"
         echo "     loginctl enable-linger $USER"
     else
-        echo "2. Run agents manually:"
+        echo "${NEXT}. Run agents manually:"
         for agent in "${SELECTED_AGENTS[@]}"; do
             case $agent in
                 bug-triage)       echo "     $VENV_PATH/bin/octavia-triage-bugs" ;;

@@ -1,0 +1,27 @@
+{
+  "channels": {
+    "email": {
+      "enabled": false,
+      "smtp_host": "smtp.example.com",
+      "smtp_port": 587,
+      "smtp_user": "user@example.com",
+      "smtp_password_env": "SMTP_PASSWORD",
+      "from": "claude-agents@example.com",
+      "to": ["you@example.com"],
+      "use_tls": true,
+      "include_report_body": true
+    },
+    "slack": {
+      "enabled": false,
+      "webhook_url_env": "SLACK_WEBHOOK_URL"
+    },
+    "ntfy": {
+      "enabled": false,
+      "url": "https://ntfy.sh/your-topic-name",
+      "token_env": "NTFY_TOKEN"
+    },
+    "desktop": {
+      "enabled": false
+    }
+  }
+}

@@ -21,6 +21,8 @@ from agents_lib import (
     check_devstack_health,
     devstack_lock,
     get_unique_resource_prefix,
+    notify_report,
+    load_notifications_config,
 )
 from config import load_config
 from review_parser import parse_review_file, should_test_review, get_review_timestamp
@@ -298,6 +300,13 @@ async def main():
                 save_tracking_file(tracking_file, tested_reviews)
                 tested_count += 1
                 print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
+                notify_report(
+                    report_path=review_file,
+                    subject=f"DevStack Test: {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}",
+                    summary="DevStack integration test passed",
+                    agent_config=config,
+                    notifications_config=load_notifications_config(),
+                )
             else:
                 print(f"\n⚠️  Test succeeded but failed to update review file")
         else:

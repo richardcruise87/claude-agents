@@ -77,5 +77,9 @@
     "exclude_branches": [],
     "include_branches": ["master", "main"],
     "comment4": "Branch filtering. Wildcards (*) supported. Exclude processed first, then include. Examples: exclude=['*'] + include=['master'] = only master; exclude=['stable/*'] = skip all stable branches; exclude=[] + include=[] = all branches"
+  },
+  "notifications": {
+    "enabled": false,
+    "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
   }
 }

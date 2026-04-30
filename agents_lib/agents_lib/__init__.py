@@ -35,6 +35,7 @@ from .devstack_lock import (
     check_devstack_available,
     get_unique_resource_prefix,
 )
+from .notifications import load_notifications_config, notify_report
 
 __all__ = [
     "expand_path",
@@ -61,4 +62,6 @@ __all__ = [
     "devstack_lock",
     "check_devstack_available",
     "get_unique_resource_prefix",
+    "load_notifications_config",
+    "notify_report",
 ]

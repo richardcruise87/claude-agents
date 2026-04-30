@@ -30,5 +30,10 @@
   },
 
   "cutoff_date": null,
-  "comment2": "Cutoff date (YYYY-MM-DD) for processing triages. Defaults to 30 days ago if null."
+  "comment2": "Cutoff date (YYYY-MM-DD) for processing triages. Defaults to 30 days ago if null.",
+
+  "notifications": {
+    "enabled": false,
+    "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
+  }
 }

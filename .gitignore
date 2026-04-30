@@ -23,8 +23,12 @@ ENV/
 # Each agent keeps its own config.json locally
 config.json
 
+# Shared notification channel config (contains credentials)
+notifications.json
+
 # Keep sample configs so new users can copy them
 !config.sample.json
+!notifications.sample.json
 
 # ── Agent output files ──────────────────────────────────────────────────────────
 # Triage reports

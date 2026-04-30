@@ -35,5 +35,10 @@
     "comment": "Only test changes from these repositories. Empty array = test all. Client libraries and tempest plugins don't need DevStack testing.",
     "skip_merged": true,
     "comment2": "Skip testing changes that are already merged"
+  },
+
+  "notifications": {
+    "enabled": false,
+    "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
   }
 }

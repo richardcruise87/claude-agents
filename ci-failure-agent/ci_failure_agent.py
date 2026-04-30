@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import load_config
+from agents_lib import notify_report, load_notifications_config
 from zuul_client import (
     fetch_recent_failures,
     group_failures_by_change,
@@ -243,6 +244,13 @@ def process_repo(project, pipeline, hours_back, output_dir, analyzed_count, max_
                 extra_data={"report_file": str(report_file)},
             )
             analyzed_count += 1
+            notify_report(
+                report_path=report_file,
+                subject=f"CI Failures: {proj} #{change_number} PS{patchset}",
+                summary=f"{len(jobs)} failing job(s) in {pipeline} pipeline",
+                agent_config=CONFIG,
+                notifications_config=load_notifications_config(),
+            )
         else:
             print(f"    Warning: No report generated for #{change_number}.")
 
