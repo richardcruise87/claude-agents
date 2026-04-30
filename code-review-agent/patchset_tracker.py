@@ -117,7 +117,7 @@ def load_previous_review(review_file: Path) -> str:
     Returns the review content as a string.
     """
     try:
-        with open(review_file, 'r') as f:
+        with open(review_file, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
         return f"Error loading previous review: {e}"

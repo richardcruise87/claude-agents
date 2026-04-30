@@ -77,6 +77,7 @@ def run_analysis_subprocess(failure_data, output_dir):
             ],
             cwd=str(SCRIPT_DIR),
             timeout=1800,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -316,14 +317,14 @@ def analyze_by_change(change_number, pipeline=None):
         print("  Could not group failures — check the build data.")
         return
 
-    pipeline_names = sorted({pip for (_, _, pip) in grouped.keys()})
+    pipeline_names = sorted({pip for (_, _, pip) in grouped})
     print(f"  Latest patchset: PS{latest_patchset}")
     print(f"  Failing pipeline(s): {', '.join(pipeline_names)}")
 
     output_dir = Path(CONFIG["reports_output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for (ps, proj, pipeline), jobs in sorted(grouped.items()):
+    for (ps, proj, ps_pipeline), jobs in sorted(grouped.items()):
         gerrit_url = f"{CONFIG['gerrit_base_url']}/c/{proj}/+/{change_number}"
         if jobs and jobs[0].get("ref_url"):
             gerrit_url = jobs[0]["ref_url"]
@@ -332,19 +333,19 @@ def analyze_by_change(change_number, pipeline=None):
             "change_number": change_number,
             "patchset": ps,
             "project": proj,
-            "pipeline": pipeline,
+            "pipeline": ps_pipeline,
             "gerrit_url": gerrit_url,
             "sequence": 1,
             "jobs": [_build_to_job_dict(b) for b in jobs],
         }
 
-        print(f"\n  Analyzing PS{ps} / {pipeline}  ({len(jobs)} failing job(s))...")
+        print(f"\n  Analyzing PS{ps} / {ps_pipeline}  ({len(jobs)} failing job(s))...")
         report_file = run_analysis_subprocess(failure_data, output_dir)
 
         if report_file:
             print(f"  Report saved: {report_file}")
         else:
-            print(f"  Warning: No report generated for {pipeline}.")
+            print(f"  Warning: No report generated for {ps_pipeline}.")
 
 
 def analyze_by_build(build_uuid):

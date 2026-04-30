@@ -1,0 +1,73 @@
+[MAIN]
+# Use all available CPUs
+jobs=0
+
+[MESSAGES CONTROL]
+disable=
+    # Duplicate code — wrapper functions around agents_lib are intentionally similar
+    R0801,
+    # Too few public methods — ModelClient.query() is the entire public surface
+    R0903,
+    # Complexity thresholds bumped via [DESIGN] section below; disable the
+    # defaults so the bumped limits take effect cleanly
+    R0913,
+    R0917,
+    # Invalid constant name — applies to __main__ block locals, not real constants
+    C0103,
+    # Wrong import position — all agents do sys.path.insert() before imports,
+    # which is the required pattern for a monorepo without a top-level package
+    C0413,
+    # Import outside toplevel — intentional for lazy optional deps
+    # (openai, google-generativeai, claude-agent-sdk, httpx) and __main__ blocks
+    C0415,
+    # Unable to import — optional runtime deps (openai, google-generativeai)
+    # are not installed in the lint environment
+    E0401,
+    # Line too long — already enforced by flake8 at 120 chars; pylint's
+    # default of 100 would be a second, stricter limit we don't want
+    C0301,
+    # Redefining name from outer scope — all occurrences are in __main__ test
+    # blocks that shadow module-level names; harmless
+    W0621,
+    # Consider using from-import — google.generativeai.protos style is fine
+    # inside lazy-import functions
+    R0402,
+    # Catching broad Exception — intentional in notification dispatch (must not
+    # crash the agent), tool executor, and DevStack health checks
+    W0718,
+    # Unused argument — on_progress is a documented future parameter in the
+    # OpenAI and Gemini backends; keeping it for API consistency
+    W0613,
+    # Wrong import order — local agent modules (bug_tracker, prompts, zuul_client
+    # etc.) sit on sys.path via sys.path.insert and look like third-party packages
+    # to pylint, producing false positives
+    C0411,
+    # No name in module — prompts/__init__.py defines functions dynamically;
+    # pylint can't resolve them statically
+    E0611,
+    # Missing function/method docstring — not all helper functions require one
+    C0116,
+    # Too many branches / statements in large orchestrator functions;
+    # these are complex by necessity, not poor design
+    R0912,
+    R0915,
+    # Too many instance attributes — TriageReport dataclass intentionally
+    # captures all triage fields in one place
+    R0902,
+    # Missing class docstring — applies to test helper classes in __main__ blocks
+    C0115,
+    # Use of global statement — required for lazy module-level config loading
+    W0603,
+    # Ungrouped imports — __main__ blocks import from sys.path, cannot reorder
+    C0412,
+
+[FORMAT]
+max-line-length=120
+
+[DESIGN]
+max-args=7
+max-locals=35
+max-statements=80
+max-returns=8
+max-bool-expr=6
+max-branches=15

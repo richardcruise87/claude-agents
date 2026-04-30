@@ -6,6 +6,7 @@ Helps agents track what items (bugs, changes, etc.) have been processed.
 import json
 from pathlib import Path
 from datetime import datetime
+from .utils import slugify as _default_slugify
 
 
 def load_tracking_file(tracking_file):
@@ -20,7 +21,7 @@ def load_tracking_file(tracking_file):
     """
     tracking_file = Path(tracking_file)
     if tracking_file.exists():
-        with open(tracking_file, 'r') as f:
+        with open(tracking_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     return {}
 
@@ -35,7 +36,7 @@ def save_tracking_file(tracking_file, history):
     """
     tracking_file = Path(tracking_file)
     tracking_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(tracking_file, 'w') as f:
+    with open(tracking_file, 'w', encoding='utf-8') as f:
         json.dump(history, f, indent=2)
 
 
@@ -138,9 +139,7 @@ def create_output_filename(
         Path to the output file
     """
     if slugify_func is None:
-        # Simple default slugification
-        from .utils import slugify as default_slugify
-        slugify_func = default_slugify
+        slugify_func = _default_slugify
 
     title_slug = slugify_func(item_title)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

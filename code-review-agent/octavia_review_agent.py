@@ -101,7 +101,7 @@ def load_reviewed_changes():
     """Load the set of already reviewed change IDs."""
     reviewed_file = Path(CONFIG["reviewed_changes_file"])
     if reviewed_file.exists():
-        with open(reviewed_file, 'r') as f:
+        with open(reviewed_file, 'r', encoding='utf-8') as f:
             return set(json.load(f))
     return set()
 
@@ -123,7 +123,7 @@ def save_reviewed_change(change_id, patchset=None):
         review_id = change_id
 
     reviewed.add(review_id)
-    with open(CONFIG["reviewed_changes_file"], 'w') as f:
+    with open(CONFIG["reviewed_changes_file"], 'w', encoding='utf-8') as f:
         json.dump(list(reviewed), f, indent=2)
 
 
@@ -232,7 +232,8 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
             cwd=str(script_dir),
             capture_output=True,
             text=True,
-            timeout=1800  # 30 minute timeout for reviews
+            timeout=1800,  # 30 minute timeout for reviews
+            check=False,
         )
 
         # Print the output from the review script
@@ -264,13 +265,12 @@ async def review_change(repo_name, change_number, change_id, revision_ref, patch
                 notifications_config=load_notifications_config(),
             )
             return review_file
-        else:
-            # No review file found - don't mark as complete so it retries
-            print("\n❌ Review file not found - will retry on next pass")
-            print(f"   Expected pattern: {pattern} in {output_dir}")
-            if result.returncode != 0:
-                print(f"   Exit code: {result.returncode}")
-            return None
+        # No review file found - don't mark as complete so it retries
+        print("\n❌ Review file not found - will retry on next pass")
+        print(f"   Expected pattern: {pattern} in {output_dir}")
+        if result.returncode != 0:
+            print(f"   Exit code: {result.returncode}")
+        return None
 
     except subprocess.TimeoutExpired:
         print("\n❌ Review timed out after 30 minutes")
@@ -310,7 +310,6 @@ async def monitor_and_review(repo_name, max_reviews=5):
     print("\n📋 Parsing changes...")
 
     try:
-        import json
         # Gerrit response contains ")]}'" prefix - extract the JSON part
         response_text = str(changes_info)
 

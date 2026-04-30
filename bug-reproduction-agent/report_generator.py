@@ -44,9 +44,9 @@ def generate_report(
     # Status
     if final_status == "REPRODUCED":
         lines.append("**Status:** ✅ REPRODUCED")
-    elif final_status == "NOT_REPRODUCED":
+    if final_status == "NOT_REPRODUCED":
         lines.append("**Status:** ❌ NOT REPRODUCED")
-    elif final_status == "ENVIRONMENT_ERROR":
+    if final_status == "ENVIRONMENT_ERROR":
         lines.append("**Status:** ⚠️ ENVIRONMENT ERROR")
     else:
         lines.append(f"**Status:** ❓ {final_status}")
@@ -189,7 +189,7 @@ The bug was reproduced using
 Execution took {last_result.execution_time:.1f} seconds on the final attempt.
 """
 
-    elif final_status == "NOT_REPRODUCED":
+    if final_status == "NOT_REPRODUCED":
         return """The bug **{triage.bug_title}** (#{triage.bug_number}) could **not be reproduced**
 after {len(attempts)} attempt(s).
 
@@ -202,7 +202,7 @@ This could indicate:
 Manual investigation is recommended.
 """
 
-    elif final_status == "ENVIRONMENT_ERROR":
+    if final_status == "ENVIRONMENT_ERROR":
         return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) was **aborted**
 due to DevStack environment issues.
 
@@ -210,8 +210,7 @@ The reproduction environment is not healthy and needs to be fixed before attempt
 See the DevStack Health Check section below for details.
 """
 
-    else:
-        return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with
+    return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with
 status: **{final_status}** after {len(attempts)} attempt(s).
 """
 
@@ -265,7 +264,7 @@ def generate_recommendations(
         recommendations.append("4. ✅ Implement the fix and verify with this reproduction script")
         recommendations.append("5. ✅ Update bug status on Launchpad once fixed")
 
-    elif final_status == "NOT_REPRODUCED":
+    if final_status == "NOT_REPRODUCED":
         recommendations.append("**Next Steps:**")
         recommendations.append("")
         recommendations.append("1. 🔍 Review the triage reproduction steps for accuracy")
@@ -275,7 +274,7 @@ def generate_recommendations(
         recommendations.append("5. 🔍 Check if the bug has been fixed in recent commits")
         recommendations.append("6. 🔍 Consider if the bug is intermittent (run multiple times)")
 
-    elif final_status == "ENVIRONMENT_ERROR":
+    if final_status == "ENVIRONMENT_ERROR":
         recommendations.append("**Required Actions:**")
         recommendations.append("")
         recommendations.append("1. ⚠️ Fix DevStack environment issues (see Health Check section)")
@@ -290,7 +289,6 @@ def generate_recommendations(
 if __name__ == "__main__":
     # Test report generation
     from dataclasses import dataclass
-    from devstack_health import DevStackHealth
 
     print("Testing report generation...")
 

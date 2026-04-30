@@ -123,7 +123,7 @@ async def process_triage(triage_file: Path) -> bool:
                 None
             )
 
-            with open(report_file, 'w') as f:
+            with open(report_file, 'w', encoding='utf-8') as f:
                 f.write(report)
 
             print(f"\n📝 Report saved: {report_file}")
@@ -272,7 +272,7 @@ async def process_triage(triage_file: Path) -> bool:
         if final_status == "REPRODUCED" and successful_script:
             script_path = output_dir / "scripts" / f"bug_{triage.bug_number}_reproduction.sh"
             script_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(script_path, 'w') as f:
+            with open(script_path, 'w', encoding='utf-8') as f:
                 f.write(successful_script)
             script_path.chmod(0o755)
             print(f"   💾 Saved reproduction script: {script_path}")
@@ -286,7 +286,7 @@ async def process_triage(triage_file: Path) -> bool:
             total_usage
         )
 
-        with open(report_file, 'w') as f:
+        with open(report_file, 'w', encoding='utf-8') as f:
             f.write(report)
 
         print(f"   💾 Saved report: {report_file}")
@@ -387,14 +387,13 @@ async def main():
         triage_timestamp = get_triage_timestamp(triage_file)
 
         # Check if should process
-        should_process, sequence = should_reproduce_bug(bug_number, triage_timestamp, history)
+        should_process, _sequence = should_reproduce_bug(bug_number, triage_timestamp, history)
 
         if should_process:
             print(f"\nProcessing new triage: {triage_file.name}")
             await process_triage(triage_file)
             break  # Process only one triage per run
-        else:
-            print(f"Skipping already processed: {triage_file.name}")
+        print(f"Skipping already processed: {triage_file.name}")
 
     print("\n" + "="*80)
     print("✅ Reproduction cycle complete!")

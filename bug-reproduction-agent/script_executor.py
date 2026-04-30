@@ -64,7 +64,8 @@ def execute_script(
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                cwd=working_dir
+                cwd=working_dir,
+                check=False
             )
             timeout_exceeded = False
         except subprocess.TimeoutExpired as e:
