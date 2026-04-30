@@ -133,6 +133,10 @@ if ! $UPDATE_MODE && [ -z "$INSTALL_SYSTEMD" ]; then
     echo ""
 fi
 
+# Ensure INSTALL_SYSTEMD is always set before the agent loop (update mode
+# skips the step-3 prompt, so it may still be empty here — default to no).
+[ -z "$INSTALL_SYSTEMD" ] && INSTALL_SYSTEMD=no
+
 # Step: Install agents
 echo -e "${BLUE}Step ${STEP}: Installing agents${NC}"
 for agent in "${SELECTED_AGENTS[@]}"; do
@@ -145,9 +149,9 @@ for agent in "${SELECTED_AGENTS[@]}"; do
         echo -e "  ${YELLOW}⚠${NC} Skipping $agent (no install.sh found in $agent_dir)"
         continue
     fi
+    [ "$INSTALL_SYSTEMD" = "yes" ] && _sd_flag="--systemd" || _sd_flag="--no-systemd"
     echo -e "  ${BLUE}→${NC} $agent"
-    VENV_PATH="$VENV_PATH" INSTALL_SYSTEMD="$INSTALL_SYSTEMD" \
-        bash "$SCRIPT_DIR/$agent_dir/install.sh" 2>&1 | sed 's/^/    /'
+    bash "$SCRIPT_DIR/$agent_dir/install.sh" --venv "$VENV_PATH" "$_sd_flag" 2>&1 | sed -u 's/^/    /'
 done
 STEP=$((STEP + 1))
 echo ""
