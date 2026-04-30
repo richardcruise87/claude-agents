@@ -2,9 +2,12 @@
 
 Context file for AI instances working with this repository.
 
-**Last Updated:** 2026-03-30
+**Last Updated:** 2026-04-30
 **Repository:** https://github.com/richardcruise87/claude-agents
 **Purpose:** AI-powered automation agents for OpenStack development
+
+> **Change history:** See [CHANGELOG.md](CHANGELOG.md) for a full record of
+> features added and changes made to this project.
 
 ---
 
@@ -15,7 +18,8 @@ This repository contains Claude-based automation agents for OpenStack project ma
 1. **Bug Triage Agent** (`bug-triage-agent/`) - Monitors Launchpad for bugs, performs intelligent triage
 2. **Code Review Agent** (`code-review-agent/`) - Monitors Gerrit for changes, performs AI-powered code reviews
 3. **Bug Reproduction Agent** (`bug-reproduction-agent/`) - Watches for triage reports, reproduces bugs in DevStack
-4. **Shared Library** (`agents_lib/`) - Common utilities shared between agents
+4. **CI Failure Agent** (`ci-failure-agent/`) - Monitors Zuul for CI failures, analyses logs and recommends fix vs re-run
+5. **Shared Library** (`agents_lib/`) - Common utilities shared between agents
 
 ### Key Features
 
