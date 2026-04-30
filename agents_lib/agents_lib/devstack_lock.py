@@ -193,10 +193,9 @@ def get_unique_resource_prefix(agent_name: str) -> str:
 
 if __name__ == "__main__":
     # Test the locking mechanism
-    import sys
 
     print("Testing DevStack lock...")
-    print(f"Lock file: /tmp/devstack-agent.lock")
+    print("Lock file: /tmp/devstack-agent.lock")
     print()
 
     # Test 1: Check availability

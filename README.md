@@ -203,6 +203,49 @@ Key settings common to all agents:
 
 ---
 
+## Running Tests
+
+Tests require `tox`:
+
+```bash
+pip install tox
+```
+
+### Run all tests
+
+```bash
+tox
+```
+
+### Unit tests only (fast, no network)
+
+```bash
+tox -e unit
+```
+
+### Functional tests (end-to-end flows, still no network)
+
+```bash
+tox -e functional
+```
+
+### PEP8 / style check
+
+```bash
+tox -e pep8
+```
+
+### Run a specific test file or test
+
+```bash
+tox -e unit -- tests/unit/test_utils.py -v
+tox -e unit -- -k "test_slugify"
+```
+
+All tests use `pytest`. The test suite covers `agents_lib` utilities, all agent tracking/parsing modules, the notification system, and the model client provider detection — 240 tests in total.
+
+---
+
 ## Notifications
 
 Agents can notify you when they produce a new report. Four channels are supported — all use Python stdlib, no extra packages needed.

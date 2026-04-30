@@ -162,7 +162,6 @@ sudo systemctl restart devstack@o-api devstack@o-cw devstack@o-hm
 ```
 
 ## Step 10: Generate Test Results
-Use the Write tool to create a test results markdown file: {results_file}
 
 **Results Format:**
 ```markdown

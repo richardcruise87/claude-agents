@@ -243,7 +243,6 @@ def format_execution_report(result: ExecutionResult, attempt_number: int) -> str
 
 if __name__ == "__main__":
     # Test the script executor
-    import sys
 
     print("Testing script executor...")
     print("")

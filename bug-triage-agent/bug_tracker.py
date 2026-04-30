@@ -158,6 +158,7 @@ def get_previous_triage_summary(triage_file: Path) -> Optional[str]:
 if __name__ == "__main__":
     # Test the tracking functionality
     import tempfile
+    from agents_lib.utils import slugify
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tracking_file = Path(tmpdir) / "test_tracking.json"

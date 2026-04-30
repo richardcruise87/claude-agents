@@ -43,11 +43,11 @@ def generate_report(
 
     # Status
     if final_status == "REPRODUCED":
-        lines.append(f"**Status:** ✅ REPRODUCED")
+        lines.append("**Status:** ✅ REPRODUCED")
     elif final_status == "NOT_REPRODUCED":
-        lines.append(f"**Status:** ❌ NOT REPRODUCED")
+        lines.append("**Status:** ❌ NOT REPRODUCED")
     elif final_status == "ENVIRONMENT_ERROR":
-        lines.append(f"**Status:** ⚠️ ENVIRONMENT ERROR")
+        lines.append("**Status:** ⚠️ ENVIRONMENT ERROR")
     else:
         lines.append(f"**Status:** ❓ {final_status}")
 
@@ -181,16 +181,16 @@ def generate_executive_summary(
 ) -> str:
     """Generate executive summary section."""
     if final_status == "REPRODUCED":
-        last_result = attempts[-1][1] if attempts else None
-        return f"""The bug **{triage.bug_title}** (#{triage.bug_number}) was **successfully reproduced**
+        return """The bug **{triage.bug_title}** (#{triage.bug_number}) was **successfully reproduced**
 in {len(attempts)} attempt(s). The reproduction confirms the issue identified in the triage report.
 
-The bug was reproduced using {'the triage reproduction steps' if len(attempts) == 1 else 'refined reproduction scripts'}.
+The bug was reproduced using
+{'the triage reproduction steps' if len(attempts) == 1 else 'refined reproduction scripts'}.
 Execution took {last_result.execution_time:.1f} seconds on the final attempt.
 """
 
     elif final_status == "NOT_REPRODUCED":
-        return f"""The bug **{triage.bug_title}** (#{triage.bug_number}) could **not be reproduced**
+        return """The bug **{triage.bug_title}** (#{triage.bug_number}) could **not be reproduced**
 after {len(attempts)} attempt(s).
 
 This could indicate:
@@ -203,7 +203,7 @@ Manual investigation is recommended.
 """
 
     elif final_status == "ENVIRONMENT_ERROR":
-        return f"""Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) was **aborted**
+        return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) was **aborted**
 due to DevStack environment issues.
 
 The reproduction environment is not healthy and needs to be fixed before attempting reproduction.
@@ -211,7 +211,7 @@ See the DevStack Health Check section below for details.
 """
 
     else:
-        return f"""Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with
+        return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with
 status: **{final_status}** after {len(attempts)} attempt(s).
 """
 

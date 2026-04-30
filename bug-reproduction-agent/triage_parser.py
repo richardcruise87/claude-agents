@@ -6,7 +6,7 @@ and bash code blocks for script generation.
 """
 import re
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 from dataclasses import dataclass
 
 
@@ -204,7 +204,10 @@ def get_triage_timestamp(triage_path: Path) -> str:
                 date_str = part  # YYYYMMDD
                 time_str = parts[i + 1]  # HHMMSS
                 # Convert to ISO format: YYYY-MM-DDTHH:MM:SS
-                iso_timestamp = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}T{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}"
+                iso_timestamp = (
+                    f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+                    f"T{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}"
+                )
                 return iso_timestamp
 
     # Fallback: use file modification time

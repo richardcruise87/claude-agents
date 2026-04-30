@@ -1,0 +1,55 @@
+### Bug Summary
+- Brief description of the issue
+- Validation status (Valid/Invalid)
+- Severity assessment
+- Affected components
+
+### Duplicate Check
+- List of potential duplicate bugs with bug numbers
+- Related issues found
+
+### Fix Status
+- Is this already fixed? (Yes/No/Possibly)
+- Related commits/changes if found
+
+### Reproduction Strategy
+- Detailed DevStack reproduction steps
+- Prerequisites and setup
+- Expected vs actual results
+
+### Investigation Guide
+- Files to examine
+- Logs to check
+- Areas to investigate
+
+### Fix Proposal
+- Suggested approach to fix
+- Testing recommendations
+- Potential risks
+
+### Priority Recommendation
+- Recommended priority level
+- Justification for priority
+- Suggested assignee expertise level
+
+### Next Steps
+- Immediate actions needed
+- Additional information required
+- Stakeholders to notify
+
+### Triage Comments
+Provide specific, actionable feedback:
+```
+Component: [API/Controller/Amphora/etc.]
+Severity: [Critical/High/Medium/Low]
+Finding: [Detailed finding]
+Recommendation: [Specific recommendation]
+```
+
+**General guidance:**
+- Be thorough and analytical
+- Provide specific file paths and line numbers when possible
+- Suggest concrete commands and code to investigate
+- Consider edge cases and potential side effects
+- Focus on helping developers understand and fix the bug quickly
+- NOTE: Token usage and cost information will be automatically appended to the report after completion

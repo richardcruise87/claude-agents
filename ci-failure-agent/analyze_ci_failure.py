@@ -45,7 +45,7 @@ import asyncio
 import json
 import sys
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -78,7 +78,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
     Returns:
         Path to the generated report file, or None on failure
     """
-    from claude_agent_sdk import query, ClaudeAgentOptions
+    from agents_lib import create_model_client as _create_model_client
 
     change_number = str(failure_data["change_number"])
     patchset = str(failure_data["patchset"])
@@ -99,7 +99,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
     report_file = create_report_filename(output_dir, project, change_number, patchset, sequence)
 
     print(f"\n{'='*80}")
-    print(f"  CI Failure Analysis")
+    print("  CI Failure Analysis")
     print(f"{'='*80}")
     print(f"  Project:      {project}")
     print(f"  Change:       #{change_number}")
@@ -110,6 +110,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
     print(f"  Report:       {report_file.name}")
     print(f"{'='*80}\n")
 
+    _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_ci_failure_prompt(
         project=project,
         change_number=change_number,
@@ -120,6 +121,8 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         zuul_tenant=CONFIG["zuul_tenant"],
         failing_jobs=jobs,
         output_file=str(report_file),
+        provider=_provider,
+        save_path=str(report_file),
     )
 
     if print_prompt:
@@ -143,32 +146,26 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
     usage_info = None
 
     try:
-        async for message in query(
+        _client = _create_model_client(CONFIG)
+        _res = await _client.query(
             prompt=prompt,
-            options=ClaudeAgentOptions(
-                allowed_tools=["Bash", "WebFetch", "Write"],
-                model=CONFIG.get("model", "claude-sonnet-4-6"),
-            ),
-        ):
-            if hasattr(message, "text"):
-                print(f"  {message.text}")
-            elif hasattr(message, "result"):
-                result = message.result
+            tools=["Bash", "WebFetch", "Write"],
+            on_progress=lambda text: print(f"  {text}"),
+        )
+        result = _res.text
+        usage_info = format_usage_info(
+            usage_data=_res.usage,
+            cost_usd=_res.cost_usd,
+            model=_res.model,
+            duration_ms=_res.duration_ms,
+        )
 
-                if hasattr(message, "usage") or hasattr(message, "total_cost_usd"):
-                    usage_info = format_usage_info(
-                        usage_data=getattr(message, "usage", None),
-                        cost_usd=getattr(message, "total_cost_usd", None),
-                        model=getattr(message, "model", None),
-                        duration_ms=getattr(message, "duration_ms", None),
-                    )
-
-                print(f"\n{'='*80}")
-                print("  Analysis Complete!")
-                print(f"{'='*80}")
-                if result:
-                    preview = result[:400].replace("\n", " ")
-                    print(f"\n  Summary: {preview}...")
+        print(f"\n{'='*80}")
+        print("  Analysis Complete!")
+        print(f"{'='*80}")
+        if result:
+            preview = result[:400].replace("\n", " ")
+            print(f"\n  Summary: {preview}...")
 
         # Append token usage to the report
         if report_file.exists():
@@ -179,7 +176,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
             print(f"\n  Report saved: {report_file}")
             return report_file
         elif result:
-            print(f"\n  Warning: Report file not found — saving AI result directly...")
+            print("\n  Warning: Report file not found — saving AI result directly...")
             content = result
             if usage_info:
                 content += "\n\n---\n\n" + usage_info

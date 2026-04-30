@@ -6,6 +6,10 @@ from external files, keeping the main code clean and maintainable.
 """
 from pathlib import Path
 
+from agents_lib import load_agent_prompt as _load_agent_prompt
+
+_PROMPTS_DIR = Path(__file__).parent
+
 
 def load_prompt_template(template_name: str) -> str:
     """
@@ -40,6 +44,8 @@ def get_code_review_prompt(
     specific_patchset_note: str = "",
     previous_review_section: str = "",
     previous_patchset: int = None,
+    provider: str = "anthropic",
+    save_path: str = None,
 ) -> str:
     """
     Get the formatted code review prompt.
@@ -58,7 +64,9 @@ def get_code_review_prompt(
     Returns:
         Formatted prompt ready to use with the agent
     """
-    template = load_prompt_template("code_review_prompt")
+    template = _load_agent_prompt(
+        "code_review", provider=provider, prompts_dir=_PROMPTS_DIR, save_path=save_path
+    )
 
     # Pre-compute complex expressions that appear in the template
     patchset_display = str(current_patchset) if current_patchset else 'unknown'

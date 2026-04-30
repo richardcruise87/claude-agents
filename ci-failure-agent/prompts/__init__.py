@@ -4,6 +4,8 @@ Prompt template loader for the CI Failure Analysis Agent.
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agents_lib import load_agent_prompt as _load_agent_prompt
+
 PROMPTS_DIR = Path(__file__).parent
 
 
@@ -17,6 +19,8 @@ def get_ci_failure_prompt(
     zuul_tenant,
     failing_jobs,
     output_file,
+    provider: str = "anthropic",
+    save_path: str = None,
 ):
     """
     Return a formatted CI failure analysis prompt.
@@ -36,11 +40,9 @@ def get_ci_failure_prompt(
     Returns:
         Formatted prompt string ready to send to an AI agent
     """
-    template_file = PROMPTS_DIR / "ci_failure_prompt.txt"
-    if not template_file.exists():
-        raise FileNotFoundError(f"Prompt template not found: {template_file}")
-
-    template = template_file.read_text()
+    template = _load_agent_prompt(
+        "ci_failure", provider=provider, prompts_dir=PROMPTS_DIR, save_path=save_path
+    )
 
     # Build the failing jobs table for the prompt
     table_lines = [

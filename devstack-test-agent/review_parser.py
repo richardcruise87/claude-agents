@@ -204,7 +204,7 @@ Test change
             if info:
                 print(f"  ✓ Repo: {info.repo_name}, Change: {info.change_number}, PS: {info.patchset}")
             else:
-                print(f"  ✗ Failed to parse")
+                print("  ✗ Failed to parse")
 
             test_file.unlink()
 

@@ -7,11 +7,8 @@ Operates asynchronously from code review agent to improve throughput.
 """
 import asyncio
 import sys
-import re
 from pathlib import Path
 from datetime import datetime
-from claude_agent_sdk import query, ClaudeAgentOptions
-
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -23,9 +20,10 @@ from agents_lib import (
     get_unique_resource_prefix,
     notify_report,
     load_notifications_config,
+    create_model_client,
 )
 from config import load_config
-from review_parser import parse_review_file, should_test_review, get_review_timestamp
+from review_parser import parse_review_file, should_test_review
 
 # Load configuration
 CONFIG = None
@@ -50,7 +48,7 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
         Tuple of (success, test_results_file_path)
     """
     print(f"\n{'='*80}")
-    print(f"🧪 Testing Change in DevStack")
+    print("🧪 Testing Change in DevStack")
     print(f"📋 Repository: {review_info.repo_name}")
     print(f"📋 Change: {review_info.change_number} (Patchset {review_info.patchset})")
     print(f"{'='*80}\n")
@@ -78,9 +76,14 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
             # Results file (temp location, will be incorporated into review)
             results_file = Path(f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md")
 
-            # Load prompt template
-            prompt_file = Path(__file__).parent / "prompts" / "devstack_test_prompt.txt"
-            prompt_template = prompt_file.read_text()
+            # Load prompt template via provider-aware loader
+            _prompts_dir = Path(__file__).parent / "prompts"
+            _provider = config.get("model_provider", "anthropic")
+            from agents_lib import load_agent_prompt as _lap
+            prompt_template = _lap(
+                "devstack_test", provider=_provider,
+                prompts_dir=_prompts_dir, save_path=str(results_file),
+            )
 
             # Format prompt
             prompt = prompt_template.format(
@@ -102,19 +105,16 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
             # Run test with AI agent
             test_result = None
             try:
-                async for message in query(
+                _client = create_model_client(config)
+                _res = await _client.query(
                     prompt=prompt,
-                    options=ClaudeAgentOptions(
-                        allowed_tools=["Bash", "Read", "Write", "Grep"],
-                    ),
-                ):
-                    if hasattr(message, 'text'):
-                        print(f"  {message.text}")
-                    elif hasattr(message, 'result'):
-                        test_result = message.result
-                        print(f"\n{'='*80}")
-                        print(f"✅ Testing Complete!")
-                        print(f"{'='*80}")
+                    tools=["Bash", "Read", "Write", "Grep"],
+                    on_progress=lambda text: print(f"  {text}"),
+                )
+                test_result = _res.text
+                print(f"\n{'='*80}")
+                print("✅ Testing Complete!")
+                print(f"{'='*80}")
 
                 # Check if results file was created
                 if results_file.exists():
@@ -122,12 +122,12 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
                     return (True, str(results_file))
                 elif test_result:
                     # Save result manually if AI didn't write file
-                    print(f"\n⚠️  Results file not found - saving manually...")
+                    print("\n⚠️  Results file not found - saving manually...")
                     results_file.write_text(test_result)
                     print(f"✓ Saved results to: {results_file}")
                     return (True, str(results_file))
                 else:
-                    print(f"\n❌ No test results generated")
+                    print("\n❌ No test results generated")
                     return (False, "")
 
             except Exception as e:
@@ -155,7 +155,7 @@ def update_review_with_test_results(review_file: Path, test_results_file: Path) 
     Returns:
         True if successful, False otherwise
     """
-    print(f"\n📝 Updating review file with test results...")
+    print("\n📝 Updating review file with test results...")
 
     try:
         # Read both files
@@ -220,7 +220,7 @@ async def main():
     # Load configuration
     config = load_config_module()
 
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"  Reviews directory: {config['reviews_directory']}")
     print(f"  DevStack path: {config['devstack_path']}")
     print(f"  Lock timeout: {config['devstack']['lock_timeout']}s")
@@ -302,13 +302,16 @@ async def main():
                 print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
                 notify_report(
                     report_path=review_file,
-                    subject=f"DevStack Test: {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}",
+                    subject=(
+                        f"DevStack Test: {review_info.repo_name} "
+                        f"#{review_info.change_number} PS{review_info.patchset}"
+                    ),
                     summary="DevStack integration test passed",
                     agent_config=config,
                     notifications_config=load_notifications_config(),
                 )
             else:
-                print(f"\n⚠️  Test succeeded but failed to update review file")
+                print("\\n⚠️  Test succeeded but failed to update review file")
         else:
             print(f"\n⚠️  Test failed or skipped for {review_info.repo_name} #{review_info.change_number}")
 
@@ -318,7 +321,7 @@ async def main():
             break
 
     if tested_count == 0:
-        print(f"\n✓ No new reviews to test")
+        print("\n✓ No new reviews to test")
 
     print("\n" + "="*80)
     print("✅ DevStack test cycle complete!")

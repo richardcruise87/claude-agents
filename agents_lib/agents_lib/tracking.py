@@ -6,7 +6,6 @@ Helps agents track what items (bugs, changes, etc.) have been processed.
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Optional, Tuple
 
 
 def load_tracking_file(tracking_file):
