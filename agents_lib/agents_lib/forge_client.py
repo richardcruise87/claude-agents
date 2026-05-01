@@ -90,14 +90,23 @@ class ForgeClient:
     # Shared HTTP helper
     # ------------------------------------------------------------------
 
-    def _http_get(self, url: str, headers: Optional[dict] = None) -> dict | list:
+    def _http_get(self, url: str, headers: Optional[dict] = None) -> dict | list[dict]:
         """Perform a GET request and return parsed JSON."""
         req = urllib.request.Request(url, headers=headers or {})
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"HTTP {exc.code} fetching {url}: {exc.reason}") from exc
+            # Include the response body when available — APIs often return
+            # a JSON error message that explains the failure in detail.
+            try:
+                body = exc.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                body = ""
+            detail = f" — {body}" if body else ""
+            raise RuntimeError(
+                f"HTTP {exc.code} fetching {url}: {exc.reason}{detail}"
+            ) from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Network error fetching {url}: {exc.reason}") from exc
 
@@ -303,8 +312,8 @@ class GitHubClient(ForgeClient):
         return self._parse_pr(data)
 
     def get_change_from_url(self, url: str) -> ChangeInfo:
-        # https://github.com/owner/repo/pull/123
-        m = re.search(r'github\.com/([^/]+/[^/]+)/pull/(\d+)', url)
+        # Matches github.com and GitHub Enterprise (github.company.com)
+        m = re.search(r'github[^/]*/([^/]+/[^/]+)/pull/(\d+)', url)
         if not m:
             raise ValueError(f"Cannot parse GitHub PR URL: {url}")
         repo, pr = m.group(1), m.group(2)
