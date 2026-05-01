@@ -1,0 +1,47 @@
+### Requirement Summary
+- What is being built (1–2 sentences)
+- Key acceptance criteria
+- Any critical ambiguities identified
+
+### Technical Analysis
+- Affected components / services
+- Relevant existing code (file:function references)
+- Reusable patterns or abstractions found
+
+### Implementation Plan
+Ordered steps:
+1. [Step 1]
+2. [Step 2]
+3. ...
+
+**API / interface changes:** (none / describe)
+**Data model changes:** (none / describe)
+**Configuration changes:** (none / describe)
+
+### Risk Assessment
+
+| Risk | Category | Likelihood | Mitigation |
+|------|----------|------------|------------|
+| [description] | Technical / Scope / Integration / Compat / Performance | Low/Medium/High | [mitigation] |
+
+### Testing Strategy
+- **Unit tests:** [what to test]
+- **Integration tests:** [what to test]
+- **Manual scenarios:** [key scenarios]
+- **Regression protection:** [what existing behaviour to protect]
+
+### Complexity Estimate
+**Size:** XS / S / M / L / XL
+
+**Justification:** [one sentence]
+
+### Open Questions
+1. [Question requiring stakeholder input]
+2. [Technical unknown]
+3. ...
+
+**General guidance:**
+- Provide specific file paths and function names where possible
+- Flag scope risks prominently — it is better to surface ambiguity early
+- Focus on helping developers start work quickly with confidence
+- NOTE: Token usage and cost information will be automatically appended

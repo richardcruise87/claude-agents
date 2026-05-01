@@ -1,0 +1,2 @@
+include prompts/*.txt
+include config.sample.json

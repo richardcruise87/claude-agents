@@ -6,6 +6,36 @@ All notable changes to the claude-agents project are documented here.
 
 ## 2026-05-01
 
+### Added: JIRA Triage Agent (`jira-triage-agent/`)
+
+New standalone agent that reads JIRA issues via a user-supplied JQL query and
+produces AI-powered outputs depending on issue type:
+
+- **Bugs / Defects** — triage report: validate the bug, check for duplicates,
+  assess severity, outline a reproduction strategy, and propose a fix approach.
+  Follows the same analytical steps as the existing Launchpad bug triage agent.
+- **Stories / Tasks / Epics** — implementation plan: break down the requirement,
+  list implementation steps in order, identify technical/scope/integration/
+  compatibility risks (each with likelihood and mitigation), propose a testing
+  strategy, and give a T-shirt size complexity estimate.
+
+**Key design decisions:**
+- The JQL query is opaque to the agent — all filtering (project, status, date
+  range, labels) lives in config rather than being baked into the agent code.
+- Uses stdlib `urllib` for the JIRA REST API (no third-party SDK dependency).
+- Converts Atlassian Document Format (ADF) rich text to plain text for prompt
+  injection.
+- Subprocess isolation (same pattern as the bug triage agent) gives each issue
+  a fresh asyncio event loop.
+- Re-processes issues when they are updated (sequence tracking via agents_lib).
+
+**New files:** `jira-triage-agent/` directory with `jira_client.py`,
+`issue_tracker.py`, `jira_triage_agent.py`, `config.py`, `config.sample.json`,
+two prompt/template pairs (bug triage + planning), systemd unit files, and a
+Claude Code sub-agent definition at `.claude/agents/jira-triage.md`.
+
+**Updated:** `setup-agents.sh` (adds `jira-triage` agent name), `AGENTS.md`.
+
 ### Added: Multi-forge code review support (Gerrit / GitHub / GitLab)
 
 The code review agent can now work with GitHub and GitLab in addition to Gerrit,

@@ -1,0 +1,86 @@
+You are producing an implementation plan for a JIRA {issue_type}.
+
+**Issue Information:**
+- Issue Key:   {issue_key}
+- Summary:     {summary}
+- Type:        {issue_type}
+- Status:      {status}
+- Priority:    {priority}
+- Reporter:    {reporter}
+- Assignee:    {assignee}
+- JIRA URL:    {jira_url}
+- Created:     {created}
+- Updated:     {updated}
+{sequence_note}{previous_plan_section}
+**Description / Acceptance Criteria:**
+```
+{description}
+```
+
+**Your Task:**
+Produce a detailed, actionable implementation plan by working through these steps:
+
+## Step 1: Understand the Requirement
+Analyse the description carefully:
+- What exactly is being asked for?
+- What are the explicit acceptance criteria?
+- What implicit requirements can you infer from the context?
+- Are there any ambiguities that need clarification before work starts?
+
+## Step 2: Technical Analysis
+Investigate the codebase to understand the current state:
+- Which components, services, or modules are affected?
+- Search for relevant existing code:
+
+```bash
+cd {devstack_path}/octavia
+grep -r "{search_keywords}" --include="*.py" -l | head -20
+git log --all --grep="{search_keywords}" --oneline | head -10
+```
+
+- What existing patterns or abstractions can be reused?
+- Are there related issues, pull requests, or documentation?
+
+## Step 3: Implementation Approach
+Propose a clear implementation plan:
+- If multiple approaches exist, briefly compare them and justify your choice
+- Ordered list of implementation steps
+- API or interface changes (new endpoints, modified signatures, removed features)
+- Data model or schema changes (new fields, migrations, index changes)
+- Configuration changes (new config keys, deprecations)
+- UI changes (if applicable)
+
+## Step 4: Risk Assessment
+Identify and categorise risks honestly:
+
+**Technical risks** — areas of complexity, unknowns, or fragility
+**Scope risks** — ambiguity in requirements, potential for creep
+**Integration risks** — impact on other services or downstream consumers
+**Backward-compatibility risks** — breaking changes for existing users or APIs
+**Performance risks** — potential throughput or latency regressions
+
+For each risk: describe it, rate its likelihood (Low / Medium / High), and
+suggest a concrete mitigation.
+
+## Step 5: Testing Strategy
+Describe the testing approach:
+- Unit tests to write (what to mock, what to assert)
+- Integration or functional tests needed
+- Manual testing scenarios and edge cases
+- Regression tests to protect existing behaviour
+
+## Step 6: Complexity Estimate
+Provide a T-shirt size estimate:
+- **XS** — a few lines, well-understood area, no risk
+- **S** — a few hours, small well-scoped change
+- **M** — 1–2 days, moderate complexity or cross-cutting change
+- **L** — 3–5 days, significant new capability or architectural change
+- **XL** — week+, major feature, substantial design work needed
+
+Include a one-sentence justification for the estimate.
+
+## Step 7: Open Questions
+List any questions that should be answered before or during implementation:
+- Decisions that require product/stakeholder input
+- Technical unknowns that need a spike or proof-of-concept
+- Dependencies on other teams or external systems

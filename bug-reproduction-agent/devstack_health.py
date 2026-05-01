@@ -194,7 +194,6 @@ def format_health_report(health: DevStackHealth) -> str:
 if __name__ == "__main__":
     # Test the health check functionality
     import json
-    from pathlib import Path
 
     print("Testing DevStack health check...")
     print("")
