@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 from jira_client import JiraClient
 from jira_client import _adf_to_text
+from jira_client import _text_to_adf
 
 
 # ---------------------------------------------------------------------------
@@ -232,3 +233,94 @@ class TestHttpErrorHandling:
                     client._get("/search")
 
             assert "401" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# _text_to_adf
+# ---------------------------------------------------------------------------
+
+class TestTextToAdf:
+    def test_single_paragraph(self):
+        doc = _text_to_adf("Hello world")
+        assert doc["type"] == "doc"
+        assert doc["version"] == 1
+        assert len(doc["content"]) == 1
+        assert doc["content"][0]["type"] == "paragraph"
+        assert doc["content"][0]["content"][0]["text"] == "Hello world"
+
+    def test_multiple_paragraphs(self):
+        doc = _text_to_adf("First paragraph\n\nSecond paragraph")
+        paras = [n for n in doc["content"] if n["type"] == "paragraph"]
+        assert len(paras) == 2
+
+    def test_code_block(self):
+        doc = _text_to_adf("Intro\n\n```python\nprint('hi')\n```\n\nOutro")
+        types = [n["type"] for n in doc["content"]]
+        assert "codeBlock" in types
+
+    def test_code_block_language_attr(self):
+        doc = _text_to_adf("```bash\necho hello\n```")
+        cb = next(n for n in doc["content"] if n["type"] == "codeBlock")
+        assert cb.get("attrs", {}).get("language") == "bash"
+
+    def test_empty_input_returns_valid_doc(self):
+        doc = _text_to_adf("")
+        assert doc["type"] == "doc"
+        assert isinstance(doc["content"], list)
+
+
+# ---------------------------------------------------------------------------
+# JiraClient.add_comment
+# ---------------------------------------------------------------------------
+
+class TestAddComment:
+    def _make_client(self, monkeypatch):
+        monkeypatch.setenv("JIRA_API_TOKEN", "tok")
+        return JiraClient.from_config({
+            "jira": {
+                "base_url": "https://test.atlassian.net",
+                "email": "u@test.com",
+                "token_env": "JIRA_API_TOKEN",
+            }
+        })
+
+    def test_add_comment_public_no_visibility(self, monkeypatch):
+        client = self._make_client(monkeypatch)
+        posted = {}
+
+        def fake_post(path, payload):
+            posted["path"] = path
+            posted["payload"] = payload
+            return {"id": "123"}
+
+        client._post = fake_post
+        result = client.add_comment("PROJ-1", "Nice change.", private=False)
+        assert result is True
+        assert "visibility" not in posted["payload"]
+        assert posted["payload"]["body"]["type"] == "doc"
+
+    def test_add_comment_private_includes_visibility(self, monkeypatch):
+        client = self._make_client(monkeypatch)
+        posted = {}
+
+        def fake_post(path, payload):
+            posted["payload"] = payload
+            return {"id": "456"}
+
+        client._post = fake_post
+        result = client.add_comment("PROJ-2", "Private note.", private=True,
+                                    visibility_role="Developers")
+        assert result is True
+        vis = posted["payload"]["visibility"]
+        assert vis["type"] == "role"
+        assert vis["value"] == "Developers"
+
+    def test_add_comment_returns_false_on_error(self, monkeypatch):
+        client = self._make_client(monkeypatch)
+
+        def fake_post(path, payload):
+            raise RuntimeError("JIRA HTTP 403 for /issue/PROJ-3/comment: Forbidden")
+
+        client._post = fake_post
+        result = client.add_comment("PROJ-3", "Will fail.")
+        assert result is False

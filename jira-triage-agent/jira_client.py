@@ -106,6 +106,29 @@ class JiraClient:
         """Fetch full details for a single issue."""
         return self._get(f"/issue/{urllib.parse.quote(issue_key)}")
 
+    def add_comment(self, issue_key: str, body_text: str,
+                    private: bool = False, visibility_role: str = "Service Desk Team") -> bool:
+        """Post a comment on a JIRA issue.
+
+        Args:
+            issue_key:       JIRA issue key, e.g. ``"PROJ-123"``.
+            body_text:       Plain-text / basic-markdown comment content.
+            private:         When True, restrict visibility to ``visibility_role``.
+            visibility_role: JIRA role name used for private comments.
+
+        Returns:
+            True on success, False on any error (error is logged, never raised).
+        """
+        payload: dict = {"body": _text_to_adf(body_text)}
+        if private:
+            payload["visibility"] = {"type": "role", "value": visibility_role}
+        try:
+            self._post(f"/issue/{urllib.parse.quote(issue_key)}/comment", payload)
+            return True
+        except RuntimeError as exc:
+            print(f"⚠️  JIRA comment post failed for {issue_key}: {exc}")
+            return False
+
     # ------------------------------------------------------------------
     # Issue field helpers
     # ------------------------------------------------------------------
@@ -168,6 +191,70 @@ class JiraClient:
     def issue_url(self, issue: dict) -> str:
         key = self.issue_key(issue)
         return f"{self._base}/browse/{key}"
+
+
+# ---------------------------------------------------------------------------
+# Plain text → ADF  (for posting comments)
+# ---------------------------------------------------------------------------
+
+def _text_to_adf(text: str) -> dict:
+    """Convert plain text (with basic markdown) to Atlassian Document Format.
+
+    Handles:
+    - Fenced code blocks (``` ... ```)
+    - Double-newline paragraph breaks
+    - Everything else becomes plain paragraph text
+    """
+    content = []
+    # Split on blank lines to get blocks; handle code fences as a unit
+    blocks: list[str] = []
+    current: list[str] = []
+    in_code = False
+    for line in text.splitlines():
+        if line.startswith("```"):
+            if in_code:
+                current.append(line)
+                blocks.append("\n".join(current))
+                current = []
+                in_code = False
+            else:
+                if current:
+                    blocks.append("\n".join(current))
+                    current = []
+                current.append(line)
+                in_code = True
+        elif in_code:
+            current.append(line)
+        elif line == "" and current:
+            blocks.append("\n".join(current))
+            current = []
+        else:
+            current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+        if block.startswith("```"):
+            lines = block.splitlines()
+            lang = lines[0][3:].strip() if len(lines) > 0 else ""
+            code_body = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+            node: dict = {"type": "codeBlock", "content": [{"type": "text", "text": code_body}]}
+            if lang:
+                node["attrs"] = {"language": lang}
+            content.append(node)
+        else:
+            content.append({
+                "type": "paragraph",
+                "content": [{"type": "text", "text": block}],
+            })
+
+    if not content:
+        content.append({"type": "paragraph", "content": [{"type": "text", "text": ""}]})
+
+    return {"version": 1, "type": "doc", "content": content}
 
 
 # ---------------------------------------------------------------------------

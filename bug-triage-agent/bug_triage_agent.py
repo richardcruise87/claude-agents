@@ -6,14 +6,28 @@ Monitors Launchpad for Octavia bugs, performs triage, suggests reproduction
 strategies, checks for duplicates and potential fixes.
 """
 import asyncio
+import base64
+import hashlib
+import hmac
 import json
+import os
 import sys
 import subprocess
+import time
+import urllib.parse
+import urllib.request
+import uuid
 from pathlib import Path
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
-from agents_lib import notify_report, load_notifications_config, create_model_client, format_usage_info
+from agents_lib import (
+    build_feedback_comment,
+    notify_report,
+    load_notifications_config,
+    create_model_client,
+    format_usage_info,
+)
 from bug_tracker import (
     load_triage_history,
     should_triage_bug,
@@ -26,6 +40,112 @@ from prompts import get_bug_triage_prompt
 
 # Load configuration
 CONFIG = load_config()
+
+
+# ---------------------------------------------------------------------------
+# Launchpad feedback posting (OAuth 1.0a, stdlib only)
+# ---------------------------------------------------------------------------
+
+def _launchpad_auth_header(method: str, url: str,
+                           consumer_key: str, access_token: str,
+                           token_secret: str) -> str:
+    """Build an OAuth 1.0a HMAC-SHA1 Authorization header for Launchpad.
+
+    Launchpad uses a blank consumer secret for registered applications.
+    """
+    timestamp = str(int(time.time()))
+    nonce = uuid.uuid4().hex
+    oauth_params = {
+        "oauth_consumer_key": consumer_key,
+        "oauth_token": access_token,
+        "oauth_signature_method": "HMAC-SHA1",
+        "oauth_timestamp": timestamp,
+        "oauth_nonce": nonce,
+        "oauth_version": "1.0",
+    }
+    # Signature base string
+    param_string = "&".join(
+        f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}"
+        for k, v in sorted(oauth_params.items())
+    )
+    base_string = "&".join([
+        method.upper(),
+        urllib.parse.quote(url, safe=""),
+        urllib.parse.quote(param_string, safe=""),
+    ])
+    # Consumer secret is empty for Launchpad desktop/service integrations
+    signing_key = f"&{urllib.parse.quote(token_secret, safe='')}"
+    raw_sig = hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
+    oauth_params["oauth_signature"] = base64.b64encode(raw_sig).decode()
+    auth = "OAuth " + ", ".join(
+        f'{k}="{urllib.parse.quote(v, safe="")}"' for k, v in oauth_params.items()
+    )
+    return auth
+
+
+def _post_launchpad_comment(
+    bug_id: str, subject: str, content: str,
+    consumer_key: str, access_token: str, token_secret: str,
+) -> bool:
+    """Post a comment to a Launchpad bug via the REST API.
+
+    Returns True on success, False on any error (logged, never raised).
+    """
+    url = f"https://api.launchpad.net/1.0/bugs/{bug_id}/messages"
+    body = urllib.parse.urlencode({"subject": subject, "content": content}).encode("utf-8")
+    auth = _launchpad_auth_header("POST", url, consumer_key, access_token, token_secret)
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Authorization", auth)
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status in (200, 201)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            detail = ""
+        print(f"⚠️  Launchpad comment failed (HTTP {exc.code}): {exc.reason} — {detail}")
+        return False
+    except urllib.error.URLError as exc:
+        print(f"⚠️  Launchpad comment failed (network): {exc.reason}")
+        return False
+
+
+def _post_bug_feedback(bug_info: dict, triage_file: "Path", config: dict) -> None:
+    """Post the triage report as a comment on the Launchpad bug.
+
+    Reads OAuth credentials from env vars named in config. Errors are logged
+    but never raised — a failed post must not prevent local recording.
+    """
+    if not config.get("feedback_enabled"):
+        return
+    consumer_key = os.environ.get(config.get("feedback_consumer_key_env", ""), "")
+    access_token = os.environ.get(config.get("feedback_access_token_env", ""), "")
+    token_secret = os.environ.get(config.get("feedback_access_token_secret_env", ""), "")
+    if not all([consumer_key, access_token, token_secret]):
+        print(
+            "⚠️  Launchpad feedback skipped — set "
+            f"{config.get('feedback_consumer_key_env')}, "
+            f"{config.get('feedback_access_token_env')}, and "
+            f"{config.get('feedback_access_token_secret_env')} env vars."
+        )
+        return
+    try:
+        content = triage_file.read_text(encoding="utf-8")
+        model_name = config.get("model", "claude-sonnet-4-6")
+        comment = build_feedback_comment(content, model_name, max_chars=5000)
+        bug_id = bug_info["number"]
+        subject = "AI Triage Report (automated, may contain errors)"
+        print(f"\n📤 Posting comment to Launchpad bug #{bug_id}...")
+        ok = _post_launchpad_comment(bug_id, subject, comment,
+                                     consumer_key, access_token, token_secret)
+        if ok:
+            print(f"   ✅ Comment posted to bug #{bug_id}")
+        else:
+            print("   ⚠️  Comment post returned failure (see warning above)")
+    except Exception as exc:
+        print(f"   ⚠️  Could not post Launchpad feedback: {exc}")
 
 
 async def fetch_bugs_from_launchpad(project: str, statuses: list, max_bugs: int = 10):
@@ -115,9 +235,6 @@ async def fetch_bugs_from_launchpad(project: str, statuses: list, max_bugs: int 
 
     except ImportError:
         print("⚠️  httpx not available, using urllib...")
-        import urllib.request
-        import urllib.parse
-
         try:
             with urllib.request.urlopen(launchpad_url, timeout=30) as response:
                 data = json.loads(response.read().decode('utf-8'))
@@ -277,6 +394,8 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             agent_config=CONFIG,
             notifications_config=load_notifications_config(),
         )
+
+        _post_bug_feedback(bug_info, triage_file, CONFIG)
 
         return triage_file
 

@@ -26,12 +26,43 @@ from jira_client import JiraClient
 from jira_client import create_jira_client
 from prompts import get_jira_bug_triage_prompt
 from prompts import get_jira_planning_prompt
+from agents_lib import build_feedback_comment
 from agents_lib import create_model_client
 from agents_lib import format_usage_info
 from agents_lib import load_notifications_config
 from agents_lib import notify_report
 
 CONFIG = load_config()
+
+
+# ---------------------------------------------------------------------------
+# Forge feedback posting
+# ---------------------------------------------------------------------------
+
+def _post_jira_feedback(issue: dict, report_file: "Path", config: dict) -> None:
+    """Post the report as a comment on the JIRA issue.
+
+    Errors are logged but never re-raised — a failed post must not prevent
+    the report from being recorded locally.
+    """
+    if not config.get("feedback_enabled"):
+        return
+    try:
+        content = report_file.read_text(encoding="utf-8")
+        model_name = config.get("model", "claude-sonnet-4-6")
+        comment = build_feedback_comment(content, model_name, max_chars=6000)
+        issue_key = JiraClient.issue_key(issue)
+        jira = create_jira_client(config)
+        private = config.get("feedback_private", True)
+        role = config.get("feedback_visibility_role", "Service Desk Team")
+        print(f"\n📤 Posting {'private ' if private else ''}comment to JIRA {issue_key}...")
+        ok = jira.add_comment(issue_key, comment, private=private, visibility_role=role)
+        if ok:
+            print(f"   ✅ Comment posted to {issue_key}")
+        else:
+            print("   ⚠️  Comment post returned failure (see warning above)")
+    except Exception as exc:
+        print(f"   ⚠️  Could not post JIRA feedback: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +142,7 @@ async def process_bug(issue: dict, sequence: int, save_path: str) -> None:
     report_path = Path(save_path)
     _save_result(result, report_path)
     print(f"\n✅ Triage saved to: {report_path}")
+    _post_jira_feedback(issue, report_path, CONFIG)
 
 
 async def process_plan(issue: dict, sequence: int, save_path: str) -> None:
@@ -154,6 +186,7 @@ async def process_plan(issue: dict, sequence: int, save_path: str) -> None:
     report_path = Path(save_path)
     _save_result(result, report_path)
     print(f"\n✅ Plan saved to: {report_path}")
+    _post_jira_feedback(issue, report_path, CONFIG)
 
 
 def _save_result(result, report_path: Path) -> None:
