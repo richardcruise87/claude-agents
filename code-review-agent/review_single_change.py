@@ -41,25 +41,30 @@ REPO_BASE_PATH = CONFIG.get("repo_base_path", DEVSTACK_PATH)
 
 
 def _find_full_review_content(summary_content: str) -> str:
-    """Try to load the full review from a path embedded in the summary text.
+    """Return the full review if the AI wrote it to a path referenced in the summary.
 
-    The AI sometimes writes the full review to a path like
-    '/opt/stack/octavia/review-985404-ps1.md' and references it in the summary.
-    Returns the full content, or falls back to the summary content.
+    When the AI writes the detailed review to its working directory (e.g.
+    /opt/stack/octavia/) it mentions that path in its text response.  This
+    function detects that path, reads the full file, and returns it so the
+    tracking-directory file can contain the complete report rather than just
+    the brief summary text.
+
+    Returns the full content when found, otherwise returns an empty string
+    (letting the caller fall back to the summary text).
     """
     m = re.search(r'saved to\s+[`\']?(/[^\s`\']+\.md)[`\']?', summary_content, re.IGNORECASE)
     if m:
         full_path = Path(m.group(1))
         if full_path.exists():
             return full_path.read_text(encoding="utf-8")
-    return summary_content
+    return ""
 
 
 def _post_forge_feedback(change_info, review_content: str, config: dict, forge) -> None:
     """Parse the review and post a summary comment (and optional vote) to the forge.
 
-    Uses the summary file for the forge comment and vote (compact, well-structured),
-    and the full review file (if referenced in the summary) for line comments.
+    review_content is the full consolidated report (already resolved by the caller),
+    so no secondary file lookup is needed.
 
     Errors are logged but never re-raised — a failed post must not prevent the
     review from being recorded locally.
@@ -67,8 +72,7 @@ def _post_forge_feedback(change_info, review_content: str, config: dict, forge) 
     model_name = config.get("model", "claude-sonnet-4-6")
     try:
         comment = extract_forge_comment(review_content, model_name)
-        full_content = _find_full_review_content(review_content)
-        line_comments = extract_line_comments(full_content)
+        line_comments = extract_line_comments(review_content)
         vote = determine_vote(review_content, config) if config.get("feedback_voting") else None
 
         vote_label = config.get("feedback_vote_label", "Code-Review")
@@ -288,35 +292,33 @@ This change has been reviewed before.
         print(f"\n📄 Review Document: {review_file}")
         print(f"\nSummary:\n{(review_result or '')[:500]}...")
 
-        # Append usage info to review if available
-        if review_result and usage_info:
-            review_result = review_result + "\n\n---\n\n" + usage_info
+        # Resolve the canonical report content.
+        # The AI often writes the full detailed review to its working directory
+        # (e.g. /opt/stack/octavia/) and outputs only a brief summary as text.
+        # _find_full_review_content() detects the full review path from the
+        # summary text and returns it when available, so that the tracking file
+        # always contains the complete report.
+        full_content = _find_full_review_content(review_result or "")
+        content_to_save = full_content if full_content else review_result
 
-        # Ensure the review file was created
-        if not review_file.exists() and review_result:
-            print("\n⚠️  Review file not found - saving result now...")
-            review_file.write_text(review_result)
-            print(f"✓ Saved review to: {review_file}")
-        elif not review_file.exists():
-            print("\n❌ WARNING: Review file was not created and no result received!")
+        if not content_to_save:
+            print("\n❌ WARNING: No review content received — aborting.")
             return
-        else:
-            # If file exists but we have usage info, append it
-            if usage_info:
-                existing_content = review_file.read_text()
-                # Only append if not already present
-                if "## Token Usage & Cost" not in existing_content:
-                    review_file.write_text(existing_content + "\n\n---\n\n" + usage_info)
-            print(f"\n✓ Review file confirmed at: {review_file}")
+
+        # Append usage info once if not already present
+        if usage_info and "## Token Usage & Cost" not in content_to_save:
+            content_to_save += "\n\n---\n\n" + usage_info
+
+        # Always write (or overwrite) the tracking file with the full report
+        review_file.write_text(content_to_save, encoding="utf-8")
+        print(f"\n✓ Full review saved to: {review_file}")
 
         # Record in forge-agnostic tracking
-        if review_file.exists():
-            record_review(tracking_file, change, sequence, review_file)
+        record_review(tracking_file, change, sequence, review_file)
 
-            # Optionally post feedback back to the forge
-            if CONFIG.get("feedback_enabled"):
-                final_content = review_file.read_text()
-                _post_forge_feedback(change, final_content, CONFIG, forge)
+        # Optionally post feedback back to the forge
+        if CONFIG.get("feedback_enabled"):
+            _post_forge_feedback(change, review_file.read_text(encoding="utf-8"), CONFIG, forge)
 
     except Exception as e:
         print(f"\n❌ Error during review: {e}")
