@@ -15,7 +15,7 @@ INSTALL_SYSTEMD=""
 SETUP_NOTIFICATIONS=""
 SELECTED_AGENTS=()
 
-ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test")
+ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test" "jira-triage")
 
 get_agent_dir() {
     case $1 in
@@ -24,6 +24,7 @@ get_agent_dir() {
         bug-reproduction) echo "bug-reproduction-agent" ;;
         ci-failure)       echo "ci-failure-agent" ;;
         devstack-test)    echo "devstack-test-agent" ;;
+        jira-triage)      echo "jira-triage-agent" ;;
     esac
 }
 
@@ -47,6 +48,7 @@ usage() {
     echo "  bug-reproduction  Bug Reproduction Agent"
     echo "  ci-failure        CI Failure Agent"
     echo "  devstack-test     DevStack Test Agent"
+    echo "  jira-triage       JIRA Triage Agent"
     echo ""
     echo "Examples:"
     echo "  $(basename "$0")                              # Install all agents"
@@ -295,6 +297,8 @@ if ! $UPDATE_MODE; then
                     echo "     systemctl --user enable --now octavia-bug-reproduction.path" ;;
                 devstack-test)
                     echo "     systemctl --user enable --now octavia-devstack-test.path" ;;
+                jira-triage)
+                    echo "     systemctl --user enable --now octavia-jira-triage.timer" ;;
             esac
         done
         echo ""
@@ -309,6 +313,7 @@ if ! $UPDATE_MODE; then
                 ci-failure)       echo "     $VENV_PATH/bin/octavia-ci-agent" ;;
                 bug-reproduction) echo "     $VENV_PATH/bin/octavia-reproduce-bugs" ;;
                 devstack-test)    echo "     $VENV_PATH/bin/octavia-devstack-test" ;;
+                jira-triage)      echo "     $VENV_PATH/bin/octavia-jira-triage" ;;
             esac
         done
         echo ""

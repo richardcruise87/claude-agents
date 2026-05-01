@@ -6,13 +6,13 @@ version: 1.0
 
 # Claude Agents
 
-Five specialised AI agents for OpenStack Octavia maintenance — bug triage,
-code review, CI failure analysis, bug reproduction, and DevStack integration
-testing.  All agents share a common virtual environment, a unified install
-script, and optional multi-channel notifications.
+Six specialised AI agents for OpenStack Octavia maintenance — bug triage,
+code review, CI failure analysis, bug reproduction, DevStack integration
+testing, and JIRA issue triage.  All agents share a common virtual environment,
+a unified install script, and optional multi-channel notifications.
 
 > **AI assistant note**: When a user in this repo asks you to triage a bug,
-> review a change, analyse a CI failure, reproduce a bug, or run integration
+> review a change, analyse a CI failure, reproduce a bug, run integration
 > tests, delegate to the appropriate agent command listed below rather than
 > doing the work inline.
 
@@ -217,6 +217,39 @@ octavia-devstack-test
 **Output**: appends results to the existing review file in `~/octavia_reviews/`
 
 **Tracking file**: `~/.octavia_devstack_tests.json`
+
+---
+
+### JIRA Triage Agent
+
+Reads JIRA issues matching a configurable JQL query and produces:
+- **Bugs / Defects** → triage report (same structure as the Launchpad bug triage agent)
+- **Stories / Tasks** → implementation plan with risk assessment, complexity estimate, and open questions
+
+**When to use**: triage JIRA bugs, or produce implementation plans for stories and tasks.
+
+**Command**:
+```bash
+octavia-jira-triage
+```
+
+**Key configuration** (`jira-triage-agent/config.json`):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `jira.base_url` | (required) | Atlassian Cloud URL, e.g. `https://myco.atlassian.net` |
+| `jira.email` | (required) | Your Atlassian account email |
+| `jira.token_env` | `JIRA_API_TOKEN` | Env var holding your API token |
+| `jira.jql` | (required) | JQL query — all filtering goes here |
+| `processing.max_issues_per_run` | `5` | Issues processed per execution |
+| `issue_types.bugs` | `["Bug", "Defect"]` | Types treated as bugs |
+| `issue_types.planning` | `["Story", "Task", "Epic"]` | Types that get implementation plans |
+
+**Output**:
+- Bug triages: `~/jira_triages/jira_{KEY}_{title-slug}_{timestamp}_{seq}.md`
+- Implementation plans: `~/jira_plans/jira_{KEY}_{title-slug}_{timestamp}_{seq}.md`
+
+**Tracking file**: `~/.jira_triages.json`
 
 ---
 

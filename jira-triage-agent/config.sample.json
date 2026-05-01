@@ -1,0 +1,41 @@
+{
+  "comment": "Copy this file to config.json and customize for your environment",
+  "model": "claude-sonnet-4-6",
+  "model_provider": "anthropic",
+
+  "jira": {
+    "base_url": "https://yourcompany.atlassian.net",
+    "email": "you@yourcompany.com",
+    "token_env": "JIRA_API_TOKEN",
+    "jql": "project = MYPROJ AND status != Done AND updated >= -30d ORDER BY updated DESC",
+    "comment": "JQL drives all issue selection — project, status, date range, labels, etc. The agent fetches whatever JQL returns and dispatches by issue type."
+  },
+
+  "output": {
+    "triages_dir": "~/jira_triages",
+    "plans_dir": "~/jira_plans",
+    "comment": "Bug triage reports go to triages_dir; Story/Task plans go to plans_dir."
+  },
+
+  "processing": {
+    "max_issues_per_run": 5,
+    "triage_tracking_file": "~/.jira_triages.json",
+    "cutoff_date": null,
+    "comment": "cutoff_date: YYYY-MM-DD — skip issues created before this date. null = 30 days ago."
+  },
+
+  "issue_types": {
+    "bugs": ["Bug", "Defect"],
+    "planning": ["Story", "Task", "Epic"],
+    "comment": "Issue type names as they appear in your JIRA project. Add or remove to match your workflow."
+  },
+
+  "devstack_path": "/opt/stack",
+  "search_repos": ["openstack/octavia"],
+  "gerrit_base_url": "https://review.opendev.org",
+
+  "notifications": {
+    "enabled": false,
+    "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
+  }
+}

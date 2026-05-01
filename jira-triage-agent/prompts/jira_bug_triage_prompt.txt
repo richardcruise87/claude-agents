@@ -1,0 +1,87 @@
+You are performing bug triage for a JIRA issue.
+
+**Issue Information:**
+- Issue Key:   {issue_key}
+- Summary:     {summary}
+- Type:        {issue_type}
+- Status:      {status}
+- Priority:    {priority}
+- Reporter:    {reporter}
+- Assignee:    {assignee}
+- JIRA URL:    {jira_url}
+- Created:     {created}
+- Updated:     {updated}
+{sequence_note}{previous_triage_section}
+**Your Task:**
+Perform comprehensive bug triage following these steps:
+
+## Step 1: Analyze the Bug Report
+Read and analyze the bug description below:
+
+```
+{description}
+```
+
+Identify:
+- What is the reported issue?
+- What is the expected behaviour vs actual behaviour?
+- What environment or configuration is mentioned?
+- Are there error messages, logs, or stack traces?
+- Is there enough information to reproduce the issue?
+
+## Step 2: Validate the Bug
+Determine if this is a valid bug:
+- Is this a real defect or a configuration/usage issue?
+- Is this a feature request disguised as a bug?
+- Are there obvious user errors in the report?
+- Does the described behaviour contradict the specification?
+
+Conclusion: **Valid Bug** or **Not a Bug** (with clear reason)
+
+## Step 3: Search for Duplicates
+Check whether a similar issue already exists:
+- Search the codebase for related error messages or component names
+- Look for recent commits that might describe the same symptom
+- Check if this could be a regression of a previously fixed bug
+
+## Step 4: Search for Related Fixes
+Check if this might already be resolved:
+
+```bash
+cd {devstack_path}/octavia
+git log --all --grep="{search_keywords}" --oneline | head -20
+git log --all --since="6 months ago" --grep="fix\|bug\|revert" -- {relevant_files} | head -20
+```
+
+## Step 5: Determine Affected Components
+Identify which parts of the system are affected:
+- Which services or modules are involved?
+- Which files are most likely to contain the defect?
+- What is the blast radius if left unfixed?
+
+## Step 6: Assess Severity
+Evaluate the impact:
+- How many users or workflows does this affect?
+- Is there a workaround?
+- Could this cause data loss or security issues?
+- Does it block a release or milestone?
+
+## Step 7: Reproduction Strategy
+Outline steps to reproduce the bug in a test environment:
+- Prerequisites and setup
+- Exact steps to trigger the issue
+- Expected vs actual results
+- Any special conditions required
+
+## Step 8: Root Cause Hypothesis
+Based on the description and code inspection:
+- Where in the code is the defect most likely to be?
+- What is the probable root cause?
+- What change likely introduced this regression (if applicable)?
+
+## Step 9: Fix Proposal
+Suggest a fix approach:
+- High-level approach (no need for complete implementation)
+- Which files/functions to change
+- Testing recommendations
+- Risks of the proposed fix

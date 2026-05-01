@@ -1,0 +1,52 @@
+### Bug Summary
+- Brief description of the reported issue
+- Validation verdict (Valid Bug / Not a Bug)
+- Severity assessment (Critical / High / Medium / Low)
+- Affected component(s)
+
+### Duplicate / Related Issues
+- List of known duplicates or related bugs (if any)
+- Status of any related previous fixes
+
+### Fix Status
+- Is this already fixed? (Yes / No / Possibly)
+- Related commits or changes found (if any)
+
+### Reproduction Strategy
+- Prerequisites and environment
+- Step-by-step reproduction steps
+- Expected vs actual result
+
+### Root Cause Hypothesis
+- Most likely location of the defect (file:function)
+- Probable root cause
+- Confidence level (High / Medium / Low)
+
+### Fix Proposal
+- Suggested approach
+- Files/functions to modify
+- Testing recommendations
+- Potential risks of the fix
+
+### Priority Recommendation
+- Recommended priority level and justification
+- Suggested assignee expertise
+
+### Next Steps
+- Immediate actions required
+- Additional information needed from reporter
+- Stakeholders to notify
+
+### Triage Comments
+```
+Component: [affected service or module]
+Severity:  [Critical/High/Medium/Low]
+Finding:   [key finding]
+Action:    [recommended action]
+```
+
+**General guidance:**
+- Provide specific file paths and line numbers where possible
+- Include exact commands to reproduce or investigate
+- Focus on helping developers understand and fix the bug quickly
+- NOTE: Token usage and cost information will be automatically appended

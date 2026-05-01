@@ -1,0 +1,17 @@
+[Unit]
+Description=JIRA Triage Agent Timer
+Documentation=https://github.com/richardcruise87/claude-agents
+
+[Timer]
+# Run every 4 hours (adjust to match your team's JIRA update cadence)
+OnCalendar=00/4:00:00
+
+# Alternative schedules (uncomment one):
+# Daily at 9 AM:  OnCalendar=*-*-* 09:00:00
+# Every 2 hours:  OnCalendar=00/2:00:00
+
+# Run if the system was off at the scheduled time
+Persistent=true
+
+[Install]
+WantedBy=timers.target

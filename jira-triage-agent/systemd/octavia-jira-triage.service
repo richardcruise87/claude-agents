@@ -1,0 +1,26 @@
+[Unit]
+Description=JIRA Triage Agent
+Documentation=https://github.com/richardcruise87/claude-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/git/claude-agents/jira-triage-agent
+
+ExecStart=%h/.venv/claude-agents/bin/octavia-jira-triage
+
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+# Environment="JIRA_API_TOKEN=your_token_here"
+# Environment="MAX_ISSUES=5"
+# Environment="CUTOFF_DATE=2026-01-01"
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=octavia-jira-triage
+
+# MemoryMax=2G
+# CPUQuota=50%
+
+[Install]
+WantedBy=default.target
