@@ -1,5 +1,6 @@
 """Unit tests for agents_lib.utils."""
-from agents_lib.utils import expand_path, slugify, format_usage_info
+import os
+from agents_lib.utils import expand_path, slugify, format_usage_info, sanitize_for_forge
 
 
 class TestSlugify:
@@ -105,3 +106,87 @@ class TestFormatUsageInfo:
         }
         result = format_usage_info(usage_data=usage)
         assert "cache creation" not in result.lower()
+
+
+class TestSanitizeForForge:
+    def test_redacts_env_var_password(self):
+        result = sanitize_for_forge("export OS_PASSWORD=supersecret123")
+        assert "supersecret123" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_bare_assignment(self):
+        result = sanitize_for_forge("GERRIT_HTTP_PASSWORD=abc123abc123abc123abc123")
+        assert "abc123abc123abc123abc123" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_prefixed_cli_flag(self):
+        result = sanitize_for_forge("openstack --os-password mypassword token issue")
+        assert "mypassword" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_cli_flag_with_equals(self):
+        result = sanitize_for_forge("openstack --os-password=mypassword token issue")
+        assert "mypassword" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_pem_private_key_block(self):
+        pem = (
+            "-----BEGIN RSA PRIVATE KEY-----\n"
+            "MIIEowIBAAKCAQEA...\n"
+            "-----END RSA PRIVATE KEY-----"
+        )
+        result = sanitize_for_forge(pem)
+        assert "MIIEowIBAAKCAQEA" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_bearer_token(self):
+        result = sanitize_for_forge("Authorization: Bearer eyJhbGciOiJSUzI1NiJ9.longtoken")
+        assert "eyJhbGciOiJSUzI1NiJ9" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_basic_auth_header(self):
+        result = sanitize_for_forge("Authorization: Basic cmNydWlzZTpzZWNyZXQ=")
+        assert "cmNydWlzZTpzZWNyZXQ=" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_json_password_value(self):
+        result = sanitize_for_forge('"password": "hunter2"')
+        assert "hunter2" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_url_credentials(self):
+        result = sanitize_for_forge("mysql://admin:p4ssw0rd@localhost/db")
+        assert "p4ssw0rd" not in result
+        assert "[REDACTED]" in result
+
+    def test_redacts_long_token_after_keyword(self):
+        result = sanitize_for_forge("token: abcXYZabcXYZabcXYZabcXYZ")
+        assert "abcXYZabcXYZabcXYZabcXYZ" not in result
+        assert "[REDACTED]" in result
+
+    def test_preserves_token_usage_prose(self):
+        text = "The token usage was 1200 input tokens."
+        assert sanitize_for_forge(text) == text
+
+    def test_preserves_openstack_secret_subcommand(self):
+        text = "openstack secret store --name my-cert"
+        assert sanitize_for_forge(text) == text
+
+    def test_preserves_key_findings_prose(self):
+        text = "See the Key Findings section below."
+        assert sanitize_for_forge(text) == text
+
+    def test_preserves_plain_https_url(self):
+        text = "https://review.opendev.org/c/openstack/octavia/+/985404"
+        assert sanitize_for_forge(text) == text
+
+    def test_redacts_home_directory(self):
+        home = os.path.expanduser("~")
+        text = f"Review saved to {home}/octavia_reviews/review_foo.md"
+        result = sanitize_for_forge(text)
+        assert home not in result
+        assert "~/octavia_reviews/review_foo.md" in result
+
+    def test_already_tilde_path_unchanged(self):
+        text = "Review saved to ~/octavia_reviews/review_foo.md"
+        assert sanitize_for_forge(text) == text
