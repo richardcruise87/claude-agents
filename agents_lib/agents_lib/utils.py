@@ -17,7 +17,12 @@ _SENSITIVE_KEYS = (
 _KEY_PAT = r"(?:" + "|".join(re.escape(k) for k in _SENSITIVE_KEYS) + r")"
 _REDACTED = "[REDACTED]"
 
+_HOME_DIR = os.path.expanduser("~").rstrip("/")
+
 _SANITIZE_RULES: list[tuple] = [
+    # Home directory paths — replace with ~ to avoid leaking usernames / machine layout
+    *([(re.compile(re.escape(_HOME_DIR)), "~")] if _HOME_DIR and _HOME_DIR != "/" else []),
+
     # PEM private key blocks (multi-line)
     (re.compile(
         r'-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----.*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----',
