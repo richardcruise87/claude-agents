@@ -12,18 +12,30 @@ Usage:
     change  = forge.get_change("982567")
 """
 
+import base64
 import json
 import os
 import re
 import urllib.request
 import urllib.parse
+import urllib.error
 from dataclasses import dataclass
 from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# Shared dataclass
+# Shared dataclasses
 # ---------------------------------------------------------------------------
+
+@dataclass
+class LineComment:
+    """A review comment anchored to a specific line in a file."""
+
+    file_path: str
+    line: int
+    message: str
+    line_end: Optional[int] = None  # for range references e.g. Lines 10-15
+
 
 @dataclass
 class ChangeInfo:
@@ -86,8 +98,29 @@ class ForgeClient:
         """
         raise NotImplementedError
 
+    def post_feedback(
+        self,
+        change_info: ChangeInfo,
+        comment: str,
+        vote: Optional[int] = None,
+        line_comments: Optional[list] = None,
+    ) -> bool:
+        """Post review feedback to the forge.
+
+        Args:
+            change_info:   The change to post feedback on.
+            comment:       Overall review comment (summary text).
+            vote:          Numeric vote: +1 approve, -1 reject, 0 neutral.
+                           None means no vote (comment only).
+            line_comments: Optional list of LineComment objects for inline comments.
+
+        Returns:
+            True on success, False on failure.
+        """
+        raise NotImplementedError
+
     # ------------------------------------------------------------------
-    # Shared HTTP helper
+    # Shared HTTP helpers
     # ------------------------------------------------------------------
 
     def _http_get(self, url: str, headers: Optional[dict] = None) -> dict | list[dict]:
@@ -110,6 +143,29 @@ class ForgeClient:
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Network error fetching {url}: {exc.reason}") from exc
 
+    def _http_post(self, url: str, data: dict, headers: Optional[dict] = None) -> dict:
+        """Perform a POST request with a JSON body and return parsed JSON response."""
+        body = json.dumps(data).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        for k, v in (headers or {}).items():
+            req.add_header(k, v)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as exc:
+            try:
+                body_txt = exc.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                body_txt = ""
+            detail = f" — {body_txt}" if body_txt else ""
+            raise RuntimeError(
+                f"HTTP {exc.code} posting to {url}: {exc.reason}{detail}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Network error posting to {url}: {exc.reason}") from exc
+
 
 # ---------------------------------------------------------------------------
 # Gerrit
@@ -118,13 +174,21 @@ class ForgeClient:
 class GerritClient(ForgeClient):
     """Gerrit REST API client."""
 
-    def __init__(self, base_url: str, token_env: Optional[str] = None):
+    def __init__(self, base_url: str, token_env: Optional[str] = None,
+                 username_env: Optional[str] = None):
         self.base_url = base_url.rstrip("/")
         self._token = os.environ.get(token_env) if token_env else None
+        # username_env enables HTTP Basic auth (Gerrit username + HTTP password).
+        # If set, the token is used as the HTTP password rather than as Bearer.
+        self._username = os.environ.get(username_env) if username_env else None
 
     def _headers(self) -> dict:
         h = {"Accept": "application/json"}
-        if self._token:
+        if self._username and self._token:
+            # HTTP Basic auth: required for most self-hosted Gerrit instances
+            creds = base64.b64encode(f"{self._username}:{self._token}".encode()).decode()
+            h["Authorization"] = f"Basic {creds}"
+        elif self._token:
             h["Authorization"] = f"Bearer {self._token}"
         return h
 
@@ -237,6 +301,95 @@ class GerritClient(ForgeClient):
             raise ValueError(f"Cannot extract change number from URL: {url}")
         return self.get_change(m.group(1))
 
+    def _http_post_gerrit(self, url: str, data: dict) -> dict:
+        """POST to Gerrit, stripping the )]}' security prefix from the response."""
+        body = json.dumps(data).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "application/json")
+        for k, v in self._headers().items():
+            req.add_header(k, v)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read().decode("utf-8")
+                raw = self._strip_prefix(raw)
+                return json.loads(raw) if raw.strip() else {}
+        except urllib.error.HTTPError as exc:
+            try:
+                body_txt = exc.read().decode("utf-8", errors="replace")[:500]
+            except Exception:
+                body_txt = ""
+            detail = f" — {body_txt}" if body_txt else ""
+            raise RuntimeError(
+                f"HTTP {exc.code} posting to {url}: {exc.reason}{detail}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Network error posting to {url}: {exc.reason}") from exc
+
+    def _gerrit_review_url(self, change_id: str) -> str:
+        return f"{self.base_url}/a/changes/{change_id}/revisions/current/review"
+
+    def _build_gerrit_comments(self, line_comments: list) -> dict:
+        comments_by_file: dict = {}
+        for lc in line_comments:
+            entry = {"message": lc.message}
+            if lc.line_end:
+                entry["range"] = {
+                    "start_line": lc.line,
+                    "end_line": lc.line_end,
+                    "start_character": 0,
+                    "end_character": 0,
+                }
+            else:
+                entry["line"] = lc.line
+            comments_by_file.setdefault(lc.file_path, []).append(entry)
+        return comments_by_file
+
+    def post_feedback(
+        self,
+        change_info: ChangeInfo,
+        comment: str,
+        vote: Optional[int] = None,
+        line_comments: Optional[list] = None,
+    ) -> bool:
+        url = self._gerrit_review_url(change_info.change_id)
+        payload: dict = {
+            "tag": "autogenerated:claude-review",
+            "message": comment,
+        }
+        if vote is not None:
+            payload["labels"] = {"Code-Review": vote}
+        if line_comments:
+            payload["comments"] = self._build_gerrit_comments(line_comments)
+
+        try:
+            self._http_post_gerrit(url, payload)
+            return True
+        except RuntimeError as exc:
+            if "400" in str(exc) and line_comments:
+                # A file referenced in line comments may not be in this revision's
+                # diff. Fall back: post the overall comment + vote without inline
+                # comments, then retry each file's comments individually.
+                print("⚠️  Inline comments rejected (likely stale file path) — retrying without them")
+                base_payload = {k: v for k, v in payload.items() if k != "comments"}
+                try:
+                    self._http_post_gerrit(url, base_payload)
+                except RuntimeError as exc2:
+                    print(f"⚠️  Gerrit feedback post failed: {exc2}")
+                    return False
+                # Try each file's comments individually; skip files not in the diff
+                by_file = self._build_gerrit_comments(line_comments)
+                for file_path, file_comments in by_file.items():
+                    try:
+                        self._http_post_gerrit(url, {
+                            "tag": "autogenerated:claude-review",
+                            "comments": {file_path: file_comments},
+                        })
+                    except RuntimeError:
+                        print(f"   ⚠️  Skipped comments for {file_path} (not in diff)")
+                return True
+            print(f"⚠️  Gerrit feedback post failed: {exc}")
+            return False
+
 
 # ---------------------------------------------------------------------------
 # GitHub
@@ -318,6 +471,45 @@ class GitHubClient(ForgeClient):
             raise ValueError(f"Cannot parse GitHub PR URL: {url}")
         repo, pr = m.group(1), m.group(2)
         return self.get_change(pr, repo)
+
+    def post_feedback(
+        self,
+        change_info: ChangeInfo,
+        comment: str,
+        vote: Optional[int] = None,
+        line_comments: Optional[list] = None,
+    ) -> bool:
+        if vote is not None and vote > 0:
+            event = "APPROVE"
+        elif vote is not None and vote < 0:
+            event = "REQUEST_CHANGES"
+        else:
+            event = "COMMENT"
+
+        payload: dict = {
+            "commit_id": change_info.head_sha,
+            "body": comment,
+            "event": event,
+        }
+        if line_comments:
+            payload["comments"] = [
+                {
+                    "path": lc.file_path,
+                    "line": lc.line,
+                    "body": lc.message,
+                }
+                for lc in line_comments
+            ]
+
+        repo = change_info.repo_name
+        pr = change_info.change_id
+        url = f"{self._api}/repos/{repo}/pulls/{pr}/reviews"
+        try:
+            self._http_post(url, payload, self._headers())
+            return True
+        except RuntimeError as exc:
+            print(f"⚠️  GitHub feedback post failed: {exc}")
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +594,57 @@ class GitLabClient(ForgeClient):
         repo, mr = m.group(1), m.group(2)
         return self.get_change(mr, repo)
 
+    def post_feedback(
+        self,
+        change_info: ChangeInfo,
+        comment: str,
+        vote: Optional[int] = None,
+        line_comments: Optional[list] = None,
+    ) -> bool:
+        encoded = self._encode_path(change_info.repo_name)
+        iid = change_info.change_id
+        base_mr = f"{self._api}/projects/{encoded}/merge_requests/{iid}"
+        success = True
+
+        # Post the overall comment as a note
+        try:
+            self._http_post(f"{base_mr}/notes", {"body": comment}, self._headers())
+        except RuntimeError as exc:
+            print(f"⚠️  GitLab note post failed: {exc}")
+            success = False
+
+        # Post inline comments as discussions with position
+        for lc in (line_comments or []):
+            discussion_payload = {
+                "body": lc.message,
+                "position": {
+                    "position_type": "text",
+                    "base_sha": change_info.head_sha,
+                    "start_sha": change_info.head_sha,
+                    "head_sha": change_info.head_sha,
+                    "new_path": lc.file_path,
+                    "new_line": lc.line,
+                },
+            }
+            try:
+                self._http_post(f"{base_mr}/discussions", discussion_payload, self._headers())
+            except RuntimeError as exc:
+                print(f"⚠️  GitLab inline comment failed for {lc.file_path}:{lc.line}: {exc}")
+                success = False
+
+        # Handle voting via approve/unapprove
+        if vote is not None:
+            try:
+                if vote > 0:
+                    self._http_post(f"{base_mr}/approve", {}, self._headers())
+                elif vote < 0:
+                    self._http_post(f"{base_mr}/unapprove", {}, self._headers())
+            except RuntimeError as exc:
+                print(f"⚠️  GitLab vote failed: {exc}")
+                success = False
+
+        return success
+
 
 # ---------------------------------------------------------------------------
 # Factory
@@ -418,6 +661,7 @@ def create_forge_client(config: dict) -> ForgeClient:
     forge_type = forge_cfg.get("type") or config.get("forge_type", "")
     base_url = forge_cfg.get("base_url") or config.get("forge_base_url", "")
     token_env = forge_cfg.get("token_env") or config.get("forge_token_env")
+    username_env = forge_cfg.get("username_env") or config.get("forge_username_env")
 
     # Backward compat: no forge section → use gerrit.base_url
     if not base_url:
@@ -438,4 +682,4 @@ def create_forge_client(config: dict) -> ForgeClient:
         return GitHubClient(base_url, token_env)
     if forge_type == "gitlab":
         return GitLabClient(base_url, token_env)
-    return GerritClient(base_url, token_env)
+    return GerritClient(base_url, token_env, username_env)

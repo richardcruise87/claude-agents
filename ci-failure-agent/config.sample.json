@@ -38,5 +38,18 @@
   "notifications": {
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
+  },
+
+  "forge": {
+    "type": "gerrit",
+    "base_url": "https://review.opendev.org",
+    "token_env": null,
+    "comment": "type: gerrit | github | gitlab. token_env: env var holding the API token (required for posting feedback). Only needed when feedback.post_to_forge is true."
+  },
+
+  "feedback": {
+    "post_to_forge": false,
+    "enable_voting": false,
+    "comment": "post_to_forge: post CI analysis summary as a comment on the Gerrit change / GitHub PR / GitLab MR. enable_voting: not recommended for CI analysis (informational only). Requires forge.token_env to be set."
   }
 }

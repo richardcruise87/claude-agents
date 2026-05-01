@@ -33,6 +33,14 @@ def load_config():
             "token_env": None,
             "repo_base_path": "/opt/stack",
         },
+        "feedback": {
+            "post_to_forge": False,
+            "enable_voting": True,
+            "vote_label": "Code-Review",
+            "approval_score": 1,
+            "major_issues_score": -1,
+            "minor_only_score": 0,
+        },
         "testing": {
             "run_unit_tests": True,
             "run_functional_tests": True,
@@ -106,6 +114,13 @@ def load_config():
         "model": config.get("model", "claude-sonnet-4-6"),
         "model_provider": config.get("model_provider", "anthropic"),
         "notifications": config.get("notifications", {}),
+        # Feedback / forge posting
+        "feedback_enabled": config.get("feedback", {}).get("post_to_forge", False),
+        "feedback_voting": config.get("feedback", {}).get("enable_voting", True),
+        "feedback_vote_label": config.get("feedback", {}).get("vote_label", "Code-Review"),
+        "feedback_approval_score": config.get("feedback", {}).get("approval_score", 1),
+        "feedback_major_score": config.get("feedback", {}).get("major_issues_score", -1),
+        "feedback_minor_score": config.get("feedback", {}).get("minor_only_score", 0),
     }
 
     return flat_config

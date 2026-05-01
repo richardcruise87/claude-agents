@@ -6,7 +6,7 @@ Shared utilities for Claude-based automation agents.
 
 __version__ = "1.0.0"
 
-from .utils import expand_path, slugify, format_usage_info
+from .utils import expand_path, slugify, format_usage_info, sanitize_for_forge
 from .config_loader import (
     load_agent_config,
     apply_cutoff_date,
@@ -38,7 +38,10 @@ from .devstack_lock import (
 from .notifications import load_notifications_config, notify_report
 from .model_client import ModelResult, ModelClient, create_model_client
 from .prompt_loader import load_agent_prompt
-from .forge_client import ChangeInfo, ForgeClient, GerritClient, GitHubClient, GitLabClient, create_forge_client
+from .forge_client import (
+    LineComment, ChangeInfo, ForgeClient,
+    GerritClient, GitHubClient, GitLabClient, create_forge_client,
+)
 from .review_history import (
     ReviewRecord,
     load_review_history,
@@ -53,6 +56,7 @@ __all__ = [
     "expand_path",
     "slugify",
     "format_usage_info",
+    "sanitize_for_forge",
     "load_agent_config",
     "apply_cutoff_date",
     "expand_config_paths",
@@ -80,6 +84,7 @@ __all__ = [
     "ModelClient",
     "create_model_client",
     "load_agent_prompt",
+    "LineComment",
     "ChangeInfo",
     "ForgeClient",
     "GerritClient",
