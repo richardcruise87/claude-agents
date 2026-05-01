@@ -66,7 +66,7 @@ max-line-length=120
 
 [DESIGN]
 max-args=7
-max-locals=35
+max-locals=40
 max-statements=80
 max-returns=8
 max-bool-expr=6

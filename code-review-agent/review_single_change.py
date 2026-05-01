@@ -114,7 +114,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
 
     if not repo_path.exists():
         print(f"❌ Repository not found at: {repo_path}")
-        print(f"   Set forge.repo_base_path in config.json to the directory containing the clone.")
+        print("   Set forge.repo_base_path in config.json to the directory containing the clone.")
         return
 
     # Pre-flight checks

@@ -6,7 +6,6 @@ Monitors OpenDev for new Octavia changes, downloads them to local devstack,
 runs tests, analyzes code, and prepares review documents.
 """
 import asyncio
-import json
 import sys
 from pathlib import Path
 
@@ -19,9 +18,7 @@ from agents_lib import (
     create_forge_client,
     should_review_change,
     record_review,
-    create_review_filename,
     load_review_history,
-    load_previous_review_context,
 )
 
 # Load configuration from config.json or environment variables
@@ -123,7 +120,6 @@ async def review_change(change, sequence):
         sequence: Sequence number for this review (1 = first, 2 = re-review, …).
     """
     from agents_lib import ChangeInfo as _CI  # noqa: F401 (type hint only)
-    forge_label = "PS" if change.forge_type == "gerrit" else "r"
     ps_display = f"PS{change.patchset}" if change.patchset else f"r{sequence}"
 
     print(f"\n{'='*80}")

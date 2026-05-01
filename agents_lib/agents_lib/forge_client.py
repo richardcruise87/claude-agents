@@ -17,7 +17,7 @@ import os
 import re
 import urllib.request
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -36,11 +36,11 @@ class ChangeInfo:
     created_at: str         # ISO-8601 timestamp
     updated_at: str         # ISO-8601 timestamp
     head_sha: str           # current HEAD commit SHA
-    patchset: Optional[int] # Gerrit only; None for GitHub/GitLab
-    git_fetch_ref: str      # ref to pass to "git fetch origin <ref>"
+    patchset: Optional[int]  # Gerrit only; None for GitHub/GitLab
+    git_fetch_ref: str  # ref to pass to "git fetch origin <ref>"
     forge_url: str          # URL to view the change in a browser
     author: str
-    forge_type: str         # "gerrit" | "github" | "gitlab"
+    forge_type: str  # "gerrit" | "github" | "gitlab"
     description: str = ""   # PR/MR body / Gerrit change description
 
 

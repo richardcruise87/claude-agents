@@ -22,7 +22,6 @@ from dataclasses import dataclass, asdict
 from typing import Optional
 
 from .forge_client import ChangeInfo
-from .utils import slugify
 
 
 # ---------------------------------------------------------------------------

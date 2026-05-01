@@ -1,7 +1,4 @@
 """Unit tests for agents_lib.review_history."""
-import json
-import pytest
-from pathlib import Path
 from agents_lib.forge_client import ChangeInfo
 from agents_lib.review_history import (
     should_review_change,
@@ -11,7 +8,6 @@ from agents_lib.review_history import (
     load_review_history,
     load_previous_review_context,
     _tracking_key,
-    _base_key,
 )
 
 

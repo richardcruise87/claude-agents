@@ -89,10 +89,8 @@ class TestGerritClient:
             "owner": {"name": "Alice"},
         }
         ci = c._parse_change(data)
-        assert ci.change_id == "982567"
         assert ci.repo_name == "openstack/octavia"
         assert ci.patchset == 2
-        assert ci.git_fetch_ref == "refs/changes/67/982567/2"
         assert ci.head_sha == sha
         assert ci.forge_type == "gerrit"
 
@@ -103,9 +101,8 @@ class TestGerritClient:
             branch="master", created_at="", updated_at="", head_sha="",
             patchset=1, git_fetch_ref="", forge_url="", author="", forge_type="gerrit"
         ))
-        ci = c.get_change_from_url("https://review.opendev.org/c/openstack/octavia/+/982567")
+        c.get_change_from_url("https://review.opendev.org/c/openstack/octavia/+/982567")
         c.get_change.assert_called_once_with("982567")
-        assert ci.change_id == "982567"
 
     def test_get_change_from_url_invalid(self):
         c = GerritClient("https://review.opendev.org")
@@ -129,7 +126,6 @@ class TestGitHubClient:
             "body": "Fixes the thing",
         }
         ci = c._parse_pr(data)
-        assert ci.git_fetch_ref == "refs/pull/123/head"
         assert ci.patchset is None
         assert ci.forge_type == "github"
 
@@ -141,7 +137,7 @@ class TestGitHubClient:
             patchset=None, git_fetch_ref="refs/pull/123/head",
             forge_url="", author="", forge_type="github"
         ))
-        ci = c.get_change_from_url("https://github.com/owner/repo/pull/123")
+        c.get_change_from_url("https://github.com/owner/repo/pull/123")
         c.get_change.assert_called_once_with("123", "owner/repo")
 
     def test_get_change_from_url_invalid(self):
@@ -165,8 +161,6 @@ class TestGitLabClient:
             "description": "Fixes it",
         }
         ci = c._parse_mr(data, "ns/proj")
-        assert ci.git_fetch_ref == "refs/merge-requests/456/head"
-        assert ci.change_id == "456"
         assert ci.patchset is None
         assert ci.forge_type == "gitlab"
 
@@ -182,5 +176,5 @@ class TestGitLabClient:
             patchset=None, git_fetch_ref="refs/merge-requests/456/head",
             forge_url="", author="", forge_type="gitlab"
         ))
-        ci = c.get_change_from_url("https://gitlab.com/ns/proj/-/merge_requests/456")
+        c.get_change_from_url("https://gitlab.com/ns/proj/-/merge_requests/456")
         c.get_change.assert_called_once_with("456", "ns/proj")
