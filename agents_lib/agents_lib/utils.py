@@ -5,6 +5,71 @@ import os
 import re
 
 
+# ── Sensitive-data sanitization ───────────────────────────────────────────────
+
+_SENSITIVE_KEYS = (
+    "password", "passwd", "secret", "api_key", "apikey",
+    "token", "auth_token", "access_token", "bearer",
+    "private_key", "ssh_key", "ssh_pass",
+    "http_password", "http_passwd",
+    "client_secret", "consumer_secret",
+)
+_KEY_PAT = r"(?:" + "|".join(re.escape(k) for k in _SENSITIVE_KEYS) + r")"
+_REDACTED = "[REDACTED]"
+
+_SANITIZE_RULES: list[tuple] = [
+    # PEM private key blocks (multi-line)
+    (re.compile(
+        r'-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----.*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----',
+        re.DOTALL,
+    ), f"-----BEGIN PRIVATE KEY-----\n{_REDACTED}\n-----END PRIVATE KEY-----"),
+
+    # Authorization header values
+    (re.compile(r'(?i)(Authorization\s*:\s*(?:Bearer|Basic|Digest)\s+)\S+'),
+     rf'\1{_REDACTED}'),
+
+    # export VAR=value  /  VAR=value  where VAR contains a sensitive name
+    (re.compile(rf'(?i)(export\s+)?({_KEY_PAT})\s*=\s*\S+'), rf'\2={_REDACTED}'),
+
+    # --flag value  /  --flag=value  for sensitive CLI flags.
+    # The sensitive keyword may appear after a prefix (e.g. --os-password, --db-token).
+    (re.compile(rf'(?i)(--(?:\w+-)*{_KEY_PAT}(?:[-_]\w+)*)\s+(?!-)\S+'), rf'\1 {_REDACTED}'),
+    (re.compile(rf'(?i)(--(?:\w+-)*{_KEY_PAT}(?:[-_]\w+)*)=\S+'), rf'\1={_REDACTED}'),
+
+    # "key": "value"  /  key = value  in JSON/YAML/INI config
+    (re.compile(rf'(?i)("{_KEY_PAT}"\s*:\s*")[^"]+(")', ), rf'\1{_REDACTED}\2'),
+    (re.compile(rf"(?i)('{_KEY_PAT}'\s*:\s*')[^']+(')", ), rf'\1{_REDACTED}\2'),
+    (re.compile(rf'(?i)(\b{_KEY_PAT}\s*=\s*)(?!https?://)\S+'), rf'\1{_REDACTED}'),
+
+    # URL embedded credentials: scheme://[user[:password]]@host.
+    # Redact everything between :// and the final @ (greedy match handles
+    # passwords that themselves contain @ signs).
+    (re.compile(r'(?i)([a-z][a-z0-9+\-.]*://)([^/\s@]+(?::[^/\s@]*)?(?:@[^/\s@]+)*@)'),
+     rf'\1{_REDACTED}@'),
+
+    # Long token-like strings (≥20 chars) following a sensitive keyword on the same line
+    (re.compile(rf'(?i)(\b{_KEY_PAT}\b\s*[:\s]\s*)([A-Za-z0-9+/]{{20,}}={{0,2}})'),
+     rf'\1{_REDACTED}'),
+]
+
+
+def sanitize_for_forge(text: str) -> str:
+    """Strip passwords, tokens, SSH keys, and other credentials from text.
+
+    Applied to all content before it is posted to a public forge. Uses a
+    conservative set of pattern-based rules; normal review prose is unaffected.
+
+    Args:
+        text: Raw review or comment text that may contain sensitive values.
+
+    Returns:
+        Text with sensitive values replaced by ``[REDACTED]``.
+    """
+    for pattern, replacement in _SANITIZE_RULES:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def expand_path(path_str):
     """
     Expand ~ and environment variables in paths.
