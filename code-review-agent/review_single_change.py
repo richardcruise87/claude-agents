@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
 from prompts import get_code_review_prompt
+from review_parser import extract_forge_comment, extract_line_comments, determine_vote
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
@@ -37,6 +38,55 @@ DEVSTACK_PATH = CONFIG["devstack_path"]
 REVIEWS_OUTPUT_DIR = CONFIG["reviews_output_dir"]
 GERRIT_BASE_URL = CONFIG["gerrit_base_url"]  # kept for backward compat with prompts
 REPO_BASE_PATH = CONFIG.get("repo_base_path", DEVSTACK_PATH)
+
+
+def _find_full_review_content(summary_content: str) -> str:
+    """Try to load the full review from a path embedded in the summary text.
+
+    The AI sometimes writes the full review to a path like
+    '/opt/stack/octavia/review-985404-ps1.md' and references it in the summary.
+    Returns the full content, or falls back to the summary content.
+    """
+    import re as _re
+    m = _re.search(r'saved to\s+[`\']?(/[^\s`\']+\.md)[`\']?', summary_content, _re.IGNORECASE)
+    if m:
+        full_path = Path(m.group(1))
+        if full_path.exists():
+            return full_path.read_text()
+    return summary_content
+
+
+def _post_forge_feedback(change_info, review_content: str, config: dict, forge) -> None:
+    """Parse the review and post a summary comment (and optional vote) to the forge.
+
+    Uses the summary file for the forge comment and vote (compact, well-structured),
+    and the full review file (if referenced in the summary) for line comments.
+
+    Errors are logged but never re-raised — a failed post must not prevent the
+    review from being recorded locally.
+    """
+    model_name = config.get("model", "claude-sonnet-4-6")
+    try:
+        comment = extract_forge_comment(review_content, model_name)
+        full_content = _find_full_review_content(review_content)
+        line_comments = extract_line_comments(full_content)
+        vote = determine_vote(review_content, config) if config.get("feedback_voting") else None
+
+        vote_label = config.get("feedback_vote_label", "Code-Review")
+        print(f"\n📤 Posting feedback to {change_info.forge_type}...")
+        if vote is not None:
+            sign = "+" if vote > 0 else ""
+            print(f"   Vote ({vote_label}): {sign}{vote}")
+        if line_comments:
+            print(f"   Inline comments: {len(line_comments)}")
+
+        ok = forge.post_feedback(change_info, comment, vote, line_comments)
+        if ok:
+            print("   ✅ Feedback posted successfully")
+        else:
+            print("   ⚠️  Feedback post returned failure (see warnings above)")
+    except Exception as exc:
+        print(f"   ⚠️  Could not post forge feedback: {exc}")
 
 
 async def review_specific_change(change_url_or_number, requested_patchset=None):
@@ -263,6 +313,11 @@ This change has been reviewed before.
         # Record in forge-agnostic tracking
         if review_file.exists():
             record_review(tracking_file, change, sequence, review_file)
+
+            # Optionally post feedback back to the forge
+            if CONFIG.get("feedback_enabled"):
+                final_content = review_file.read_text()
+                _post_forge_feedback(change, final_content, CONFIG, forge)
 
     except Exception as e:
         print(f"\n❌ Error during review: {e}")

@@ -38,7 +38,7 @@ from .devstack_lock import (
 from .notifications import load_notifications_config, notify_report
 from .model_client import ModelResult, ModelClient, create_model_client
 from .prompt_loader import load_agent_prompt
-from .forge_client import ChangeInfo, ForgeClient, GerritClient, GitHubClient, GitLabClient, create_forge_client
+from .forge_client import LineComment, ChangeInfo, ForgeClient, GerritClient, GitHubClient, GitLabClient, create_forge_client
 from .review_history import (
     ReviewRecord,
     load_review_history,
@@ -80,6 +80,7 @@ __all__ = [
     "ModelClient",
     "create_model_client",
     "load_agent_prompt",
+    "LineComment",
     "ChangeInfo",
     "ForgeClient",
     "GerritClient",

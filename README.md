@@ -29,11 +29,15 @@ octavia-triage-bugs
 Monitors OpenDev Gerrit for open changes and produces comprehensive AI-powered code reviews.
 
 **Features:**
-- Fetches open changes from configured repositories via Gerrit API
+- Fetches open changes from configured repositories via Gerrit, GitHub, or GitLab API
 - Runs unit tests (`tox -e py3`), functional tests (`tox -e functional`), and style checks (`tox -e pep8`)
 - Patchset-aware: provides previous review as context when a new patchset arrives
 - Branch filtering: include/exclude lists with wildcard support
 - Configurable cutoff date, max reviews per cycle, skip-WIP/draft options
+- **Forge feedback posting**: optionally posts the review summary and inline line
+  comments back to Gerrit/GitHub/GitLab, with optional Code-Review voting
+  (+1 approve / -1 request changes / 0 minor suggestions) — disabled by default,
+  enable via `feedback.post_to_forge` in config
 
 **Commands:**
 ```bash
@@ -59,6 +63,8 @@ whether a code fix or a re-run (`recheck`) is needed.
 - Report includes Gerrit link, Zuul build links, per-job analysis, and overall recommendation
 - Re-analyzes automatically when new failures appear after the last analysis
 - `--print-prompt` flag outputs the formatted prompt for use with any AI tool (Cursor, Claude.ai, etc.)
+- **Forge feedback posting**: optionally posts the analysis summary back to the Gerrit
+  change / GitHub PR / GitLab MR — disabled by default, enable via `feedback.post_to_forge`
 
 **Commands:**
 ```bash

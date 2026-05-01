@@ -85,5 +85,15 @@
   "notifications": {
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
+  },
+
+  "feedback": {
+    "post_to_forge": false,
+    "enable_voting": true,
+    "vote_label": "Code-Review",
+    "approval_score": 1,
+    "major_issues_score": -1,
+    "minor_only_score": 0,
+    "comment": "post_to_forge: post review summaries and line comments back to the forge after each review. enable_voting: add a Code-Review vote (Gerrit) or APPROVE/REQUEST_CHANGES state (GitHub/GitLab). vote_label: Gerrit label name (default Code-Review). Scores: approval_score=+1 (no blocking issues), major_issues_score=-1 (critical/major issues found), minor_only_score=0 (only suggestions). Requires forge.token_env to be set."
   }
 }

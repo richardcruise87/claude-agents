@@ -26,6 +26,11 @@ def load_config():
         "gerrit": {
             "base_url": "https://review.opendev.org",
         },
+        "forge": {
+            "type": "gerrit",
+            "base_url": "",
+            "token_env": None,
+        },
         "output": {
             "reports_directory": "~/octavia_ci_failures",
         },
@@ -35,6 +40,10 @@ def load_config():
         },
         "filters": {
             "skip_non_voting": False,
+        },
+        "feedback": {
+            "post_to_forge": False,
+            "enable_voting": False,
         },
     }
 
@@ -56,12 +65,18 @@ def load_config():
 
     zuul = config.get("zuul", {})
     gerrit = config.get("gerrit", {})
+    forge_cfg = config.get("forge", {})
     output = config.get("output", {})
     monitoring = config.get("monitoring", {})
     filters = config.get("filters", {})
+    feedback_cfg = config.get("feedback", {})
+
+    # Resolve forge base_url: fall back to gerrit.base_url
+    forge_base_url = forge_cfg.get("base_url") or gerrit.get("base_url", "https://review.opendev.org")
 
     return {
         "model": config.get("model", "claude-sonnet-4-6"),
+        "model_provider": config.get("model_provider", "anthropic"),
         "repositories": config.get("repositories", ["openstack/octavia"]),
         "zuul_base_url": zuul.get("base_url", "https://zuul.opendev.org"),
         "zuul_tenant": zuul.get("tenant", "openstack"),
@@ -72,6 +87,14 @@ def load_config():
         "max_changes_per_cycle": int(monitoring.get("max_changes_per_cycle", 5)),
         "analyzed_failures_file": expand_path(monitoring.get("analyzed_failures_file", "~/.octavia_ci_failures.json")),
         "skip_non_voting": filters.get("skip_non_voting", False),
+        # Forge config (for feedback posting)
+        "forge": {
+            "type": forge_cfg.get("type", "gerrit"),
+            "base_url": forge_base_url,
+            "token_env": forge_cfg.get("token_env"),
+        },
+        "feedback_enabled": feedback_cfg.get("post_to_forge", False),
+        "feedback_voting": feedback_cfg.get("enable_voting", False),
     }
 
 
