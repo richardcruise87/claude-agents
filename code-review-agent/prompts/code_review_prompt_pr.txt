@@ -1,0 +1,96 @@
+You are performing a comprehensive code review for an OpenStack change submitted as a {pr_or_mr}.
+
+**{pr_or_mr} Information:**
+- Repository: {repo_name}
+- {pr_or_mr} Number: #{change_number}
+- Review sequence: r{sequence}
+- HEAD commit: {head_sha}
+- {pr_or_mr} URL: {forge_url}
+- Local repo: {repo_path}
+{specific_patchset_note}{previous_review_section}
+**Your Task:**
+Perform a complete code review following these steps:
+
+## Step 1: Save Current Branch
+Record the current branch name so you can return to it after the review.
+
+## Step 2: Fetch the {pr_or_mr}
+Fetch and checkout the {pr_or_mr} head:
+```bash
+cd {repo_path}
+{git_fetch_command}
+```
+
+## Step 3: Analyze the Changes
+- Run `git log -1 --pretty=full` to see the commit message
+- Run `git show --stat` to see files changed
+- Run `git diff HEAD~1` (or against the target branch) to see the actual changes
+- Read the modified files to understand the changes deeply
+- Identify:
+  * Purpose of the change
+  * Scope and impact
+  * Any breaking changes
+  * New features or bug fixes
+{patchset_comparison_section}
+## Step 4: Run Tests
+Run the test suite for changed areas:
+
+**Unit tests** (always run):
+```bash
+cd {repo_path}
+tox -e py3 2>&1 | tail -50
+```
+
+**PEP8 / style checks** (for Python changes):
+```bash
+tox -e pep8 2>&1 | tail -30
+```
+
+**Functional tests** (if API or controller changes):
+```bash
+tox -e functional 2>&1 | tail -50
+```
+
+Note: Tests run against the checked-out {pr_or_mr} HEAD.
+
+## Step 5: Security Review
+Check for:
+- SQL injection risks (use parameterized queries)
+- Command injection in subprocess calls
+- Exposed credentials or secrets
+- Insecure defaults or deprecated cryptographic primitives
+- Privilege escalation issues
+
+## Step 6: Performance Review
+- Database query efficiency (N+1 queries, missing indexes)
+- Unnecessary synchronous I/O in async code
+- Memory allocation patterns
+- Caching opportunities missed
+
+## Step 7: API and Interface Review (if applicable)
+- Breaking changes to public APIs
+- Backward compatibility
+- Deprecation notices where needed
+- API documentation updated
+
+## Step 8: Code Quality Review
+- Code readability and naming conventions
+- DRY (Don't Repeat Yourself)
+- Adequate test coverage for new code
+- Error handling completeness
+- Logging at appropriate levels
+
+## Step 9: Return to Original Branch
+```bash
+cd {repo_path}
+git checkout <original_branch>
+```
+
+**IMPORTANT:**
+- Be thorough and professional
+- Provide specific file:line references for all issues
+- Give actionable suggestions with code examples where helpful
+- Balance criticism with recognition of good work
+- Consider OpenStack community standards
+- DO NOT post to GitHub/GitLab — only save the review locally
+- NOTE: Token usage and cost information will be automatically appended

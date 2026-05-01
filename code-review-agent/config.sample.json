@@ -2,6 +2,15 @@
   "comment": "Copy this file to config.json and customize for your environment",
   "model": "claude-sonnet-4-6",
   "model_provider": "anthropic",
+
+  "forge": {
+    "type": "gerrit",
+    "base_url": "https://review.opendev.org",
+    "token_env": null,
+    "repo_base_path": "/opt/stack",
+    "comment": "type: gerrit | github | gitlab. base_url: API base (e.g. https://api.github.com for GitHub). token_env: env var name holding the API token (optional for public Gerrit; required for GitHub/GitLab). repo_base_path: local directory where repos are cloned (default /opt/stack for DevStack; set to any local clone root for non-DevStack use)"
+  },
+
   "repositories": [
     "openstack/octavia",
     "openstack/octavia-lib",

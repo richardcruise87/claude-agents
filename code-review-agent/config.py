@@ -27,6 +27,12 @@ def load_config():
         "devstack": {"path": "/opt/stack"},
         "output": {"reviews_directory": "~/octavia_reviews"},
         "gerrit": {"base_url": "https://review.opendev.org"},
+        "forge": {
+            "type": "gerrit",
+            "base_url": "",     # empty → falls back to gerrit.base_url
+            "token_env": None,
+            "repo_base_path": "/opt/stack",
+        },
         "testing": {
             "run_unit_tests": True,
             "run_functional_tests": True,
@@ -49,6 +55,9 @@ def load_config():
         "DEVSTACK_PATH": ("devstack", "path"),
         "REVIEWS_OUTPUT_DIR": ("output", "reviews_directory"),
         "GERRIT_URL": ("gerrit", "base_url"),
+        "FORGE_TYPE": ("forge", "type"),
+        "FORGE_BASE_URL": ("forge", "base_url"),
+        "FORGE_REPO_BASE_PATH": ("forge", "repo_base_path"),
         "MAX_REVIEWS": ("monitoring", "max_reviews_per_cycle"),
         "REVIEWED_CHANGES_FILE": ("monitoring", "reviewed_changes_file"),
         "CUTOFF_DATE": ("filters", "cutoff_date"),
@@ -66,21 +75,37 @@ def load_config():
         ("devstack", "path"),
         ("output", "reviews_directory"),
         ("monitoring", "reviewed_changes_file"),
+        ("forge", "repo_base_path"),
     ]
     config = expand_config_paths(config, path_keys)
+
+    # Resolve forge base_url: fall back to gerrit.base_url for backward compat
+    forge_cfg = config.get("forge", {})
+    if not forge_cfg.get("base_url"):
+        forge_cfg["base_url"] = config.get("gerrit", {}).get("base_url", "https://review.opendev.org")
+        config["forge"] = forge_cfg
 
     # Create a flat CONFIG dict for backward compatibility
     flat_config = {
         "octavia_repos": config.get("repositories", []),
         "devstack_path": config["devstack"]["path"],
         "reviews_output_dir": config["output"]["reviews_directory"],
+        # Gerrit key kept for backward compat (prompts still use it)
         "gerrit_base_url": config["gerrit"]["base_url"],
+        # Forge config (new)
+        "forge": config.get("forge", {}),
+        "forge_type": forge_cfg.get("type", "gerrit"),
+        "forge_base_url": forge_cfg.get("base_url", ""),
+        "forge_token_env": forge_cfg.get("token_env"),
+        "repo_base_path": forge_cfg.get("repo_base_path", "/opt/stack"),
         "reviewed_changes_file": config["monitoring"]["reviewed_changes_file"],
         "max_reviews_per_cycle": config["monitoring"].get("max_reviews_per_cycle", 3),
         "testing": config.get("testing", {}),
         "cutoff_date": config["filters"]["cutoff_date"],
         "filters": config.get("filters", {}),
         "model": config.get("model", "claude-sonnet-4-6"),
+        "model_provider": config.get("model_provider", "anthropic"),
+        "notifications": config.get("notifications", {}),
     }
 
     return flat_config
