@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
 from prompts import get_code_review_prompt
-from review_parser import extract_forge_comment, extract_line_comments, determine_vote
+from forge_feedback import extract_forge_comment, extract_line_comments, determine_vote
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
@@ -47,12 +47,11 @@ def _find_full_review_content(summary_content: str) -> str:
     '/opt/stack/octavia/review-985404-ps1.md' and references it in the summary.
     Returns the full content, or falls back to the summary content.
     """
-    import re as _re
-    m = _re.search(r'saved to\s+[`\']?(/[^\s`\']+\.md)[`\']?', summary_content, _re.IGNORECASE)
+    m = re.search(r'saved to\s+[`\']?(/[^\s`\']+\.md)[`\']?', summary_content, re.IGNORECASE)
     if m:
         full_path = Path(m.group(1))
         if full_path.exists():
-            return full_path.read_text()
+            return full_path.read_text(encoding="utf-8")
     return summary_content
 
 

@@ -369,7 +369,7 @@ class GerritClient(ForgeClient):
                 # A file referenced in line comments may not be in this revision's
                 # diff. Fall back: post the overall comment + vote without inline
                 # comments, then retry each file's comments individually.
-                print(f"⚠️  Inline comments rejected (likely stale file path) — retrying without them")
+                print("⚠️  Inline comments rejected (likely stale file path) — retrying without them")
                 base_payload = {k: v for k, v in payload.items() if k != "comments"}
                 try:
                     self._http_post_gerrit(url, base_payload)
