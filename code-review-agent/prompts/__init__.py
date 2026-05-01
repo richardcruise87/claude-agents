@@ -141,6 +141,8 @@ Reference the previous review context provided at the beginning of these instruc
     git_fetch_expr = '{"git fetch " + GERRIT_BASE_URL + "/" + repo_name + " " + patchset_ref if patchset_ref else "git fetch " + GERRIT_BASE_URL + "/" + repo_name + " refs/changes/*/" + change_number + "/*"}'
     formatted_prompt = formatted_prompt.replace(git_fetch_expr, git_fetch_command)
 
+    formatted_prompt = formatted_prompt.replace('{save_path}', save_path or '')
+
     # Replace the patchset comparison conditional
     comparison_expr = '{"" if not previous_patchset else f\'\'\'\n## Step 3a: Compare with Previous Patchset (PS {previous_patchset})\n\n**IMPORTANT**: You have context from a previous review of Patchset {previous_patchset}.\n\nCompare the current patchset with your previous review:\n- Check if issues you identified in PS {previous_patchset} were addressed\n- Identify what changed between patchsets (new files, modifications, deletions)\n- Note if the change is improving or regressing\n- Be specific about what was fixed and what wasn\'t\n\nReference the previous review context provided at the beginning of these instructions.\n\'\'\'}'
     formatted_prompt = formatted_prompt.replace(comparison_expr, patchset_comparison_section)

@@ -93,4 +93,6 @@ git checkout <original_branch>
 - Balance criticism with recognition of good work
 - Consider OpenStack community standards
 - DO NOT post to GitHub/GitLab — only save the review locally
+- Save the complete review document using the Write tool to **exactly** this path: `{save_path}`
+- Do NOT save a copy to /opt/stack/ or any other location — the only output file must be `{save_path}`
 - NOTE: Token usage and cost information will be automatically appended
