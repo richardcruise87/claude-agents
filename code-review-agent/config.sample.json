@@ -8,7 +8,8 @@
     "base_url": "https://review.opendev.org",
     "token_env": null,
     "repo_base_path": "/opt/stack",
-    "comment": "type: gerrit | github | gitlab. base_url: API base (e.g. https://api.github.com for GitHub). token_env: env var name holding the API token (optional for public Gerrit; required for GitHub/GitLab). repo_base_path: local directory where repos are cloned (default /opt/stack for DevStack; set to any local clone root for non-DevStack use)"
+    "username_env": null,
+    "comment": "type: gerrit | github | gitlab. base_url: API base (e.g. https://api.github.com for GitHub). token_env: env var holding the API token. username_env: (Gerrit only) env var holding your Gerrit username — when set, token_env is used as the HTTP password and Basic auth is used instead of Bearer. repo_base_path: local directory where repos are cloned (default /opt/stack for DevStack)."
   },
 
   "repositories": [
