@@ -7,12 +7,10 @@ and sequences repeated triages/plans when issues are updated.
 
 from pathlib import Path
 from typing import Optional
-from agents_lib import (
-    load_tracking_file,
-    should_process_item,
-    record_processed_item,
-    create_output_filename,
-)
+from agents_lib import create_output_filename
+from agents_lib import load_tracking_file
+from agents_lib import record_processed_item
+from agents_lib import should_process_item
 
 
 def load_issue_history(tracking_file: Path) -> dict:

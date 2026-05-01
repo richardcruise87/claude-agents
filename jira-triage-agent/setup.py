@@ -1,6 +1,7 @@
 """Setup script for the JIRA Triage Agent."""
 
-from setuptools import setup, find_packages
+from setuptools import find_packages
+from setuptools import setup
 from pathlib import Path
 
 readme_file = Path(__file__).parent / "README.md"

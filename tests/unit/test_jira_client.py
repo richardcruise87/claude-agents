@@ -1,13 +1,15 @@
 """Unit tests for jira-triage-agent/jira_client.py."""
 
-import sys
 import os
+import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../jira-triage-agent'))
 
 import base64
 import pytest
-from unittest.mock import patch, MagicMock
-from jira_client import JiraClient, _adf_to_text
+from unittest.mock import MagicMock
+from unittest.mock import patch
+from jira_client import JiraClient
+from jira_client import _adf_to_text
 
 
 # ---------------------------------------------------------------------------

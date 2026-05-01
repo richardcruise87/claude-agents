@@ -2,7 +2,9 @@
 
 import os
 from pathlib import Path
-from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths
+from agents_lib import apply_cutoff_date
+from agents_lib import expand_config_paths
+from agents_lib import load_agent_config
 
 
 def load_config() -> dict:
