@@ -48,6 +48,14 @@ def load_config():
     ]
     config = expand_config_paths(config, path_keys)
 
+    feedback = config.get("feedback", {})
+    config["feedback_enabled"] = feedback.get("post_to_launchpad", False)
+    config["feedback_consumer_key_env"] = feedback.get("consumer_key_env", "LAUNCHPAD_CONSUMER_KEY")
+    config["feedback_access_token_env"] = feedback.get("access_token_env", "LAUNCHPAD_ACCESS_TOKEN")
+    config["feedback_access_token_secret_env"] = feedback.get(
+        "access_token_secret_env", "LAUNCHPAD_ACCESS_TOKEN_SECRET"
+    )
+
     return config
 
 

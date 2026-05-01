@@ -37,5 +37,12 @@
   "notifications": {
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
+  },
+
+  "feedback": {
+    "post_to_jira": false,
+    "private_comments": true,
+    "visibility_role": "Service Desk Team",
+    "comment": "post_to_jira: post triage/plan report as a comment on the JIRA issue after generation. private_comments: restrict comment visibility to visibility_role (recommended). visibility_role: JIRA role name that can see private comments (varies by project — common values: 'Service Desk Team', 'Developers', 'Administrators')."
   }
 }

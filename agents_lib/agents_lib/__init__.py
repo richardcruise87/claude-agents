@@ -6,7 +6,7 @@ Shared utilities for Claude-based automation agents.
 
 __version__ = "1.0.0"
 
-from .utils import expand_path, slugify, format_usage_info, sanitize_for_forge
+from .utils import expand_path, slugify, format_usage_info, sanitize_for_forge, build_feedback_comment
 from .config_loader import (
     load_agent_config,
     apply_cutoff_date,
@@ -57,6 +57,7 @@ __all__ = [
     "slugify",
     "format_usage_info",
     "sanitize_for_forge",
+    "build_feedback_comment",
     "load_agent_config",
     "apply_cutoff_date",
     "expand_config_paths",

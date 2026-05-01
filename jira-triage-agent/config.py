@@ -35,6 +35,11 @@ def load_config() -> dict:
         },
         "devstack_path": "/opt/stack",
         "search_repos": [],
+        "feedback": {
+            "post_to_jira": False,
+            "private_comments": True,
+            "visibility_role": "Service Desk Team",
+        },
     }
 
     env_overrides = {
@@ -64,6 +69,11 @@ def load_config() -> dict:
     config["triage_tracking_file"] = config["processing"]["triage_tracking_file"]
     config["max_issues_per_run"] = config["processing"].get("max_issues_per_run", 5)
     config["cutoff_date"] = config["processing"]["cutoff_date"]
+
+    feedback = config.get("feedback", {})
+    config["feedback_enabled"] = feedback.get("post_to_jira", False)
+    config["feedback_private"] = feedback.get("private_comments", True)
+    config["feedback_visibility_role"] = feedback.get("visibility_role", "Service Desk Team")
 
     return config
 
