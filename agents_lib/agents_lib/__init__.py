@@ -38,6 +38,16 @@ from .devstack_lock import (
 from .notifications import load_notifications_config, notify_report
 from .model_client import ModelResult, ModelClient, create_model_client
 from .prompt_loader import load_agent_prompt
+from .forge_client import ChangeInfo, ForgeClient, GerritClient, GitHubClient, GitLabClient, create_forge_client
+from .review_history import (
+    ReviewRecord,
+    load_review_history,
+    should_review_change,
+    record_review,
+    create_review_filename,
+    find_previous_reviews,
+    load_previous_review_context,
+)
 
 __all__ = [
     "expand_path",
@@ -70,4 +80,17 @@ __all__ = [
     "ModelClient",
     "create_model_client",
     "load_agent_prompt",
+    "ChangeInfo",
+    "ForgeClient",
+    "GerritClient",
+    "GitHubClient",
+    "GitLabClient",
+    "create_forge_client",
+    "ReviewRecord",
+    "load_review_history",
+    "should_review_change",
+    "record_review",
+    "create_review_filename",
+    "find_previous_reviews",
+    "load_previous_review_context",
 ]

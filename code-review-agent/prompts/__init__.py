@@ -46,6 +46,10 @@ def get_code_review_prompt(
     previous_patchset: int = None,
     provider: str = "anthropic",
     save_path: str = None,
+    forge_type: str = "gerrit",
+    forge_url: str = "",
+    sequence: int = 1,
+    head_sha: str = "",
 ) -> str:
     """
     Get the formatted code review prompt.
@@ -64,18 +68,26 @@ def get_code_review_prompt(
     Returns:
         Formatted prompt ready to use with the agent
     """
+    # GitHub/GitLab use a shared PR/MR prompt; Gerrit uses the existing one
+    prompt_name = "code_review" if forge_type == "gerrit" else "code_review_prompt_pr"
     template = _load_agent_prompt(
-        "code_review", provider=provider, prompts_dir=_PROMPTS_DIR, save_path=save_path
+        prompt_name, provider=provider, prompts_dir=_PROMPTS_DIR, save_path=save_path
     )
 
     # Pre-compute complex expressions that appear in the template
     patchset_display = str(current_patchset) if current_patchset else 'unknown'
+    pr_or_mr = "MR" if forge_type == "gitlab" else "PR"
 
-    git_fetch_command = (
-        f"git fetch {gerrit_base_url}/{repo_name} {patchset_ref}"
-        if patchset_ref
-        else f"git fetch {gerrit_base_url}/{repo_name} refs/changes/*/{change_number}/*"
-    )
+    # Git fetch command differs by forge
+    if forge_type == "gerrit":
+        git_fetch_command = (
+            f"git fetch {gerrit_base_url}/{repo_name} {patchset_ref}"
+            if patchset_ref
+            else f"git fetch {gerrit_base_url}/{repo_name} refs/changes/*/{change_number}/*"
+        )
+    else:
+        # GitHub: refs/pull/{n}/head  GitLab: refs/merge-requests/{n}/head
+        git_fetch_command = f"git fetch origin {patchset_ref} && git checkout FETCH_HEAD"
 
     patchset_comparison_section = ""
     if previous_patchset:
@@ -119,6 +131,11 @@ Reference the previous review context provided at the beginning of these instruc
     formatted_prompt = formatted_prompt.replace('{repo_path}', str(repo_path))
     formatted_prompt = formatted_prompt.replace('{specific_patchset_note}', specific_patchset_note)
     formatted_prompt = formatted_prompt.replace('{previous_review_section}', previous_review_section)
+    # PR/MR-specific placeholders
+    formatted_prompt = formatted_prompt.replace('{pr_or_mr}', pr_or_mr)
+    formatted_prompt = formatted_prompt.replace('{forge_url}', forge_url)
+    formatted_prompt = formatted_prompt.replace('{sequence}', str(sequence))
+    formatted_prompt = formatted_prompt.replace('{head_sha}', head_sha)
 
     # Replace the complex git fetch command expression
     git_fetch_expr = '{"git fetch " + GERRIT_BASE_URL + "/" + repo_name + " " + patchset_ref if patchset_ref else "git fetch " + GERRIT_BASE_URL + "/" + repo_name + " refs/changes/*/" + change_number + "/*"}'

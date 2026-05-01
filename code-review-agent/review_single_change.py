@@ -18,153 +18,103 @@ from pathlib import Path
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
-from patchset_tracker import (
-    prepare_review_context,
-    create_review_filename,
-)
 from prompts import get_code_review_prompt
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
     create_model_client,
     format_usage_info,
+    create_forge_client,
+    load_review_history,
+    load_previous_review_context,
+    record_review,
+    create_review_filename,
 )
 
 # Load configuration
 CONFIG = load_config()
 DEVSTACK_PATH = CONFIG["devstack_path"]
 REVIEWS_OUTPUT_DIR = CONFIG["reviews_output_dir"]
-GERRIT_BASE_URL = CONFIG["gerrit_base_url"]
+GERRIT_BASE_URL = CONFIG["gerrit_base_url"]  # kept for backward compat with prompts
+REPO_BASE_PATH = CONFIG.get("repo_base_path", DEVSTACK_PATH)
 
 
 async def review_specific_change(change_url_or_number, requested_patchset=None):
-    """
-    Review a specific change by URL or change number.
+    """Review a specific change by URL, change/PR/MR number, or forge URL.
 
     Args:
-        change_url_or_number: Change number or Gerrit URL
-        requested_patchset: Optional specific patchset number to review (e.g., 2)
-                          If None, reviews the latest patchset
+        change_url_or_number: Change number, PR/MR number, or full forge URL.
+        requested_patchset:   Gerrit patchset to review (None = latest).
+                              Silently ignored for GitHub/GitLab.
     """
+    forge = create_forge_client(CONFIG)
 
-    # Parse change number from URL or direct number
-    if "review.opendev.org" in change_url_or_number:
-        # Extract from URL like: https://review.opendev.org/c/openstack/octavia/+/912345
-        match = re.search(r'/c/([^/]+/[^/]+)/\+/(\d+)', change_url_or_number)
-        if not match:
-            print(f"❌ Could not parse URL: {change_url_or_number}")
-            return
-        repo_name = match.group(1)
-        change_number = match.group(2)
-    else:
-        # Assume it's just a change number - need to find which repo
-        change_number = change_url_or_number.strip()
-        print(f"🔍 Looking up change {change_number}...")
+    # Resolve the change via the forge client (replaces both old WebFetch AI calls)
+    print(f"🔍 Resolving change: {change_url_or_number}")
+    try:
+        if re.match(r'^https?://', change_url_or_number):
+            change = forge.get_change_from_url(change_url_or_number)
+        else:
+            # Bare number — require repo in config for GitHub/GitLab
+            repos = CONFIG.get("octavia_repos", [])
+            repo_hint = repos[0] if repos else None
+            change = forge.get_change(change_url_or_number.strip(), repo_hint)
+    except Exception as e:
+        print(f"❌ Could not fetch change details: {e}")
+        return
 
-        # Fetch change details from Gerrit
-        _client = create_model_client(CONFIG)
-        _r = await _client.query(
-            prompt="""
-            Fetch the change details from Gerrit API:
-            {GERRIT_BASE_URL}/changes/{change_number}
+    # For Gerrit: honour requested_patchset by re-fetching with that patchset
+    current_patchset = change.patchset
+    patchset_ref = change.git_fetch_ref
+    if change.forge_type == "gerrit" and requested_patchset:
+        current_patchset = int(requested_patchset)
+        last2 = str(change.change_id)[-2:].zfill(2)
+        patchset_ref = f"refs/changes/{last2}/{change.change_id}/{current_patchset}"
 
-            Extract the project/repository name from the response.
-            Return ONLY the repository name in format: openstack/project-name
-            Note: Gerrit prepends ")]]}}'" to JSON - strip it.
-            """,
-            tools=["WebFetch"],
-        )
-        repo_name = None
-        result_text = _r.text.strip()
-        match = re.search(r'(openstack/[\w-]+)', result_text)
-        if match:
-            repo_name = match.group(1)
-        if not repo_name:
-            print(f"❌ Could not determine repository for change {change_number}")
-            print(f"Response: {_r.text}")
-            return
+    # For GitHub/GitLab: silently ignore patchset
+    if change.forge_type != "gerrit" and requested_patchset:
+        print(f"ℹ️  Patchset argument ignored for {change.forge_type} (no patchset concept)")
+
+    repo_name = change.repo_name
 
     print(f"\n{'='*80}")
     print("📋 Change Details:")
+    print(f"  Forge:      {change.forge_type}")
     print(f"  Repository: {repo_name}")
-    print(f"  Change Number: {change_number}")
-    print(f"  URL: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}")
+    print(f"  ID:         #{change.change_id}")
+    print(f"  Title:      {change.title[:70]}")
+    print(f"  Branch:     {change.branch}")
+    if current_patchset:
+        print(f"  Patchset:   {current_patchset}")
+    print(f"  Fetch ref:  {patchset_ref}")
+    print(f"  URL:        {change.forge_url}")
     print(f"{'='*80}\n")
 
-    # Create output directory
     output_dir = Path(REVIEWS_OUTPUT_DIR)
     output_dir.mkdir(exist_ok=True, parents=True)
 
-    # Fetch patchset number from Gerrit
-    if requested_patchset:
-        print(f"🔍 Fetching patchset {requested_patchset} information from Gerrit...")
-        current_patchset = requested_patchset
-        # Construct the ref for the specific patchset
-        # Format: refs/changes/NN/NNNN/P where last NN are last 2 digits of change
-        last_two = str(change_number)[-2:]
-        patchset_ref = f"refs/changes/{last_two}/{change_number}/{requested_patchset}"
-        print(f"✓ Patchset: {current_patchset} (requested)")
-        print(f"✓ Ref: {patchset_ref}")
-    else:
-        print("🔍 Fetching latest patchset information from Gerrit...")
-        current_patchset = None
-        patchset_ref = None
-
-        _r2 = await _client.query(
-            prompt="""
-            Fetch the change details from Gerrit API:
-            {GERRIT_BASE_URL}/changes/{change_number}?o=CURRENT_REVISION&o=ALL_REVISIONS
-
-            Extract:
-            1. The current revision number (latest patchset number)
-            2. The git ref for fetching (refs/changes/.../...)
-            3. All available patchset numbers
-
-            Return as JSON with keys: patchset_number, ref, all_patchsets
-            Note: Gerrit prepends ")]]}}'" to JSON - strip it.
-            The patchset number is under revisions -> _number field.
-            """,
-            tools=["WebFetch"],
-        )
-        result_text = _r2.text.strip()
-        try:
-            import json as _json
-            if 'patchset_number' in result_text:
-                data = _json.loads(result_text)
-                current_patchset = data.get('patchset_number')
-                patchset_ref = data.get('re')
-            else:
-                match = re.search(r'"_number":\s*(\d+)', result_text)
-                if match:
-                    current_patchset = int(match.group(1))
-                match = re.search(r'"re":\s*"([^"]+)"', result_text)
-                if match:
-                    patchset_ref = match.group(1)
-        except Exception:
-            pass
-        if current_patchset:
-            print(f"✓ Patchset: {current_patchset} (latest)")
-        if patchset_ref:
-            print(f"✓ Ref: {patchset_ref}")
-
-    # Check for previous reviews and prepare context
-    previous_review_content, previous_patchset, _old_review_file = prepare_review_context(
-        output_dir, repo_name, change_number, current_patchset
+    # Load review history and get previous context
+    tracking_file = Path(CONFIG["reviewed_changes_file"])
+    history = load_review_history(tracking_file)
+    previous_review_content, previous_record = load_previous_review_context(
+        output_dir, change, history
     )
+    previous_patchset = previous_record.patchset if previous_record else None
+    previous_sequence = previous_record.sequence if previous_record else 0
+    sequence = previous_sequence + 1
 
-    # Create the new review filename
+    # Create the review filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    review_file = create_review_filename(
-        output_dir, repo_name, change_number, current_patchset, timestamp
-    )
+    review_file = create_review_filename(output_dir, change, sequence, timestamp)
 
     print(f"📄 Review will be saved to: {review_file.name}\n")
 
-    repo_path = Path(DEVSTACK_PATH) / repo_name.split('/')[-1]
+    # Local repo path (configurable, defaults to DevStack)
+    repo_path = Path(REPO_BASE_PATH) / repo_name.split('/')[-1]
 
     if not repo_path.exists():
         print(f"❌ Repository not found at: {repo_path}")
-        print("   Please ensure DevStack is set up correctly.")
+        print(f"   Set forge.repo_base_path in config.json to the directory containing the clone.")
         return
 
     # Pre-flight checks
@@ -233,21 +183,21 @@ This change has been reviewed before.
 
 """
 
-    # Add note if reviewing a specific (potentially not latest) patchset
+    # Note if reviewing a specific (potentially not latest) patchset
     specific_patchset_note = ""
-    if requested_patchset:
+    if change.forge_type == "gerrit" and requested_patchset:
         specific_patchset_note = (
             f"\n**NOTE**: You are reviewing a SPECIFIC patchset (PS {requested_patchset}), "
             "which may not be the latest version of this change.\n"
         )
 
-    # Load and format the code review prompt from template
+    # Build and format the prompt (forge-aware)
     _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_code_review_prompt(
         repo_name=repo_name,
-        change_number=change_number,
+        change_number=change.change_id,
         current_patchset=current_patchset,
-        gerrit_base_url=GERRIT_BASE_URL,
+        gerrit_base_url=GERRIT_BASE_URL,        # kept for Gerrit prompt compat
         repo_path=repo_path,
         patchset_ref=patchset_ref,
         specific_patchset_note=specific_patchset_note,
@@ -255,6 +205,10 @@ This change has been reviewed before.
         previous_patchset=previous_patchset,
         provider=_provider,
         save_path=str(review_file),
+        forge_type=change.forge_type,
+        forge_url=change.forge_url,
+        sequence=sequence,
+        head_sha=change.head_sha,
     )
 
     # Prompt loaded from prompts/code_review_prompt.txt
@@ -262,6 +216,7 @@ This change has been reviewed before.
 
     print("🤖 Starting comprehensive code review...\n")
 
+    _client = create_model_client(CONFIG)
     review_result = None
     usage_info = None
     try:
@@ -304,6 +259,10 @@ This change has been reviewed before.
                 if "## Token Usage & Cost" not in existing_content:
                     review_file.write_text(existing_content + "\n\n---\n\n" + usage_info)
             print(f"\n✓ Review file confirmed at: {review_file}")
+
+        # Record in forge-agnostic tracking
+        if review_file.exists():
+            record_review(tracking_file, change, sequence, review_file)
 
     except Exception as e:
         print(f"\n❌ Error during review: {e}")

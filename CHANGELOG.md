@@ -4,6 +4,31 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-01
+
+### Added: Multi-forge code review support (Gerrit / GitHub / GitLab)
+
+The code review agent can now work with GitHub and GitLab in addition to Gerrit,
+selected via `forge.type` in `config.json`.
+
+**New in `agents_lib`:**
+- `forge_client.py` — `ForgeClient` base class + `GerritClient`, `GitHubClient`,
+  `GitLabClient` implementations; `ChangeInfo` normalised dataclass; `create_forge_client(config)` factory.  All HTTP calls use stdlib `urllib` (no new deps).
+- `review_history.py` — forge-agnostic review tracking.  `ReviewRecord` dataclass;
+  `should_review_change()` detects new Gerrit patchsets OR new HEAD SHA (GitHub/GitLab);
+  `create_review_filename()` generates backward-compatible names for Gerrit and
+  sequence-based names for GitHub/GitLab.
+
+**Changes to code-review-agent:**
+- Two AI `WebFetch` calls that resolved Gerrit change details are replaced by direct
+  `forge_client.get_change()` calls — faster and reliable.
+- `octavia_review_agent.py`: `fetch_pending_changes()` replaced by `forge_client.list_open_changes()`; Gerrit JSON parsing removed.
+- `review_single_change.py`: forge client resolves change details; `patchset` argument silently ignored for GitHub/GitLab.
+- `prompts/code_review_prompt_pr.txt` — shared GitHub/GitLab prompt using `{pr_or_mr}` placeholder.
+- `config.sample.json` gains a `forge` section; existing `gerrit.base_url` configs continue to work unchanged.
+
+**Tests:** `tests/unit/test_forge_client.py` and `tests/unit/test_review_history.py`.
+
 ## 2026-04-30
 
 ### Added: AGENTS.md and Claude Code sub-agent definitions
