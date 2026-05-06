@@ -223,7 +223,7 @@ def _send_desktop(subject: str, summary: str, report_path: Path) -> None:
     # notify-send --action blocks until the user acts; Popen avoids blocking the agent.
     # When clicked, xdg-open opens the report file (or folder if path is a directory).
     cmd = (
-        f"action=$(notify-send --action=open:Open {shlex.quote(subject)} {shlex.quote(summary)}); "
+        f"action=$(notify-send --action=open=Open {shlex.quote(subject)} {shlex.quote(summary)}); "
         f'[ "$action" = "open" ] && xdg-open {shlex.quote(str(report_path))}'
     )
     subprocess.Popen(  # pylint: disable=consider-using-with
