@@ -8,6 +8,7 @@ and logged; they never propagate to the calling agent.
 
 import json
 import os
+import shlex
 import smtplib
 import subprocess
 import sys
@@ -101,7 +102,7 @@ def notify_report(
             elif channel_name == "ntfy":
                 _send_ntfy(cfg, subject, summary)
             elif channel_name == "desktop":
-                _send_desktop(subject, summary)
+                _send_desktop(subject, summary, report_path)
         except Exception as e:
             print(f"[notifications] {channel_name} failed: {e}", file=sys.stderr)
 
@@ -213,16 +214,22 @@ def _send_ntfy(cfg: dict, subject: str, summary: str) -> None:
     print("[notifications] ntfy notification sent")
 
 
-def _send_desktop(subject: str, summary: str) -> None:
+def _send_desktop(subject: str, summary: str, report_path: Path) -> None:
     # Only attempt if a display is available
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         return
 
-    result = subprocess.run(
-        ["notify-send", subject, summary],
-        capture_output=True,
-        check=False,
+    # Spawn a background shell that sends the notification with an "Open" action.
+    # notify-send --action blocks until the user acts; Popen avoids blocking the agent.
+    # When clicked, xdg-open opens the report file (or folder if path is a directory).
+    cmd = (
+        f"action=$(notify-send --action=open:Open {shlex.quote(subject)} {shlex.quote(summary)}); "
+        f'[ "$action" = "open" ] && xdg-open {shlex.quote(str(report_path))}'
     )
-    if result.returncode != 0:
-        raise RuntimeError(result.stderr.decode().strip() or "notify-send failed")
+    subprocess.Popen(  # pylint: disable=consider-using-with
+        ["bash", "-c", cmd],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+    )
     print("[notifications] desktop notification sent")
