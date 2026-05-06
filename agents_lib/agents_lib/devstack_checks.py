@@ -118,8 +118,12 @@ def check_api_connectivity(openrc_file: Path) -> bool:
         return False
 
     try:
-        # Try to list load balancers (simple API test)
-        cmd = f"source {openrc_file} && openstack loadbalancer list --format value --column id"
+        # Source ~/.bashrc first so PATH/venv fixes made there are available,
+        # then source openrc credentials before running the API check.
+        cmd = (
+            f"source ~/.bashrc 2>/dev/null; source {openrc_file}"
+            " && openstack loadbalancer list --format value --column id"
+        )
         result = subprocess.run(
             cmd,
             shell=True,
