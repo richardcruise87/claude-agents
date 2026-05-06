@@ -226,7 +226,7 @@ def _send_desktop(subject: str, summary: str, report_path: Path) -> None:
         f"action=$(notify-send --action=open:Open {shlex.quote(subject)} {shlex.quote(summary)}); "
         f'[ "$action" = "open" ] && xdg-open {shlex.quote(str(report_path))}'
     )
-    subprocess.Popen(
+    subprocess.Popen(  # pylint: disable=consider-using-with
         ["bash", "-c", cmd],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

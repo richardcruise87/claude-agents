@@ -1,6 +1,5 @@
 """Unit tests for agents_lib.notifications."""
 import json
-from unittest.mock import MagicMock
 from agents_lib.notifications import (
     load_notifications_config,
     notify_report,
