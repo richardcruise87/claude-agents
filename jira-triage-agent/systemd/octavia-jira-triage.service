@@ -15,8 +15,8 @@ Environment="CLAUDE_CODE_USE_VERTEX=1"
 # Environment="MAX_ISSUES=5"
 # Environment="CUTOFF_DATE=2026-01-01"
 
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:%h/octavia-logs/octavia-jira-triage.log
+StandardError=append:%h/octavia-logs/octavia-jira-triage.log
 SyslogIdentifier=octavia-jira-triage
 
 # MemoryMax=2G

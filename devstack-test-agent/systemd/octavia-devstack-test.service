@@ -14,8 +14,8 @@ Environment="CLAUDE_CODE_USE_VERTEX=1"
 # Environment="LOCK_TIMEOUT=600"
 # Environment="TEST_TIMEOUT=900"
 
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:%h/octavia-logs/octavia-devstack-test.log
+StandardError=append:%h/octavia-logs/octavia-devstack-test.log
 SyslogIdentifier=octavia-devstack-test
 
 MemoryMax=4G
