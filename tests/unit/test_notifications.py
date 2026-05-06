@@ -194,6 +194,6 @@ class TestNotifyReport:
         popen.assert_called_once()
         shell_script = popen.call_args[0][0][2]
         assert "notify-send" in shell_script
-        assert "--action=open:Open" in shell_script
+        assert "--action=open=Open" in shell_script
         assert "xdg-open" in shell_script
         assert str(sample_report_file) in shell_script
