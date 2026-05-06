@@ -172,7 +172,7 @@ class TestNotifyReport:
     def test_desktop_skipped_without_display(self, sample_report_file, mocker, monkeypatch):
         monkeypatch.delenv("DISPLAY", raising=False)
         monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
-        run = mocker.patch("subprocess.run")
+        popen = mocker.patch("subprocess.Popen")
         notify_report(
             report_path=sample_report_file,
             subject="Sub",
@@ -180,11 +180,11 @@ class TestNotifyReport:
             agent_config={"notifications": {"enabled": True}},
             notifications_config=self._make_notif_config(desktop={"enabled": True}),
         )
-        run.assert_not_called()
+        popen.assert_not_called()
 
     def test_desktop_called_with_display(self, sample_report_file, mocker, monkeypatch):
         monkeypatch.setenv("DISPLAY", ":0")
-        run = mocker.patch("subprocess.run", return_value=MagicMock(returncode=0))
+        popen = mocker.patch("subprocess.Popen")
         notify_report(
             report_path=sample_report_file,
             subject="Alert",
@@ -192,7 +192,9 @@ class TestNotifyReport:
             agent_config={"notifications": {"enabled": True}},
             notifications_config=self._make_notif_config(desktop={"enabled": True}),
         )
-        run.assert_called_once()
-        args = run.call_args[0][0]
-        assert "notify-send" in args
-        assert "Alert" in args
+        popen.assert_called_once()
+        shell_script = popen.call_args[0][0][2]
+        assert "notify-send" in shell_script
+        assert "--action=open:Open" in shell_script
+        assert "xdg-open" in shell_script
+        assert str(sample_report_file) in shell_script
