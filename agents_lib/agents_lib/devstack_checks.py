@@ -51,7 +51,7 @@ def check_devstack_health(config: Dict) -> DevStackHealth:
             errors.append(f"Service not running: {service}")
 
     # Check API connectivity
-    openrc_file = Path(devstack_config.get("openrc_file", "/opt/stack/devstack/openrc"))
+    openrc_file = Path(devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")).expanduser()
     api_reachable = check_api_connectivity(openrc_file)
     if not api_reachable:
         errors.append("OpenStack API not reachable")
@@ -267,7 +267,7 @@ def cleanup_test_environment(config: Dict, cleanup_commands: Optional[List[str]]
     """
     output = []
     devstack_config = config.get("devstack", {})
-    openrc_file = Path(devstack_config.get("openrc_file", "/opt/stack/devstack/openrc"))
+    openrc_file = Path(devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")).expanduser()
 
     if not openrc_file.exists():
         output.append("⚠️  OpenRC file not found, skipping cleanup")
