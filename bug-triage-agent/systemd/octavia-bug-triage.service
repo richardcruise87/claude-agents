@@ -14,8 +14,8 @@ Environment="CLAUDE_CODE_USE_VERTEX=1"
 # Environment="CUTOFF_DATE=2026-03-01"
 # Environment="MAX_BUGS=5"
 
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:%h/octavia-logs/octavia-bug-triage.log
+StandardError=append:%h/octavia-logs/octavia-bug-triage.log
 SyslogIdentifier=octavia-bug-triage
 
 # MemoryMax=2G

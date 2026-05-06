@@ -15,8 +15,8 @@ Environment="CLAUDE_MODEL=claude-opus-4-6"
 # Environment="CUTOFF_DATE=2026-03-01"
 # Environment="MAX_REVIEWS=3"
 
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:%h/octavia-logs/octavia-code-review.log
+StandardError=append:%h/octavia-logs/octavia-code-review.log
 SyslogIdentifier=octavia-code-review
 
 # MemoryMax=2G

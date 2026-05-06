@@ -71,6 +71,8 @@ def load_review_history(tracking_file: Path) -> dict[str, ReviewRecord]:
         return {}
     with open(tracking_file, encoding="utf-8") as f:
         raw = json.load(f)
+    if not isinstance(raw, dict):
+        return {}
     return {k: ReviewRecord(**v) for k, v in raw.items()}
 
 

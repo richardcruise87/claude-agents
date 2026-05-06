@@ -14,8 +14,8 @@ Environment="CLAUDE_CODE_USE_VERTEX=1"
 # Environment="MAX_ATTEMPTS=3"
 # Environment="SCRIPT_TIMEOUT=600"
 
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:%h/octavia-logs/octavia-bug-reproduction.log
+StandardError=append:%h/octavia-logs/octavia-bug-reproduction.log
 SyslogIdentifier=octavia-bug-reproduction
 
 MemoryMax=4G

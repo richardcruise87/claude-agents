@@ -265,12 +265,13 @@ class GerritClient(ForgeClient):
             # Simpler: just request all open and filter by created_at below
             age_filter = "+-age:365d"
 
-        params = urllib.parse.urlencode({
-            "q": f"project:{repo}+status:open{age_filter}",
+        # Build q separately — Gerrit needs :, +, / unencoded in its query syntax
+        q = f"project:{repo}+status:open{age_filter}"
+        other = urllib.parse.urlencode({
             "o": ["CURRENT_REVISION", "DETAILED_ACCOUNTS"],
             "n": max_results,
         }, doseq=True)
-        url = f"{self.base_url}/changes/?{params}"
+        url = f"{self.base_url}/changes/?q={q}&{other}"
         data = self._http_get_gerrit(url)
 
         changes = []

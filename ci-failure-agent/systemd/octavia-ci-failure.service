@@ -15,8 +15,8 @@ Environment="CLAUDE_MODEL=claude-sonnet-4-6"
 # Environment="HOURS_BACK=24"
 # Environment="MAX_CHANGES=5"
 
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:%h/octavia-logs/octavia-ci-failure.log
+StandardError=append:%h/octavia-logs/octavia-ci-failure.log
 SyslogIdentifier=octavia-ci-agent
 
 MemoryMax=4G
