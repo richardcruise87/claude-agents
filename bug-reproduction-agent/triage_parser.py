@@ -92,7 +92,7 @@ def extract_bug_metadata(markdown: str) -> Dict:
     # Format 3: # Bug Triage Report: Bug #2150752  (heading)
     match = re.search(r'-?\s*\*\*Bug (?:ID|Number)(?::\*\*|\*\*:)\s+(\d+)', markdown)
     if not match:
-        match = re.search(r'#\s*Bug.*?Report.*?#(\d+)', markdown)
+        match = re.search(r'^#\s+Bug\s+Triage\s+Report.*?#(\d+)', markdown, re.MULTILINE)
     if match:
         metadata["bug_number"] = match.group(1)
 
