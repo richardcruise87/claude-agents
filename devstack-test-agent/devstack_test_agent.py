@@ -311,7 +311,7 @@ async def main():
                     notifications_config=load_notifications_config(),
                 )
             else:
-                print("\n⚠️  Test succeeded but failed to create test report")
+                print(f"\n⚠️  Test succeeded but failed to create test report in {reviews_dir}")
         else:
             print(f"\n⚠️  Test failed or skipped for {review_info.repo_name} #{review_info.change_number}")
 
