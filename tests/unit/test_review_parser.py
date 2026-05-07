@@ -60,14 +60,16 @@ class TestParseReviewFile:
         info = parse_review_file(f)
         assert "982615" in info.gerrit_url
 
-    def test_already_tested_detected(self, tmp_path):
+    def test_already_tested_always_false(self, tmp_path):
+        # DevStack results are written to a separate testing_report_* file so
+        # parse_review_file never sets already_tested=True from content.
         f = _make_review_file(
             tmp_path,
             "review_openstack_octavia_982615_ps1_20260331_133739.md",
             "# Review\n\n### DevStack Integration Tests\nPASS"
         )
         info = parse_review_file(f)
-        assert info.already_tested is True
+        assert info.already_tested is False
 
     def test_not_already_tested(self, tmp_path):
         f = _make_review_file(

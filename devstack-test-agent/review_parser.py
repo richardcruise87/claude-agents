@@ -87,8 +87,10 @@ def parse_review_file(review_file: Path) -> Optional[ReviewInfo]:
             # Construct default Gerrit URL
             gerrit_url = f"https://review.opendev.org/c/{repo_name}/+/{change_number}"
 
-        # Check if DevStack testing section already exists
-        already_tested = "### DevStack Integration Tests" in content
+        # DevStack results are now written to a separate testing_report_* file
+        # rather than being inserted into the review file, so this is always False.
+        # Deduplication is handled by the tracking file in the calling agent.
+        already_tested = False
 
         return ReviewInfo(
             review_file=review_file,
