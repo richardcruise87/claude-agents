@@ -134,7 +134,7 @@ def generate_report(
         lines.append("")
         # Include the successful script
         successful_script = None
-        for script, result in attempts:
+        for script, result, *_ in attempts:
             if result.success or result.error_type == "BUG_REPRODUCED":
                 successful_script = script
                 break
