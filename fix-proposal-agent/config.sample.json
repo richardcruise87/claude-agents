@@ -15,6 +15,8 @@
     "push_wip_draft": false,
     "comment_push": "Set push_wip_draft=true to push the patch to Gerrit as a WIP change",
     "base_url": "https://review.opendev.org",
+    "remote_name": "gerrit",
+    "comment_remote": "Git remote name to push to — change if your Gerrit remote is not named 'gerrit'",
     "username_env": "GERRIT_USERNAME",
     "token_env": "GERRIT_HTTP_PASSWORD"
   },

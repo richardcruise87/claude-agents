@@ -279,12 +279,14 @@ def handle_gerrit_push(
         return None
 
     patch_content = patch_match.group(1)
-    print("\n📤 Pushing WIP draft to Gerrit...")
+    gerrit_remote = gerrit_cfg.get("remote_name", "gerrit")
+    print(f"\n📤 Pushing WIP draft to Gerrit (remote: {gerrit_remote})...")
     return push_gerrit_wip_draft(
         repo_path=repo_path,
         patch_content=patch_content,
         bug_number=bug_number,
         bug_title=bug_title,
+        gerrit_remote=gerrit_remote,
     )
 
 
