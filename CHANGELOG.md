@@ -4,6 +4,117 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-07
+
+### Added: Fix Proposal Agent
+
+New `fix-proposal-agent` reads confirmed-REPRODUCED bug triage and reproduction
+reports, uses AI to generate a targeted code patch, rates its risk across four
+dimensions (scope, confidence, test coverage, domain), and writes a structured
+proposal document.
+
+**Proposal workflow:**
+- Developer receives a `fix_proposal_*.md` document with the patch embedded and
+  a risk rating (LOW / MEDIUM / HIGH)
+- Separate `fix_proposal_*_context.md` is a ready-to-paste Claude Code prompt
+- Developer can accept the fix, paste the context packet into Claude Code, or abandon
+- **Feedback loop**: write feedback to `fix_proposal_{N}_feedback.txt` — agent reads
+  and deletes it on next run and generates a revised proposal (sequence 2+)
+
+**Optional integrations (all off by default):**
+- `gerrit.push_wip_draft: true` — push the patch to Gerrit as a WIP change
+- `gerrit.remote_name` — configurable git remote name (default: `"gerrit"`)
+- `feedback.post_to_launchpad: true` — post summary as a Launchpad bug comment
+- `feedback.read_launchpad_comments / read_gerrit_comments` — read feedback online
+
+**New files:** `fix-proposal-agent/` directory, 16 new unit tests,
+`systemd/octavia-fix-proposal.{service,timer}` (daily at 15:00)
+
+---
+
+### Changed: DevStack Test Agent writes separate testing_report_* files
+
+Previously modified the original `review_*.md` in place, inserting a DevStack
+section by searching for `## Code Analysis`. When absent, fell back to appending
+at the end, producing inconsistent formatting.
+
+Now leaves `review_*.md` untouched and creates `testing_report_*` in the same
+directory, containing the full review content followed by DevStack results.
+Tracking record gains a `test_report_file` field. Desktop notification opens
+the test report file.
+
+---
+
+### Fixed: Reproduction filenames missing bug number and title
+
+Two bugs caused files named `reproduction___<timestamp>_1.md`:
+
+1. `triage_parser.py` — `extract_bug_metadata()` only matched the old bold-field
+   format. Added fallback regexes (anchored with `re.MULTILINE`) for the newer
+   heading format (`# Bug Triage Report: Bug #N` / `## Title`).
+2. `report_generator.py` — `generate_executive_summary()` used plain triple-quoted
+   strings with `{triage.bug_title}` etc. without an `f` prefix, so placeholders
+   appeared literally. Rewritten as f-string concatenation.
+
+---
+
+### Fixed: GNOME desktop notification — clicking Open now works
+
+`notify-send 0.8.x` uses `--action=[NAME=]Text` (`=` separator). Using
+`--action=open:Open` caused the name to default to `"0"` so `xdg-open` was
+never called. Fixed to `--action=open=Open`.
+
+---
+
+### Fixed: Gerrit query encoding returning empty results
+
+`list_open_changes()` passed the query string through `urllib.parse.urlencode`,
+encoding `+`/`:`/`/` as `%2B`/`%3A`/`%2F`. Gerrit treats these as literals and
+returns an empty list. The `q` parameter is now built separately, unencoded.
+
+---
+
+### Fixed: Review history tracking file corruption crash
+
+`load_review_history()` called `raw.items()` on a JSON array (old tracking
+format), causing `'list' object has no attribute 'items'`. Now returns `{}`
+for non-dict files so the agent continues and rebuilds the file correctly.
+
+---
+
+### Fixed: DevStack health check — openrc tilde not expanded and bashrc not sourced
+
+- `Path("~/git/devstack/openrc").exists()` always returned `False` — added
+  `.expanduser()` in `devstack_checks.py`.
+- `openstack loadbalancer list` failed with `not an openstack command` because
+  `~/.bashrc` (which activates the Octavia client venv) was not sourced. The
+  health check now sources `~/.bashrc` before the openrc file.
+
+---
+
+### Changed: Default model aligned to claude-sonnet-4-6
+
+Code review agent service had `claude-opus-4-6`; all other agents use
+`claude-sonnet-4-6`. Aligned all agent service files.
+
+---
+
+### Changed: Systemd services log to ~/octavia-logs/ files
+
+Changed from `StandardOutput=journal` to `StandardOutput=append:%h/octavia-logs/<agent>.log`
+to work around a RHEL 10 journald issue where user service logs were inaccessible
+via `journalctl --user`.
+
+---
+
+### Changed: Desktop notifications open report on click
+
+`_send_desktop()` now uses `notify-send --action=open=Open` and spawns a
+background shell (`subprocess.Popen`) that calls `xdg-open <report_path>`
+on click, without blocking the agent.
+
+---
+
 ## 2026-05-01
 
 ### Added: Feedback posting for Launchpad and JIRA triage agents
