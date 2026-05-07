@@ -11,6 +11,7 @@ WorkingDirectory=%h/git/claude-agents/bug-reproduction-agent
 ExecStart=%h/.venv/claude-agents/bin/octavia-reproduce-bugs
 
 Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="PYTHONUNBUFFERED=1"
 # Environment="MAX_ATTEMPTS=3"
 # Environment="SCRIPT_TIMEOUT=600"
 
