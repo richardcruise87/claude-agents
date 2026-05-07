@@ -6,9 +6,9 @@ version: 1.0
 
 # Claude Agents
 
-Six specialised AI agents for OpenStack Octavia maintenance — bug triage,
+Seven specialised AI agents for OpenStack Octavia maintenance — bug triage,
 code review, CI failure analysis, bug reproduction, DevStack integration
-testing, and JIRA issue triage.  All agents share a common virtual environment,
+testing, JIRA issue triage, and fix proposal generation.  All agents share a common virtual environment,
 a unified install script, and optional multi-channel notifications.
 
 > **AI assistant note**: When a user in this repo asks you to triage a bug,
@@ -214,7 +214,8 @@ octavia-devstack-test
 | `devstack.lock_timeout` | `300` | Seconds to wait for DevStack lock |
 | `filters.only_test_repositories` | `[openstack/octavia]` | Repos to test |
 
-**Output**: appends results to the existing review file in `~/octavia_reviews/`
+**Output**: `~/octavia_reviews/testing_report_<repo>_<change>_ps<n>_<timestamp>.md`
+(original review file is left untouched)
 
 **Tracking file**: `~/.octavia_devstack_tests.json`
 
@@ -253,6 +254,42 @@ octavia-jira-triage
 
 ---
 
+### Fix Proposal Agent
+
+Reads bug triage and reproduction reports for confirmed-REPRODUCED bugs, uses AI to
+generate a targeted code patch, rates its risk, and saves a proposal document for
+developer review.
+
+**When to use**: a REPRODUCED bug needs a proposed fix with structured risk guidance.
+
+**Command**:
+```bash
+octavia-propose-fix
+```
+
+**Configuration** (`fix-proposal-agent/config.json`):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `triage_reports_dir` | `~/octavia_bug_triages` | Triage reports to read |
+| `reproduction_reports_dir` | `~/octavia_bug_reproductions` | Reproduction reports |
+| `proposals_output_dir` | `~/octavia_fix_proposals` | Where to save proposals |
+| `max_proposals_per_run` | `2` | Proposals generated per run |
+| `gerrit.push_wip_draft` | `false` | Push patch to Gerrit as WIP |
+| `feedback.post_to_launchpad` | `false` | Post summary to Launchpad |
+
+**Output**:
+- `~/octavia_fix_proposals/fix_proposal_<number>_<title>_<timestamp>_<seq>.md`
+- `~/octavia_fix_proposals/fix_proposal_<number>_context.md` (Claude Code prompt)
+
+**Tracking file**: `~/.octavia_fix_proposals.json`
+
+**Developer feedback loop**: write feedback to
+`~/octavia_fix_proposals/fix_proposal_{bug_number}_feedback.txt` — the agent
+reads and deletes it on the next run and produces a revised proposal.
+
+---
+
 ## Shared configuration
 
 All agents share these top-level `config.json` keys:
@@ -276,7 +313,7 @@ Then `pip install openai` and set `OPENAI_API_KEY`.
 ```bash
 pip install tox
 
-tox -e unit        # 223 unit tests — fast, no network required
+tox -e unit        # 386 unit tests — fast, no network required
 tox -e functional  # end-to-end flow tests
 tox -e pep8        # flake8 + pylint (10.00/10 score)
 tox                # run everything
@@ -321,6 +358,7 @@ systemctl --user enable --now octavia-ci-failure.timer      # every 4 hours
 # Event-driven agents (inotify path watchers)
 systemctl --user enable --now octavia-bug-reproduction.path
 systemctl --user enable --now octavia-devstack-test.path
+systemctl --user enable --now octavia-fix-proposal.timer        # daily at 15:00
 
 # Persist services across logout
 loginctl enable-linger $USER

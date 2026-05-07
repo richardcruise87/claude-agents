@@ -7,7 +7,7 @@ An AI-powered agent that performs DevStack integration testing for OpenStack cod
 This agent works in conjunction with the code-review-agent to provide comprehensive testing:
 
 1. **Code Review Agent** - Analyzes code, runs unit/functional tests, generates review (2-3 minutes)
-2. **DevStack Test Agent** - Tests changes in live DevStack, updates review with results (10-15 minutes)
+2. **DevStack Test Agent** - Tests changes in live DevStack, writes a separate test report (10-15 minutes)
 
 This separation improves throughput by **5-6x** - code reviews complete quickly without waiting for DevStack availability.
 
@@ -16,7 +16,7 @@ This separation improves throughput by **5-6x** - code reviews complete quickly 
 - ✅ Event-driven (watches for new review files)
 - ✅ DevStack exclusive locking (prevents conflicts)
 - ✅ Unique resource prefixes (prevents naming collisions)
-- ✅ Updates original review files with test results
+- ✅ Writes a separate `testing_report_*` file (original review is untouched)
 - ✅ Comprehensive test execution and cleanup
 - ✅ Configurable repository filtering
 
@@ -134,9 +134,10 @@ journalctl --user -u octavia-devstack-test.service -f
    - Restart affected services
    - Execute integration tests
 
-5. **Update Review File**
-   - Insert DevStack test results section
-   - Add to original review (non-destructive)
+5. **Write Test Report**
+   - Create `testing_report_*` file alongside the review file
+   - Contains the full review content followed by DevStack results
+   - Original `review_*.md` is left untouched
 
 6. **Cleanup**
    - Delete test resources
@@ -145,20 +146,26 @@ journalctl --user -u octavia-devstack-test.service -f
 
 ## Output Format
 
-Updates review files with:
+Creates `testing_report_<repo>_<change>_ps<n>_<timestamp>.md` in `~/octavia_reviews/`:
 
 ```markdown
-## DevStack Integration Testing
+<full contents of the original review_*.md>
 
-**Status**: ✅ PASS / ❌ FAIL / ⏭️ SKIPPED
+---
 
-**Test Details:**
-- Load balancer creation: ✅ PASS
-- Service health: ✅ PASS
-- Cleanup: ✅ PASS
+# DevStack Integration Testing
 
-**Errors:** (if any)
+## Test Environment
+...
+
+## Tests Executed
+...
+
+## Test Results Summary
+**Overall Status**: ✅ PASS / ❌ FAIL
 ```
+
+The original `review_*.md` is left unchanged.
 
 ## Tracking
 
@@ -169,7 +176,8 @@ Tracking file: `~/.octavia_devstack_tests.json`
   "openstack/octavia~982615~ps1": {
     "tested_at": "2026-04-01T14:30:00",
     "test_result": "success",
-    "review_file": "~/octavia_reviews/review_openstack_octavia_982615_ps1_20260401_143000.md"
+    "review_file": "~/octavia_reviews/review_openstack_octavia_982615_ps1_20260401_143000.md",
+    "test_report_file": "~/octavia_reviews/testing_report_openstack_octavia_982615_ps1_20260401_143200.md"
   }
 }
 ```

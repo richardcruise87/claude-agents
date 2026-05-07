@@ -114,22 +114,49 @@ octavia-reproduce-bugs
 ### [DevStack Test Agent](devstack-test-agent/)
 
 Picks up completed code reviews and runs live integration tests against a DevStack deployment,
-then appends the results to the review file.
+writing results to a separate `testing_report_*` file.
 
 **Features:**
 - Watches `~/octavia_reviews/` for new review files
 - Acquires an exclusive DevStack lock before testing (prevents concurrent access)
 - Deploys the change to DevStack, restarts affected services, runs integration tests
 - Uses unique resource prefixes (`test-review-{pid}-{ts}-`) to avoid naming conflicts
-- Appends a `DevStack Integration Tests` section to the original review file
+- Writes a new `testing_report_*` file (original review file is left untouched)
 
 **Commands:**
 ```bash
 octavia-devstack-test
 ```
 
-**Output:** Updates existing review files in `~/octavia_reviews/`  
+**Output:** `~/octavia_reviews/testing_report_<repo>_<change>_ps<n>_<timestamp>.md`  
 **Schedule:** Every 2 hours (or event-driven on new review files)
+
+---
+
+### [Fix Proposal Agent](fix-proposal-agent/)
+
+Reads bug triage and reproduction reports for REPRODUCED bugs and uses AI to generate a
+targeted code fix with a structured risk rating. Presents developers with a proposal they
+can accept, refine, or abandon.
+
+**Features:**
+- Only proposes fixes for bugs confirmed `REPRODUCED` by the Bug Reproduction Agent
+- AI examines source code, generates a minimal patch, and rates risk across four dimensions:
+  scope, confidence, test coverage, and domain sensitivity
+- Writes a proposal document with the patch embedded and a ready-to-paste Claude Code
+  context packet
+- Feedback loop: developer writes to `fix_proposal_{N}_feedback.txt` → agent produces
+  a revised proposal on its next run
+- Optional: post proposal summary to Launchpad; push WIP draft to Gerrit (both off by default)
+- Optional: read feedback from Launchpad comments or Gerrit review comments (off by default)
+
+**Commands:**
+```bash
+octavia-propose-fix
+```
+
+**Output:** `~/octavia_fix_proposals/`  
+**Schedule:** Daily at 15:00 (systemd timer)
 
 ---
 
@@ -176,6 +203,7 @@ pip install -e code-review-agent/
 pip install -e bug-reproduction-agent/
 pip install -e ci-failure-agent/
 pip install -e devstack-test-agent/
+pip install -e fix-proposal-agent/
 ```
 
 ### Available Commands After Installation
@@ -189,13 +217,15 @@ pip install -e devstack-test-agent/
 | `octavia-analyze-ci` | Analyze a single CI failure (see `--help`) |
 | `octavia-reproduce-bugs` | Bug reproduction agent |
 | `octavia-devstack-test` | DevStack integration test agent |
+| `octavia-jira-triage` | JIRA issue triage agent |
+| `octavia-propose-fix` | Fix proposal agent |
 
 ### Configuration
 
 Each agent requires a `config.json` (created from the sample template):
 
 ```bash
-for agent in bug-triage-agent code-review-agent ci-failure-agent bug-reproduction-agent devstack-test-agent; do
+for agent in bug-triage-agent code-review-agent ci-failure-agent bug-reproduction-agent devstack-test-agent jira-triage-agent fix-proposal-agent; do
     cp $agent/config.sample.json $agent/config.json
     # Edit $agent/config.json with your settings
 done
@@ -359,6 +389,7 @@ loginctl enable-linger $USER
 | `octavia-code-review.timer` | Every 4 hours | Time-based |
 | `octavia-ci-failure.timer` | Every 4 hours | Time-based |
 | `octavia-bug-reproduction.path` | Immediately | New triage report (inotify) |
+| `octavia-fix-proposal.timer` | Daily at 15:00 | Time-based |
 
 ### Useful Commands
 
@@ -463,6 +494,9 @@ claude-agents/
 │   ├── install.sh
 │   └── systemd/
 ├── devstack-test-agent/         DevStack integration testing
+│   ├── install.sh
+│   └── systemd/
+├── fix-proposal-agent/          AI fix proposals with risk rating
 │   ├── install.sh
 │   └── systemd/
 ├── setup-agents.sh              Install / update all agents
