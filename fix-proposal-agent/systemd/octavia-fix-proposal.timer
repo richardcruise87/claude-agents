@@ -1,0 +1,10 @@
+[Unit]
+Description=Octavia Fix Proposal Agent Timer
+Documentation=https://github.com/richardcruise87/claude-agents
+
+[Timer]
+OnCalendar=*-*-* 15:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
