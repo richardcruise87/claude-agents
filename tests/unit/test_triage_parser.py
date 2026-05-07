@@ -25,6 +25,22 @@ class TestExtractBugMetadata:
         meta = extract_bug_metadata(md)
         assert meta.get("bug_number") == "99999"
 
+    def test_heading_format_bug_number(self):
+        md = "# Bug Triage Report: Bug #2150752\n## Loadbalancer KeyError\n"
+        meta = extract_bug_metadata(md)
+        assert meta.get("bug_number") == "2150752"
+
+    def test_heading_format_bug_title(self):
+        md = "# Bug Triage Report: Bug #2150752\n## Loadbalancer KeyError when adding a member\n"
+        meta = extract_bug_metadata(md)
+        assert meta.get("bug_title") == "Loadbalancer KeyError when adding a member"
+
+    def test_heading_format_does_not_match_mid_line(self):
+        # Ensure the anchored regex doesn't match a # heading embedded mid-content
+        md = "Some text # Bug Triage Report: Bug #9999\n**Bug ID:** 2222\n"
+        meta = extract_bug_metadata(md)
+        assert meta.get("bug_number") == "2222"
+
     def test_missing_fields_no_crash(self):
         meta = extract_bug_metadata("# No metadata here")
         assert isinstance(meta, dict)

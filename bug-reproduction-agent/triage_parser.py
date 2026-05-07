@@ -86,15 +86,23 @@ def extract_bug_metadata(markdown: str) -> Dict:
     """
     metadata = {}
 
-    # Extract bug number (handle multiple triage formats)
-    # Format 1: **Bug ID:** 2146764 (asterisks after colon)
-    # Format 2: - **Bug Number**: 2146740 (asterisks before colon)
+    # Extract bug number — three formats:
+    # Format 1: **Bug ID:** 2146764  (bold field, colon after closing **)
+    # Format 2: - **Bug Number**: 2146740  (bold field, colon before closing **)
+    # Format 3: # Bug Triage Report: Bug #2150752  (heading)
     match = re.search(r'-?\s*\*\*Bug (?:ID|Number)(?::\*\*|\*\*:)\s+(\d+)', markdown)
+    if not match:
+        match = re.search(r'^#\s+Bug\s+Triage\s+Report.*?#(\d+)', markdown, re.MULTILINE)
     if match:
         metadata["bug_number"] = match.group(1)
 
-    # Extract bug title (both formats)
+    # Extract bug title — three formats:
+    # Format 1: **Title:** Load balancer fails  (bold field, colon after closing **)
+    # Format 2: - **Title**: Load balancer fails  (bold field, colon before closing **)
+    # Format 3: ## Load balancer fails  (second-level heading after the report heading)
     match = re.search(r'-?\s*\*\*Title(?::\*\*|\*\*:)\s+(.+)', markdown)
+    if not match:
+        match = re.search(r'^##\s+(.+)', markdown, re.MULTILINE)
     if match:
         metadata["bug_title"] = match.group(1).strip()
 

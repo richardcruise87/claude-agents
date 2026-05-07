@@ -181,38 +181,43 @@ def generate_executive_summary(
 ) -> str:
     """Generate executive summary section."""
     if final_status == "REPRODUCED":
-        return """The bug **{triage.bug_title}** (#{triage.bug_number}) was **successfully reproduced**
-in {len(attempts)} attempt(s). The reproduction confirms the issue identified in the triage report.
-
-The bug was reproduced using
-{'the triage reproduction steps' if len(attempts) == 1 else 'refined reproduction scripts'}.
-Execution took {last_result.execution_time:.1f} seconds on the final attempt.
-"""
+        script_note = (
+            "the triage reproduction steps"
+            if len(attempts) == 1
+            else "refined reproduction scripts"
+        )
+        last_time = attempts[-1][1].execution_time if attempts else 0.0
+        return (
+            f"The bug **{triage.bug_title}** (#{triage.bug_number}) was **successfully reproduced**\n"
+            f"in {len(attempts)} attempt(s). The reproduction confirms the issue identified in the triage report.\n\n"
+            f"The bug was reproduced using {script_note}.\n"
+            f"Execution took {last_time:.1f} seconds on the final attempt.\n"
+        )
 
     if final_status == "NOT_REPRODUCED":
-        return """The bug **{triage.bug_title}** (#{triage.bug_number}) could **not be reproduced**
-after {len(attempts)} attempt(s).
-
-This could indicate:
-- The bug is environment-specific or requires specific conditions not met in this DevStack
-- The bug is intermittent/timing-dependent (race condition)
-- The bug has been fixed but triage wasn't updated
-- The reproduction steps in the triage are incomplete or incorrect
-
-Manual investigation is recommended.
-"""
+        return (
+            f"The bug **{triage.bug_title}** (#{triage.bug_number}) could **not be reproduced**\n"
+            f"after {len(attempts)} attempt(s).\n\n"
+            "This could indicate:\n"
+            "- The bug is environment-specific or requires specific conditions not met in this DevStack\n"
+            "- The bug is intermittent/timing-dependent (race condition)\n"
+            "- The bug has been fixed but triage wasn't updated\n"
+            "- The reproduction steps in the triage are incomplete or incorrect\n\n"
+            "Manual investigation is recommended.\n"
+        )
 
     if final_status == "ENVIRONMENT_ERROR":
-        return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) was **aborted**
-due to DevStack environment issues.
+        return (
+            f"Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) was **aborted**\n"
+            "due to DevStack environment issues.\n\n"
+            "The reproduction environment is not healthy and needs to be fixed before attempting reproduction.\n"
+            "See the DevStack Health Check section below for details.\n"
+        )
 
-The reproduction environment is not healthy and needs to be fixed before attempting reproduction.
-See the DevStack Health Check section below for details.
-"""
-
-    return """Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with
-status: **{final_status}** after {len(attempts)} attempt(s).
-"""
+    return (
+        f"Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with\n"
+        f"status: **{final_status}** after {len(attempts)} attempt(s).\n"
+    )
 
 
 def generate_root_cause_analysis(
