@@ -21,7 +21,7 @@ SyslogIdentifier=octavia-bug-reproduction
 
 MemoryMax=4G
 CPUQuota=100%
-TimeoutSec=1800
+TimeoutSec=10800
 
 [Install]
 WantedBy=default.target
