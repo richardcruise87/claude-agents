@@ -143,26 +143,33 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
         return (False, "")
 
 
-def update_review_with_test_results(review_file: Path, test_results_file: Path) -> bool:
+def create_test_report(
+    review_file: Path,
+    test_results_file: Path,
+    output_dir: Path,
+) -> "Path | None":
     """
-    Update the original review file with DevStack test results.
+    Create a new testing_report_* file combining the review and test results.
+
+    The original review file is left untouched. The new file contains the full
+    review content followed by the DevStack test results.
 
     Args:
-        review_file: Path to original review markdown file
-        test_results_file: Path to test results markdown file
+        review_file:      Path to the original review markdown file.
+        test_results_file: Path to the temporary test results file.
+        output_dir:       Directory in which to write the test report.
 
     Returns:
-        True if successful, False otherwise
+        Path to the created test report, or None on failure.
     """
-    print("\n📝 Updating review file with test results...")
+    print("\n📝 Creating test report...")
 
     try:
-        # Read both files
         review_content = review_file.read_text(encoding="utf-8")
         test_results = Path(test_results_file).read_text(encoding="utf-8")
 
-        # Extract just the relevant sections from test results
-        # (skip the header as review already has change info)
+        # Extract from "## Test Environment" onwards — skip the AI preamble
+        # since the review already contains the change details.
         test_sections = []
         in_section = False
         for line in test_results.split('\n'):
@@ -170,44 +177,34 @@ def update_review_with_test_results(review_file: Path, test_results_file: Path) 
                 in_section = True
             if in_section:
                 test_sections.append(line)
-
         test_content = '\n'.join(test_sections)
 
-        # Find insertion point in review
-        # Insert before "## Code Analysis" or at end
-        insertion_marker = "## Code Analysis"
-        if insertion_marker in review_content:
-            parts = review_content.split(insertion_marker, 1)
-            updated_content = (
-                parts[0] +
-                "\n---\n\n" +
-                "# DevStack Integration Testing\n\n" +
-                test_content +
-                "\n\n---\n\n" +
-                insertion_marker +
-                parts[1]
-            )
-        else:
-            # Append at end
-            updated_content = (
-                review_content +
-                "\n\n---\n\n" +
-                "# DevStack Integration Testing\n\n" +
-                test_content
-            )
+        # Derive test report filename from review filename, replacing prefix and timestamp.
+        # review_openstack_octavia_932847_ps1_20260402_090051.md
+        # → testing_report_openstack_octavia_932847_ps1_20260507_143022.md
+        stem_parts = review_file.stem.split('_')
+        middle_parts = stem_parts[1:-2]  # strip 'review' prefix and old timestamp
+        new_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        new_stem = 'testing_report_' + '_'.join(middle_parts) + '_' + new_timestamp
+        test_report_file = output_dir / f"{new_stem}.md"
 
-        # Write updated review
-        review_file.write_text(updated_content)
-        print(f"   ✅ Updated: {review_file.name}")
+        combined = (
+            review_content.rstrip() +
+            "\n\n---\n\n" +
+            "# DevStack Integration Testing\n\n" +
+            test_content
+        )
+        test_report_file.write_text(combined, encoding="utf-8")
+        print(f"   ✅ Created: {test_report_file.name}")
 
         # Cleanup temp file
         Path(test_results_file).unlink(missing_ok=True)
 
-        return True
+        return test_report_file
 
     except Exception as e:
-        print(f"   ❌ Error updating review: {e}")
-        return False
+        print(f"   ❌ Error creating test report: {e}")
+        return None
 
 
 async def main():
@@ -288,19 +285,23 @@ async def main():
         success, test_results_file = await test_change_in_devstack(review_info, config)
 
         if success and test_results_file:
-            # Update original review file
-            if update_review_with_test_results(review_file, Path(test_results_file)):
+            # Create a new testing_report_* file (review file is not modified)
+            test_report = create_test_report(
+                review_file, Path(test_results_file), reviews_dir
+            )
+            if test_report:
                 # Record in tracking
                 tested_reviews[review_id] = {
                     "tested_at": datetime.now().isoformat(),
                     "review_file": str(review_file),
+                    "test_report_file": str(test_report),
                     "test_result": "success"
                 }
                 save_tracking_file(tracking_file, tested_reviews)
                 tested_count += 1
                 print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
                 notify_report(
-                    report_path=review_file,
+                    report_path=test_report,
                     subject=(
                         f"DevStack Test: {review_info.repo_name} "
                         f"#{review_info.change_number} PS{review_info.patchset}"
@@ -310,7 +311,7 @@ async def main():
                     notifications_config=load_notifications_config(),
                 )
             else:
-                print("\\n⚠️  Test succeeded but failed to update review file")
+                print(f"\n⚠️  Test succeeded but failed to create test report in {reviews_dir}")
         else:
             print(f"\n⚠️  Test failed or skipped for {review_info.repo_name} #{review_info.change_number}")
 
