@@ -11,6 +11,7 @@ WorkingDirectory=%h/git/claude-agents/jira-triage-agent
 ExecStart=%h/.venv/claude-agents/bin/octavia-jira-triage
 
 Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="PYTHONUNBUFFERED=1"
 # Environment="JIRA_API_TOKEN=your_token_here"
 # Environment="MAX_ISSUES=5"
 # Environment="CUTOFF_DATE=2026-01-01"

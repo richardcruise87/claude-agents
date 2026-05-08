@@ -11,6 +11,7 @@ WorkingDirectory=%h/git/claude-agents/devstack-test-agent
 ExecStart=%h/.venv/claude-agents/bin/octavia-devstack-test
 
 Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="PYTHONUNBUFFERED=1"
 # Environment="LOCK_TIMEOUT=600"
 # Environment="TEST_TIMEOUT=900"
 
