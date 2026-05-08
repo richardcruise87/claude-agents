@@ -111,6 +111,68 @@ async def refine_script(
     return script, usage_dict
 
 
+async def audit_reproduction(
+    script: str,
+    result: ExecutionResult,
+    triage: TriageReport,
+    config: Dict,
+) -> bool:
+    """
+    Ask the AI to verify that the script output actually demonstrates the bug.
+
+    Called when a script exits 0. A fast heuristic pre-check avoids an API
+    call for obviously empty scripts (very short output + very fast execution).
+
+    Returns:
+        True if the AI confirms the bug was triggered, False otherwise.
+    """
+    # Fast heuristic: if the output is tiny and execution trivially fast,
+    # the script almost certainly did nothing meaningful (e.g. empty script
+    # that only ran the cleanup trap).
+    stdout_stripped = result.stdout.strip()
+    if result.execution_time < 5.0 and len(stdout_stripped) < 150:
+        print("   🔍 Audit: output too short and execution too fast — no bug evidence")
+        return False
+
+    # Check for the explicit marker emitted by well-formed scripts.
+    if "BUG REPRODUCED" in result.stdout.upper():
+        return True
+
+    # Otherwise ask the AI to evaluate the output.
+    prompts_dir = Path(__file__).parent / "prompts"
+    template = load_prompt_template("script_audit_prompt", prompts_dir)
+
+    # Extract a hint about what the bug looks like from the root cause.
+    root_cause = triage.root_cause_summary[:500] if triage.root_cause_summary else "See triage report."
+    expected_error = f"KeyError, ERROR provisioning status, or exception related to: {triage.bug_title}"
+
+    prompt = template.format(
+        bug_number=triage.bug_number,
+        bug_title=triage.bug_title,
+        root_cause=root_cause,
+        expected_error=expected_error,
+        script=script[:3000],
+        exit_code=result.exit_code,
+        execution_time=result.execution_time,
+        timeout_exceeded=result.timeout_exceeded,
+        stdout=result.stdout[-3000:],
+        stderr=result.stderr[-1000:],
+    )
+
+    try:
+        _client = create_model_client(config)
+        _res = await _client.query(prompt=prompt)
+        first_line = _res.text.strip().splitlines()[0].strip().upper()
+        confirmed = first_line.startswith("YES")
+        verdict = "confirmed" if confirmed else "not confirmed"
+        print(f"   🔍 Audit: bug reproduction {verdict} — {_res.text.strip()[:120]}")
+        return confirmed
+    except Exception as exc:
+        # If the audit itself fails, err on the side of caution.
+        print(f"   ⚠️ Audit failed ({exc}), treating exit-0 as unconfirmed")
+        return False
+
+
 def extract_script_from_response(response: str) -> str:
     """
     Extract bash script from Claude's response.
