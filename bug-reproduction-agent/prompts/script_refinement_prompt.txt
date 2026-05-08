@@ -50,4 +50,12 @@ REQUIREMENTS:
 - Add status checking loops (e.g., "while status != ACTIVE; do sleep 1; done")
 - Include all fixes in comments so the next attempt understands what changed
 
-Generate the refined bash script below (complete script with shebang):
+RESPONSE FORMAT:
+First, write a brief analysis (3-5 sentences) covering:
+- Your diagnosis of exactly why the previous attempt failed (be specific about the error or symptom)
+- The concrete changes you are making to the script to fix it
+- Why those changes should allow the bug to be triggered this time
+
+Then write the complete refined bash script.
+
+Generate your analysis and the complete refined script below:

@@ -4,8 +4,9 @@ Script generation and refinement functionality.
 Generates reproduction scripts from triage reports and refines them using AI
 after failures.
 """
+import re
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 from agents_lib import load_prompt_template, create_model_client
 from triage_parser import TriageReport
 from script_executor import ExecutionResult
@@ -57,7 +58,8 @@ async def generate_initial_script(
         'duration_ms': _res.duration_ms,
     }
     script = extract_script_from_response(_res.text)
-    return script, usage_dict
+    reasoning = extract_reasoning_from_response(_res.text)
+    return script, reasoning, usage_dict
 
 
 async def refine_script(
@@ -108,7 +110,52 @@ async def refine_script(
         'duration_ms': _res.duration_ms,
     }
     script = extract_script_from_response(_res.text)
-    return script, usage_dict
+    reasoning = extract_reasoning_from_response(_res.text)
+    return script, reasoning, usage_dict
+
+
+def extract_reasoning_from_response(response: str) -> Optional[str]:
+    """
+    Extract the agent's plain-text reasoning from a script generation response.
+
+    The response is expected to contain a brief explanation followed by a
+    ```bash code block. This function returns the text that appears before
+    the first code block, stripped of leading/trailing whitespace.
+
+    Returns None if no meaningful reasoning text is found.
+    """
+    # Split on the first code fence
+    parts = re.split(r'```(?:bash)?', response, maxsplit=1)
+    if not parts:
+        return None
+    before_code = parts[0].strip()
+    if len(before_code) < 20:  # Too short to be meaningful
+        return None
+    return before_code
+
+
+def extract_script_changelog(script: str) -> Optional[str]:
+    """
+    Extract the changelog comment block from a refined reproduction script.
+
+    Well-formed refinement scripts include a block like:
+        # Attempt N changes vs Attempt N-1:
+        #   - Added longer wait for LB ACTIVE
+        #   - Changed member network to use correct subnet
+
+    Returns the changelog text, or None if not found.
+    """
+    match = re.search(
+        r'(#\s*Attempt\s+\d+\s+changes.*?)(?=\n[^#]|\Z)',
+        script,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if not match:
+        return None
+    # Strip leading # from each line for readability
+    lines = match.group(1).splitlines()
+    cleaned = [re.sub(r'^#\s?', '', ln) for ln in lines]
+    return '\n'.join(cleaned).strip()
 
 
 async def audit_reproduction(
@@ -116,6 +163,7 @@ async def audit_reproduction(
     result: ExecutionResult,
     triage: TriageReport,
     config: Dict,
+    reasoning: Optional[str] = None,
 ) -> bool:
     """
     Ask the AI to verify that the script output actually demonstrates the bug.
@@ -152,11 +200,18 @@ async def audit_reproduction(
         f"Root cause: {root_cause[:200]}"
     )
 
+    agent_reasoning_section = (
+        f"\n## Agent's Stated Approach\n\n{reasoning}\n"
+        if reasoning
+        else ""
+    )
+
     prompt = template.format(
         bug_number=triage.bug_number,
         bug_title=triage.bug_title,
         root_cause=root_cause,
         expected_error=expected_error,
+        agent_reasoning=agent_reasoning_section,
         script=script[:3000],
         exit_code=result.exit_code,
         execution_time=result.execution_time,
@@ -191,8 +246,6 @@ def extract_script_from_response(response: str) -> str:
     Returns:
         Extracted script content
     """
-    import re
-
     # Try to find bash code block
     pattern = r'```bash\n(.*?)\n```'
     match = re.search(pattern, response, re.DOTALL)
