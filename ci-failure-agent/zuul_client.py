@@ -80,6 +80,8 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
             continue
         try:
             end_time = datetime.fromisoformat(end_time_str.replace("Z", "+00:00"))
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
             if end_time >= cutoff_time:
                 recent.append(build)
         except (ValueError, AttributeError):
