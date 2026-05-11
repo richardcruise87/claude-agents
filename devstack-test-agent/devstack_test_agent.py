@@ -18,6 +18,7 @@ from agents_lib import (
     check_devstack_health,
     devstack_lock,
     get_unique_resource_prefix,
+    load_context_section,
     notify_report,
     load_notifications_config,
     create_model_client,
@@ -101,8 +102,7 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
             )
 
             # Prepend cross-run context
-            from agents_lib import load_context_section as _lcs  # pylint: disable=import-outside-toplevel
-            _ctx = _lcs(config, "devstack_test")
+            _ctx = load_context_section(config, "devstack_test")
             if _ctx:
                 prompt = _ctx + "\n\n---\n\n" + prompt
 

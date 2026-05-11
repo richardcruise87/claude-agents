@@ -52,7 +52,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import load_config
 from prompts import get_ci_failure_prompt
-from agents_lib import format_usage_info, create_forge_client, sanitize_for_forge
+from agents_lib import format_usage_info, create_forge_client, load_context_section, sanitize_for_forge
 from agents_lib.utils import slugify
 
 CONFIG = load_config()
@@ -191,8 +191,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         save_path=str(report_file),
     )
 
-    from agents_lib import load_context_section as _lcs  # pylint: disable=import-outside-toplevel
-    _ctx = _lcs(CONFIG, "ci_failure")
+    _ctx = load_context_section(CONFIG, "ci_failure")
     if _ctx:
         prompt = _ctx + "\n\n---\n\n" + prompt
 
