@@ -25,6 +25,10 @@ from agents_lib import (
     load_agent_config,
     apply_cutoff_date,
     expand_config_paths,
+    expand_context_config,
+    load_context_section,
+    generate_learning,
+    save_learning,
     notify_report,
     load_notifications_config,
 )
@@ -95,6 +99,7 @@ def load_config() -> dict:
     config = load_agent_config(_CONFIG_DIR, _ENV_OVERRIDES, _DEFAULTS)
     config = apply_cutoff_date(config, "cutoff_date", default_days=30)
     config = expand_config_paths(config, _PATH_KEYS)
+    config = expand_context_config(config)
     return config
 
 
@@ -206,6 +211,11 @@ async def propose_fix(
         feedback=feedback,
         provider=config.get("model_provider", "anthropic"),
     )
+
+    # Prepend cross-run context
+    _ctx = load_context_section(config, "fix_proposal")
+    if _ctx:
+        prompt = _ctx + "\n\n---\n\n" + prompt
 
     print("🤖 Starting fix proposal generation...\n")
 
@@ -468,6 +478,16 @@ async def main() -> None:
 
         proposed_count += 1
         print(f"\n✅ Proposal complete for bug #{bug_number} (risk: {risk_rating})")
+
+        # Save learning when this is a revised proposal (sequence > 1) — notable
+        if sequence > 1:
+            _summary = (
+                f"Revised fix proposal (sequence {sequence}) for bug #{bug_number} — {bug_title[:60]}. "
+                f"Risk: {risk_rating}."
+            )
+            _learning = await generate_learning(_summary, "Fix Proposal Agent", config)
+            if _learning:
+                save_learning(config["context"]["agent_context_file"], _learning, "Fix Proposal Agent")
 
     # -----------------------------------------------------------------------
     # Phase 2: refinement loop — process developer feedback

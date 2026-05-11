@@ -305,6 +305,10 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
 
     print(f"📄 Triage will be saved to: {triage_file.name}\n")
 
+    # Load cross-run context (rules + global + agent learnings)
+    from agents_lib import load_context_section  # pylint: disable=import-outside-toplevel
+    _context_section = load_context_section(CONFIG, "bug_triage")
+
     # Get the prompt
     _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_bug_triage_prompt(
@@ -324,6 +328,9 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         previous_sequence=previous_seq,
         provider=_provider,
     )
+
+    if _context_section:
+        prompt = _context_section + "\n\n---\n\n" + prompt
 
     print("🤖 Starting bug triage analysis...\n")
 
@@ -396,6 +403,16 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         )
 
         _post_bug_feedback(bug_info, triage_file, CONFIG)
+
+        # Save learning (always for bug triage — every triage is informative)
+        from agents_lib import generate_learning, save_learning  # pylint: disable=import-outside-toplevel
+        _summary = (
+            f"Bug #{bug_number} — {bug_title}. "
+            f"Status: {bug_info.get('status')}. Importance: {bug_info.get('importance')}. Sequence {sequence}."
+        )
+        _learning = await generate_learning(_summary, "Bug Triage Agent", CONFIG)
+        if _learning:
+            save_learning(CONFIG["context"]["agent_context_file"], _learning, "Bug Triage Agent")
 
         return triage_file
 

@@ -4,7 +4,7 @@ Configuration management for the bug triage agent.
 Loads configuration from config.json or environment variables.
 """
 from pathlib import Path
-from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths
+from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths, expand_context_config
 
 
 def load_config():
@@ -56,6 +56,7 @@ def load_config():
         "access_token_secret_env", "LAUNCHPAD_ACCESS_TOKEN_SECRET"
     )
 
+    config = expand_context_config(config)
     return config
 
 

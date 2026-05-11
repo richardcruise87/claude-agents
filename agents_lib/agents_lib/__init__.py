@@ -51,6 +51,12 @@ from .review_history import (
     find_previous_reviews,
     load_previous_review_context,
 )
+from .context_manager import (
+    expand_context_config,
+    load_context_section,
+    generate_learning,
+    save_learning,
+)
 
 __all__ = [
     "expand_path",
@@ -99,4 +105,8 @@ __all__ = [
     "create_review_filename",
     "find_previous_reviews",
     "load_previous_review_context",
+    "expand_context_config",
+    "load_context_section",
+    "generate_learning",
+    "save_learning",
 ]

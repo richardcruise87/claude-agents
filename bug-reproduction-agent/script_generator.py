@@ -14,7 +14,8 @@ from script_executor import ExecutionResult
 
 async def generate_initial_script(
     triage: TriageReport,
-    config: Dict
+    config: Dict,
+    context_section: str = "",
 ) -> tuple:
     """
     Generate initial reproduction script from triage report.
@@ -47,6 +48,10 @@ async def generate_initial_script(
         openrc_file=openrc_file,
         devstack_path=devstack_path
     )
+
+    # Prepend cross-run context (rules, global learnings, agent learnings)
+    if context_section:
+        prompt = context_section + "\n\n---\n\n" + prompt
 
     # Use model client to generate script (no tools needed — text-only task)
     _client = create_model_client(config)

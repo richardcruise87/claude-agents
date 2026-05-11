@@ -32,12 +32,20 @@
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
   },
-
   "feedback": {
     "post_to_launchpad": false,
     "consumer_key_env": "LAUNCHPAD_CONSUMER_KEY",
     "access_token_env": "LAUNCHPAD_ACCESS_TOKEN",
     "access_token_secret_env": "LAUNCHPAD_ACCESS_TOKEN_SECRET",
     "comment": "post_to_launchpad: post the triage report as a comment on the Launchpad bug. Requires OAuth 1.0a credentials. Run once to obtain tokens: python3 -c \"from launchpadlib.launchpad import Launchpad; lp = Launchpad.login_with('octavia-triage-agent', 'production', version='devel'); print('LAUNCHPAD_ACCESS_TOKEN=' + lp.credentials.access_token.key); print('LAUNCHPAD_ACCESS_TOKEN_SECRET=' + lp.credentials.access_token.secret)\""
+  },
+  "context": {
+    "rules_file": "~/.claude-agents/rules.md",
+    "global_context_file": "~/.claude-agents/global_context.md",
+    "agent_context_file": "~/.claude-agents/bug_triage_context.md",
+    "extra_files": [],
+    "max_chars_per_file": 2000,
+    "save_learnings": true,
+    "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
   }
 }

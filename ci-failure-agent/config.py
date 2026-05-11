@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agents_lib import load_agent_config, expand_config_paths
+from agents_lib import load_agent_config, expand_config_paths, expand_context_config
 from agents_lib.utils import expand_path
 
 CONFIG_DIR = Path(__file__).parent
@@ -74,7 +74,7 @@ def load_config():
     # Resolve forge base_url: fall back to gerrit.base_url
     forge_base_url = forge_cfg.get("base_url") or gerrit.get("base_url", "https://review.opendev.org")
 
-    return {
+    _cfg = {
         "model": config.get("model", "claude-sonnet-4-6"),
         "model_provider": config.get("model_provider", "anthropic"),
         "repositories": config.get("repositories", ["openstack/octavia"]),
@@ -96,6 +96,7 @@ def load_config():
         "feedback_enabled": feedback_cfg.get("post_to_forge", False),
         "feedback_voting": feedback_cfg.get("enable_voting", False),
     }
+    return expand_context_config(_cfg)
 
 
 if __name__ == "__main__":
