@@ -1,0 +1,66 @@
+You are analysing the output of a bug verification script to determine why it failed.
+
+The verification script applies a proposed fix and then re-runs the original bug
+reproduction script. A failure means either:
+  (a) The bug still triggered despite the fix (FIX_FAILURE), or
+  (b) The environment had an infrastructure problem unrelated to the fix (ENVIRONMENTAL)
+
+## Bug Details
+
+**Bug #{bug_number}**: {bug_title}
+
+**Root Cause (from triage):**
+{root_cause}
+
+**Patch Applied:**
+{patch_description}
+
+## Script Execution Results
+
+**Exit code:** {exit_code}
+**Execution time:** {execution_time:.1f}s
+**Timeout exceeded:** {timeout_exceeded}
+
+**Standard Output:**
+```
+{stdout}
+```
+
+**Standard Error:**
+```
+{stderr}
+```
+
+## Your Task
+
+Classify the failure and explain your reasoning. Answer with exactly one of these
+labels on the first line:
+
+  FIX_FAILURE
+  ENVIRONMENTAL
+  INCONCLUSIVE
+
+Then write 2-4 sentences explaining:
+- What specific evidence in the output led you to this classification
+- For FIX_FAILURE: what the output shows about why the fix did not work
+- For ENVIRONMENTAL: what infrastructure issue occurred and why retrying may help
+- For INCONCLUSIVE: what is ambiguous and what additional information would help
+
+**FIX_FAILURE indicators:**
+- The bug exception / error still appears in the output (KeyError, AssertionError, etc.)
+- A member or load balancer reached ERROR provisioning status (the bug symptom)
+- The reproduction script's "BUG REPRODUCED" marker is present
+- The patch was applied but caused a different failure in the patched code path
+
+**ENVIRONMENTAL indicators:**
+- Keystone authentication failure (HTTP 401/503)
+- OpenStack service unavailable or returning 5xx errors
+- Network connectivity errors (connection refused, host unreachable)
+- DevStack service crashed or not running
+- Disk space exhausted
+- Script timeout on operations that should be fast (suggests service hang)
+
+**INCONCLUSIVE indicators:**
+- Script exited with an error before reaching the relevant code path
+- Missing resources from a prior test run (leftover state)
+- Unclear whether failure is in the fix or the environment
