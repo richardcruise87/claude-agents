@@ -1,0 +1,31 @@
+{
+  "comment": "Copy this file to config.json and customise for your environment",
+  "model": "claude-sonnet-4-6",
+  "model_provider": "anthropic",
+  "fix_proposals_dir": "~/octavia_fix_proposals",
+  "reproduction_reports_dir": "~/octavia_bug_reproductions",
+  "verifications_output_dir": "~/octavia_fix_verifications",
+  "verification_tracking_file": "~/.octavia_fix_verifications.json",
+  "devstack_path": "/opt/stack",
+  "launchpad_project": "octavia",
+  "max_proposals_per_run": 2,
+  "cutoff_date": null,
+  "comment_cutoff": "null = 30 days ago; set to YYYY-MM-DD to override",
+  "verification": {
+    "max_attempts": 3,
+    "script_timeout": 600,
+    "retry_delay_seconds": 60,
+    "comment_retries": "Environmental failures are retried; fix failures stop immediately"
+  },
+  "feedback": {
+    "post_to_launchpad": false,
+    "comment_feedback": "Post verification result as a Launchpad bug comment",
+    "consumer_key_env": "LAUNCHPAD_CONSUMER_KEY",
+    "access_token_env": "LAUNCHPAD_ACCESS_TOKEN",
+    "access_token_secret_env": "LAUNCHPAD_ACCESS_TOKEN_SECRET"
+  },
+  "notifications": {
+    "enabled": true,
+    "comment": "Set enabled=true and configure notifications.json in repo root"
+  }
+}

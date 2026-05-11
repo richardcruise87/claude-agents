@@ -15,7 +15,7 @@ INSTALL_SYSTEMD=""
 SETUP_NOTIFICATIONS=""
 SELECTED_AGENTS=()
 
-ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test" "jira-triage" "fix-proposal")
+ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test" "jira-triage" "fix-proposal" "fix-verification")
 
 get_agent_dir() {
     case $1 in
@@ -26,6 +26,7 @@ get_agent_dir() {
         devstack-test)    echo "devstack-test-agent" ;;
         jira-triage)      echo "jira-triage-agent" ;;
         fix-proposal)     echo "fix-proposal-agent" ;;
+        fix-verification) echo "fix-verification-agent" ;;
     esac
 }
 
@@ -51,6 +52,7 @@ usage() {
     echo "  devstack-test     DevStack Test Agent"
     echo "  jira-triage       JIRA Triage Agent"
     echo "  fix-proposal      Fix Proposal Agent"
+    echo "  fix-verification  Fix Verification Agent"
     echo ""
     echo "Examples:"
     echo "  $(basename "$0")                              # Install all agents"
@@ -70,7 +72,7 @@ while [[ $# -gt 0 ]]; do
         --no-notifications)  SETUP_NOTIFICATIONS=no; shift ;;
         --venv)              VENV_PATH="$2"; shift 2 ;;
         -h|--help)        usage; exit 0 ;;
-        bug-triage|code-review|bug-reproduction|ci-failure|devstack-test|jira-triage|fix-proposal)
+        bug-triage|code-review|bug-reproduction|ci-failure|devstack-test|jira-triage|fix-proposal|fix-verification)
                           SELECTED_AGENTS+=("$1"); shift ;;
         *)
             echo -e "${RED}ERROR${NC}: Unknown argument: $1"
@@ -303,6 +305,8 @@ if ! $UPDATE_MODE; then
                     echo "     systemctl --user enable --now octavia-jira-triage.timer" ;;
                 fix-proposal)
                     echo "     systemctl --user enable --now octavia-fix-proposal.timer" ;;
+                fix-verification)
+                    echo "     systemctl --user enable --now octavia-fix-verification.timer" ;;
             esac
         done
         echo ""
@@ -319,6 +323,7 @@ if ! $UPDATE_MODE; then
                 devstack-test)    echo "     $VENV_PATH/bin/octavia-devstack-test" ;;
                 jira-triage)      echo "     $VENV_PATH/bin/octavia-jira-triage" ;;
                 fix-proposal)     echo "     $VENV_PATH/bin/octavia-propose-fix" ;;
+                fix-verification) echo "     $VENV_PATH/bin/octavia-verify-fix" ;;
             esac
         done
         echo ""

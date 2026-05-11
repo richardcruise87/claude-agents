@@ -1,0 +1,26 @@
+[Unit]
+Description=Octavia Fix Verification Agent
+Documentation=https://github.com/richardcruise87/claude-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/git/claude-agents/fix-verification-agent
+
+ExecStart=%h/.venv/claude-agents/bin/octavia-verify-fix
+
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="CLAUDE_MODEL=claude-sonnet-4-6"
+Environment="PYTHONUNBUFFERED=1"
+# Environment="MAX_PROPOSALS=2"
+# Environment="CUTOFF_DATE=2026-01-01"
+
+StandardOutput=append:%h/octavia-logs/octavia-fix-verification.log
+StandardError=append:%h/octavia-logs/octavia-fix-verification.log
+SyslogIdentifier=octavia-fix-verification
+
+TimeoutSec=10800
+
+[Install]
+WantedBy=default.target
