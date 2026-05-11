@@ -153,11 +153,7 @@ def generate_report(
 
     # How the bug was reproduced summary
     if final_status == "REPRODUCED" and reasonings:
-        final_reasoning = next(
-            (reasonings[i] for i in range(len(attempts) - 1, -1, -1)
-             if i < len(reasonings) and reasonings[i]),
-            None,
-        )
+        final_reasoning = next((r for r in reversed(reasonings) if r), None)
         lines.append("## How the Bug Was Reproduced")
         lines.append("")
         suffix = "See the agent's final analysis below." if final_reasoning else ""
