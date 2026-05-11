@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import re
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -233,11 +234,19 @@ async def run_verification(
     Returns (final_status, report_file, analyses_list).
     final_status is one of: RESOLVED | NOT_RESOLVED | ENVIRONMENTAL_ERROR
     """
-    # Import execute_script from the bug-reproduction-agent via sys.path
+    # execute_script lives in the sibling bug-reproduction-agent package.
+    # Add it to sys.path if not already present.
     repro_agent_dir = str(Path(__file__).parent.parent / "bug-reproduction-agent")
     if repro_agent_dir not in sys.path:
         sys.path.insert(0, repro_agent_dir)
-    from script_executor import execute_script  # pylint: disable=import-outside-toplevel
+    try:
+        from script_executor import execute_script  # pylint: disable=import-outside-toplevel
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import execute_script from bug-reproduction-agent. "
+            "Ensure bug-reproduction-agent is installed alongside this agent "
+            f"(expected at: {repro_agent_dir})."
+        ) from exc
 
     ver_cfg = config.get("verification", {})
     max_attempts = int(ver_cfg.get("max_attempts", 3))
@@ -277,9 +286,14 @@ async def run_verification(
 
             print(f"   Exit code: {result.exit_code} | Time: {result.execution_time:.1f}s")
 
-            # Check if bug no longer triggers (fix works)
+            # Check if bug no longer triggers (fix works).
+            # The reproduction script convention is:
+            #   exit 0  — bug WAS reproduced (with BUG REPRODUCED marker)
+            #   exit 1  — bug NOT reproduced (fix works)
+            # Accept either exit code as RESOLVED provided the bug marker is absent
+            # and the script did not time out (which would be inconclusive).
             bug_still_fires = "BUG REPRODUCED" in result.stdout.upper()
-            if result.exit_code == 0 and not bug_still_fires:
+            if not bug_still_fires and not result.timeout_exceeded and result.exit_code in (0, 1):
                 print("   ✅ Bug no longer triggers — fix RESOLVED!")
                 attempts_data.append((result, None))
                 final_status = "RESOLVED"
@@ -313,7 +327,7 @@ async def run_verification(
 
             # ENVIRONMENTAL or INCONCLUSIVE
             decision = (
-                f"RETRY ({attempt}/{max_attempts - 1} retries remaining)"
+                f"RETRY ({max_attempts - attempt} retries remaining)"
                 if attempt < max_attempts
                 else "STOP — max attempts reached"
             )
@@ -465,7 +479,6 @@ async def run_automated(config: dict) -> None:
             continue
 
         # Write patch to a temp file
-        import tempfile  # pylint: disable=import-outside-toplevel
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".patch", delete=False
         ) as pf:

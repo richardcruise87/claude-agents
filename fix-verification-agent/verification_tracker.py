@@ -4,7 +4,7 @@ Fix verification tracking functionality.
 Tracks which fix proposals have been verified, when, and their result.
 """
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 from agents_lib import (
     load_tracking_file,
@@ -99,18 +99,3 @@ def create_verification_filename(
         sequence,
         prefix="verification",
     )
-
-
-def find_previous_verifications(output_dir: Path, bug_number: str) -> List[Path]:
-    """Return all previous verification reports for a bug, sorted oldest-first."""
-    pattern = f"verification_{bug_number}_*_*.md"
-    reports = list(output_dir.glob(pattern))
-
-    def _seq(path: Path) -> int:
-        try:
-            return int(path.stem.split("_")[-1])
-        except (ValueError, IndexError):
-            return 0
-
-    reports.sort(key=_seq)
-    return reports

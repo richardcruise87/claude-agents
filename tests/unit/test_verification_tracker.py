@@ -1,7 +1,6 @@
 """Unit tests for fix-verification-agent/verification_tracker.py."""
 from verification_tracker import (
     create_verification_filename,
-    find_previous_verifications,
     load_verification_history,
     record_verification,
     should_verify_proposal,
@@ -77,22 +76,3 @@ class TestCreateVerificationFilename:
     def test_sequence_in_name(self, tmp_path):
         path = create_verification_filename(tmp_path, "99", "Some bug", 3)
         assert path.name.endswith("_3.md")
-
-
-class TestFindPreviousVerifications:
-    def test_empty_dir(self, tmp_path):
-        assert find_previous_verifications(tmp_path, "12345") == []
-
-    def test_finds_matching_files(self, tmp_path):
-        (tmp_path / "verification_12345_title_20260511_143022_1.md").write_text("")
-        (tmp_path / "verification_12345_title_20260511_150000_2.md").write_text("")
-        results = find_previous_verifications(tmp_path, "12345")
-        assert len(results) == 2
-        assert results[0].stem.endswith("_1")
-        assert results[1].stem.endswith("_2")
-
-    def test_does_not_match_other_bugs(self, tmp_path):
-        (tmp_path / "verification_12345_title_20260511_143022_1.md").write_text("")
-        (tmp_path / "verification_99999_title_20260511_143022_1.md").write_text("")
-        results = find_previous_verifications(tmp_path, "12345")
-        assert len(results) == 1
