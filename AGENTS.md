@@ -6,9 +6,9 @@ version: 1.0
 
 # Claude Agents
 
-Seven specialised AI agents for OpenStack Octavia maintenance — bug triage,
+Eight specialised AI agents for OpenStack Octavia maintenance — bug triage,
 code review, CI failure analysis, bug reproduction, DevStack integration
-testing, JIRA issue triage, and fix proposal generation.  All agents share a common virtual environment,
+testing, JIRA issue triage, fix proposal generation, and fix verification.  All agents share a common virtual environment,
 a unified install script, and optional multi-channel notifications.
 
 > **AI assistant note**: When a user in this repo asks you to triage a bug,
@@ -290,6 +290,57 @@ reads and deletes it on the next run and produces a revised proposal.
 
 ---
 
+### Fix Verification Agent
+
+Applies a proposed fix and re-runs the confirmed bug reproduction script to
+verify whether the fix resolves the bug. Supports automated operation and
+manual invocation by a developer testing their own fix.
+
+**When to use**: after a fix proposal is generated, or when a developer wants
+to validate their own fix against the reproduction test before submitting.
+
+**Commands**:
+```bash
+# Automated mode (processes new fix proposals)
+octavia-verify-fix
+
+# Manual mode — verify a local patch file
+octavia-verify-fix --bug 2150752 --patch ~/my-fix.patch
+
+# Manual mode — verify a local git branch
+octavia-verify-fix --bug 2150752 --branch fix/my-branch
+
+# Manual mode — verify a Gerrit change
+octavia-verify-fix --bug 2150752 --gerrit 987701
+
+# Manual mode — fix already applied, just re-run the reproduction test
+octavia-verify-fix --bug 2150752 --already-applied
+```
+
+**Configuration** (`fix-verification-agent/config.json`):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `fix_proposals_dir` | `~/octavia_fix_proposals` | Fix proposal files to verify |
+| `reproduction_reports_dir` | `~/octavia_bug_reproductions` | Reproduction reports/scripts |
+| `verifications_output_dir` | `~/octavia_fix_verifications` | Where to save reports |
+| `verification.max_attempts` | `3` | Max retries for environmental failures |
+| `verification.script_timeout` | `600` | Per-attempt timeout in seconds |
+| `verification.retry_delay_seconds` | `60` | Wait between environmental retries |
+| `feedback.post_to_launchpad` | `false` | Post result as Launchpad comment |
+
+**Retry behaviour**: environmental failures (service down, API timeout) are retried up
+to `max_attempts`; fix failures stop immediately.
+
+**Output**: `~/octavia_fix_verifications/verification_<number>_<title>_<timestamp>.md`
+
+**Tracking file**: `~/.octavia_fix_verifications.json`
+
+**Feedback loop**: on `NOT_RESOLVED`, automatically writes
+`fix_proposal_{bug_number}_feedback.txt` so the Fix Proposal Agent generates a revised fix.
+
+---
+
 ## Shared configuration
 
 All agents share these top-level `config.json` keys:
@@ -313,7 +364,7 @@ Then `pip install openai` and set `OPENAI_API_KEY`.
 ```bash
 pip install tox
 
-tox -e unit        # 386 unit tests — fast, no network required
+tox -e unit        # 400 unit tests — fast, no network required
 tox -e functional  # end-to-end flow tests
 tox -e pep8        # flake8 + pylint (10.00/10 score)
 tox                # run everything
@@ -359,6 +410,7 @@ systemctl --user enable --now octavia-ci-failure.timer      # every 4 hours
 systemctl --user enable --now octavia-bug-reproduction.path
 systemctl --user enable --now octavia-devstack-test.path
 systemctl --user enable --now octavia-fix-proposal.timer        # daily at 15:00
+systemctl --user enable --now octavia-fix-verification.timer    # daily at 17:00
 
 # Persist services across logout
 loginctl enable-linger $USER

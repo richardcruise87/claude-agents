@@ -4,6 +4,37 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-11
+
+### Added: Fix Verification Agent
+
+New `fix-verification-agent` applies a proposed fix and re-runs the confirmed
+bug reproduction script to verify whether the fix resolves the bug.
+
+**Smart retry logic** (key difference from Bug Reproduction Agent):
+- `FIX_FAILURE` — bug still triggers after patch → stop immediately (no point retrying)
+- `ENVIRONMENTAL` — service down, API timeout, etc. → retry up to `max_attempts`
+- `INCONCLUSIVE` — ambiguous → stop (safe default)
+
+**Patch sources** (manual mode via `--bug N` CLI flag):
+- `--patch FILE` — apply a local unified diff file
+- `--branch NAME` — checkout a local git branch
+- `--gerrit CHANGE` — fetch and checkout a Gerrit change
+- `--already-applied` — skip patch step, just re-run the reproduction test
+
+**Automated mode**: watches `~/octavia_fix_proposals/` for new proposals, applies
+the embedded patch, and verifies. On `NOT_RESOLVED`, writes
+`fix_proposal_{N}_feedback.txt` so the Fix Proposal Agent generates a revised fix.
+
+**Launchpad posting**: optional (`feedback.post_to_launchpad: false` by default).
+Distinct messages for RESOLVED / NOT_RESOLVED / ENVIRONMENTAL_ERROR (the last
+makes clear that infrastructure issues are not a verdict on the fix).
+
+**New files:** `fix-verification-agent/` directory, 11 new unit tests,
+`systemd/octavia-fix-verification.{service,timer}` (daily at 17:00, 3h timeout)
+
+---
+
 ## 2026-05-07
 
 ### Added: Fix Proposal Agent

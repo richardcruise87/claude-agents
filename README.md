@@ -160,6 +160,43 @@ octavia-propose-fix
 
 ---
 
+### [Fix Verification Agent](fix-verification-agent/)
+
+Applies a proposed fix and re-runs the confirmed reproduction script to determine
+whether the fix actually resolves the bug. Supports both automated operation and manual
+invocation by a developer testing their own fix.
+
+**Features:**
+- Applies the patch, re-runs the reproduction script, and reports RESOLVED / NOT_RESOLVED
+- **Smart retry logic**: environmental failures (service down, API timeout) are retried;
+  fix failures stop immediately — retrying won't change the result
+- AI analyses each failure to classify it as `FIX_FAILURE` or `ENVIRONMENTAL`
+- On `NOT_RESOLVED`: automatically writes feedback for the Fix Proposal Agent to generate a revised fix
+- Optional: post verification result to Launchpad (off by default)
+
+**Commands:**
+```bash
+# Automated mode (processes new fix proposals)
+octavia-verify-fix
+
+# Manual mode — verify a local patch file
+octavia-verify-fix --bug 2150752 --patch ~/my-fix.patch
+
+# Manual mode — verify a local git branch
+octavia-verify-fix --bug 2150752 --branch fix/my-branch
+
+# Manual mode — verify a Gerrit change
+octavia-verify-fix --bug 2150752 --gerrit 987701
+
+# Manual mode — fix already applied, just re-run reproduction test
+octavia-verify-fix --bug 2150752 --already-applied
+```
+
+**Output:** `~/octavia_fix_verifications/`  
+**Schedule:** Daily at 17:00 (systemd timer)
+
+---
+
 ## Installation
 
 ### Prerequisites
@@ -204,6 +241,7 @@ pip install -e bug-reproduction-agent/
 pip install -e ci-failure-agent/
 pip install -e devstack-test-agent/
 pip install -e fix-proposal-agent/
+pip install -e fix-verification-agent/
 ```
 
 ### Available Commands After Installation
@@ -219,13 +257,15 @@ pip install -e fix-proposal-agent/
 | `octavia-devstack-test` | DevStack integration test agent |
 | `octavia-jira-triage` | JIRA issue triage agent |
 | `octavia-propose-fix` | Fix proposal agent |
+| `octavia-verify-fix` | Fix verification agent |
+| `octavia-verify-fix --bug N --patch FILE` | Verify a local patch against bug N's reproduction test |
 
 ### Configuration
 
 Each agent requires a `config.json` (created from the sample template):
 
 ```bash
-for agent in bug-triage-agent code-review-agent ci-failure-agent bug-reproduction-agent devstack-test-agent jira-triage-agent fix-proposal-agent; do
+for agent in bug-triage-agent code-review-agent ci-failure-agent bug-reproduction-agent devstack-test-agent jira-triage-agent fix-proposal-agent fix-verification-agent; do
     cp $agent/config.sample.json $agent/config.json
     # Edit $agent/config.json with your settings
 done
@@ -390,6 +430,7 @@ loginctl enable-linger $USER
 | `octavia-ci-failure.timer` | Every 4 hours | Time-based |
 | `octavia-bug-reproduction.path` | Immediately | New triage report (inotify) |
 | `octavia-fix-proposal.timer` | Daily at 15:00 | Time-based |
+| `octavia-fix-verification.timer` | Daily at 17:00 | Time-based |
 
 ### Useful Commands
 
@@ -497,6 +538,7 @@ claude-agents/
 │   ├── install.sh
 │   └── systemd/
 ├── fix-proposal-agent/          AI fix proposals with risk rating
+├── fix-verification-agent/      Fix verification against reproduction scripts
 │   ├── install.sh
 │   └── systemd/
 ├── setup-agents.sh              Install / update all agents
