@@ -161,6 +161,12 @@ def save_learning(context_file: str, learning: str, agent_name: str) -> None:
 
     Creates the file and parent directories if they do not exist.
 
+    Note on priority: load_context_section() reads from the *start* of each
+    file and caps at max_chars_per_file, so older entries are read first.
+    This gives earlier learnings higher effective priority. If you want recent
+    entries to take precedence, manually move them to the top of the file, or
+    lower max_chars_per_file so old entries are trimmed sooner.
+
     Args:
         context_file: Path to the agent context markdown file.
         agent_name:   Human-readable agent name for the entry header.

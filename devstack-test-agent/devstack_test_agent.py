@@ -100,6 +100,12 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
                 current_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
 
+            # Prepend cross-run context
+            from agents_lib import load_context_section as _lcs  # pylint: disable=import-outside-toplevel
+            _ctx = _lcs(config, "devstack_test")
+            if _ctx:
+                prompt = _ctx + "\n\n---\n\n" + prompt
+
             print("🤖 Starting DevStack integration testing...\n")
 
             # Run test with AI agent

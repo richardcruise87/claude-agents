@@ -246,7 +246,8 @@ async def process_triage(triage_file: Path) -> bool:
                         previous_result,
                         attempt,
                         triage,
-                        CONFIG
+                        CONFIG,
+                        context_section=context_section,
                     )
                 except Exception as e:
                     print(f"   ⚠️ AI refinement failed: {e}")

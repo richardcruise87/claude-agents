@@ -191,6 +191,11 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         save_path=str(report_file),
     )
 
+    from agents_lib import load_context_section as _lcs  # pylint: disable=import-outside-toplevel
+    _ctx = _lcs(CONFIG, "ci_failure")
+    if _ctx:
+        prompt = _ctx + "\n\n---\n\n" + prompt
+
     if print_prompt:
         print("=" * 80)
         print("FORMATTED PROMPT (--print-prompt mode)")

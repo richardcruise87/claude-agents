@@ -72,7 +72,8 @@ async def refine_script(
     execution_result: ExecutionResult,
     attempt_number: int,
     triage: TriageReport,
-    config: Dict
+    config: Dict,
+    context_section: str = "",
 ) -> tuple:
     """
     AI-powered script refinement after failure.
@@ -104,6 +105,10 @@ async def refine_script(
         stdout=execution_result.stdout[-5000:],  # Last 5000 chars
         stderr=execution_result.stderr[-2000:]  # Last 2000 chars
     )
+
+    # Prepend cross-run context (rules, global learnings, agent learnings)
+    if context_section:
+        prompt = context_section + "\n\n---\n\n" + prompt
 
     # Use model client to refine script (no tools needed — text-only task)
     _client = create_model_client(config)

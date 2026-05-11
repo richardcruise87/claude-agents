@@ -29,6 +29,7 @@ from prompts import get_jira_planning_prompt
 from agents_lib import build_feedback_comment
 from agents_lib import create_model_client
 from agents_lib import format_usage_info
+from agents_lib import load_context_section
 from agents_lib import load_notifications_config
 from agents_lib import notify_report
 
@@ -130,6 +131,10 @@ async def process_bug(issue: dict, sequence: int, save_path: str) -> None:
         save_path=save_path,
     )
 
+    _ctx = load_context_section(CONFIG, "jira_triage")
+    if _ctx:
+        prompt = _ctx + "\n\n---\n\n" + prompt
+
     print(f"🤖 Starting bug triage for {JiraClient.issue_key(issue)}...\n")
 
     model_client = create_model_client(CONFIG)
@@ -173,6 +178,10 @@ async def process_plan(issue: dict, sequence: int, save_path: str) -> None:
         provider=_provider,
         save_path=save_path,
     )
+
+    _ctx = load_context_section(CONFIG, "jira_triage")
+    if _ctx:
+        prompt = _ctx + "\n\n---\n\n" + prompt
 
     print(f"🤖 Producing implementation plan for {JiraClient.issue_key(issue)}...\n")
 

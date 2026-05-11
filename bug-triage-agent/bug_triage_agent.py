@@ -27,6 +27,9 @@ from agents_lib import (
     load_notifications_config,
     create_model_client,
     format_usage_info,
+    load_context_section,
+    generate_learning,
+    save_learning,
 )
 from bug_tracker import (
     load_triage_history,
@@ -306,7 +309,6 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
     print(f"📄 Triage will be saved to: {triage_file.name}\n")
 
     # Load cross-run context (rules + global + agent learnings)
-    from agents_lib import load_context_section  # pylint: disable=import-outside-toplevel
     _context_section = load_context_section(CONFIG, "bug_triage")
 
     # Get the prompt
@@ -404,11 +406,15 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
 
         _post_bug_feedback(bug_info, triage_file, CONFIG)
 
-        # Save learning (always for bug triage — every triage is informative)
-        from agents_lib import generate_learning, save_learning  # pylint: disable=import-outside-toplevel
+        # Save learning (always for bug triage — every triage is informative).
+        # Include the first part of the triage result so the model has substance to summarise.
+        _triage_excerpt = ""
+        if triage_file.exists():
+            _triage_excerpt = triage_file.read_text(encoding="utf-8")[:400]
         _summary = (
             f"Bug #{bug_number} — {bug_title}. "
-            f"Status: {bug_info.get('status')}. Importance: {bug_info.get('importance')}. Sequence {sequence}."
+            f"Status: {bug_info.get('status')}. Importance: {bug_info.get('importance')}. "
+            f"Sequence {sequence}. Excerpt: {_triage_excerpt}"
         )
         _learning = await generate_learning(_summary, "Bug Triage Agent", CONFIG)
         if _learning:

@@ -322,6 +322,7 @@ async def run_verification(
                 root_cause=root_cause,
                 patch_description=patch_source.description,
                 config=config,
+                context_section=_ctx,
             )
 
             print(f"   🔍 Cause: {analysis.cause}")

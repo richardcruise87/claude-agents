@@ -30,6 +30,7 @@ async def analyse_failure(
     root_cause: str,
     patch_description: str,
     config: dict,
+    context_section: str = "",
 ) -> FailureAnalysis:
     """
     Classify a verification failure using the AI model.
@@ -64,6 +65,7 @@ async def analyse_failure(
         )
 
     # AI analysis for ambiguous cases.
+    # Prepend cross-run context so the analyser benefits from accumulated learnings.
     prompt = get_failure_analysis_prompt(
         bug_number=bug_number,
         bug_title=bug_title,
@@ -75,6 +77,9 @@ async def analyse_failure(
         stdout=stdout,
         stderr=stderr,
     )
+
+    if context_section:
+        prompt = context_section + "\n\n---\n\n" + prompt
 
     try:
         client = create_model_client(config)
