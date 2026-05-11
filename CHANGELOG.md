@@ -35,6 +35,71 @@ makes clear that infrastructure issues are not a verdict on the fix).
 
 ---
 
+## 2026-05-08
+
+### Added: AI audit step to verify bug was actually triggered before marking REPRODUCED
+
+`bug_reproduction_agent.py` was marking bugs as `REPRODUCED` whenever a script
+exited 0, even if the script was empty and did nothing — a false positive observed
+in bug #2150752 where attempt 7 consisted only of the cleanup trap.
+
+`audit_reproduction()` in `script_generator.py` now runs before any exit-0 result
+is accepted as REPRODUCED:
+1. **Fast heuristic** (no API call): `execution_time < 5s` AND `stdout < 150 chars` → reject immediately
+2. **Explicit marker** (no API call): `"BUG REPRODUCED"` in stdout → accept immediately
+3. **AI audit**: query the model with script + output; answer NO → treat as `SCRIPT_FAILURE` and continue refinement loop
+
+Also adds `prompts/script_audit_prompt.txt`. PR review feedback applied:
+- Marker check moved before heuristic (valid short-output scripts were incorrectly rejected)
+- `expected_error` derived from triage root cause instead of hardcoded Octavia-specific types
+
+---
+
+### Added: Per-attempt reasoning and final reproduction summary in reports
+
+Reproduction reports previously showed raw script output with no explanation of the
+agent's reasoning or why it changed the script between attempts.
+
+Both generation/refinement prompts now request a brief explanation before the script.
+`extract_reasoning_from_response()` captures text before the first code block.
+`extract_script_changelog()` extracts `# Attempt N changes` comment blocks.
+
+The report now includes per-attempt "Agent's Approach" / "Agent's Analysis" sections
+and a final "How the Bug Was Reproduced" summary for successful runs. The reasoning
+is also passed to the audit step so the auditor can evaluate whether the stated
+approach matches the actual output.
+
+The refinement prompt documents the exact `# Attempt N changes vs Attempt N-1:`
+format so `extract_script_changelog()` reliably finds the block.
+
+---
+
+### Fixed: ValueError unpacking attempt tuples in Final Reproduction Script section
+
+`generate_report()` stores attempts as `(script, result, usage_dict)` 3-tuples,
+but the Final Reproduction Script section iterated with `for script, result in attempts:`,
+raising `ValueError: too many values to unpack`. Fixed with starred assignment:
+`for script, result, *_ in attempts:`.
+
+---
+
+### Fixed: TypeError comparing naive and aware datetimes in zuul_client
+
+`fetch_recent_failures()` compared `end_time` (from Zuul build timestamps) against
+`cutoff_time = datetime.now(timezone.utc)`. Some Zuul builds return timestamps without
+a timezone suffix, causing `datetime.fromisoformat()` to return a naive datetime.
+Fixed by assuming UTC for any naive timestamp: `end_time.replace(tzinfo=timezone.utc)`.
+
+---
+
+### Changed: Bug reproduction service timeout increased from 1800s to 10800s
+
+The 30-minute systemd timeout was killing the bug reproduction service mid-run on
+complex bugs requiring multiple script attempts. With up to 10 attempts at 900s each
+(9000s maximum), increased to 10800s (3 hours) to give comfortable headroom.
+
+---
+
 ## 2026-05-07
 
 ### Added: Fix Proposal Agent
