@@ -1,0 +1,51 @@
+You are auditing a bug reproduction script to determine whether its output actually demonstrates the bug was triggered.
+
+## Bug Details
+
+**Bug #{bug_number}**: {bug_title}
+
+**Root Cause (from triage):**
+{root_cause}
+
+**Expected error/behaviour when bug fires:**
+{expected_error}
+
+## Script Executed
+
+```bash
+{script}
+```
+
+## Execution Results
+
+**Exit code:** {exit_code}
+**Execution time:** {execution_time:.1f}s
+**Timeout exceeded:** {timeout_exceeded}
+
+**Standard Output:**
+```
+{stdout}
+```
+
+**Standard Error:**
+```
+{stderr}
+```
+
+## Your Task
+
+Answer with exactly one word on the first line: YES or NO
+
+Then provide a single sentence explaining your reasoning.
+
+Answer YES if:
+- The output contains evidence that the specific bug condition was triggered (the KeyError, assertion failure, ERROR provisioning state, exception traceback, or whatever the bug manifests as)
+- The script ran substantive test operations and the expected failure was observed
+
+Answer NO if:
+- The output only shows setup/cleanup steps with no actual test execution
+- The script was effectively empty or only ran the cleanup trap
+- The execution time is suspiciously short for the operations the bug requires
+- There is no evidence in the output that the bug condition was reached
+
+Be strict: a script that exits 0 without demonstrating the bug is NOT a successful reproduction.

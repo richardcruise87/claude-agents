@@ -23,7 +23,12 @@ from agents_lib import (
     load_notifications_config,
 )
 from triage_parser import parse_triage_file, get_triage_timestamp
-from script_generator import generate_initial_script, refine_script, generate_fallback_script
+from script_generator import (
+    audit_reproduction,
+    generate_initial_script,
+    generate_fallback_script,
+    refine_script,
+)
 from script_executor import execute_script
 from report_generator import generate_report
 from reproduction_tracker import (
@@ -239,12 +244,18 @@ async def process_triage(triage_file: Path) -> bool:
             print(f"   Error type: {result.error_type}")
             print(f"   Execution time: {result.execution_time:.1f}s")
 
-            # Check if successful or bug reproduced
+            # Check if the script exited cleanly or has an explicit reproduction marker.
+            # Always run an audit to confirm the output actually shows the bug —
+            # an empty or trivial script can also exit 0 without triggering anything.
             if result.success or result.error_type == "BUG_REPRODUCED":
-                print("   ✅ Bug reproduced successfully!")
-                final_status = "REPRODUCED"
-                successful_script = script
-                break
+                confirmed = await audit_reproduction(script, result, triage, CONFIG)
+                if confirmed:
+                    print("   ✅ Bug reproduced and confirmed by audit!")
+                    final_status = "REPRODUCED"
+                    successful_script = script
+                    break
+                print("   ⚠️ Script exited 0 but audit found no bug evidence — treating as failure")
+                result.error_type = "SCRIPT_FAILURE"
 
             # Check if environment error
             if result.error_type == "ENVIRONMENT_ERROR":
