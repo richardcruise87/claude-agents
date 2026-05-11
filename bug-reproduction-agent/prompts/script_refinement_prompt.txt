@@ -48,7 +48,13 @@ REQUIREMENTS:
 - Keep the same safety structure (set -euo pipefail, cleanup trap)
 - Maintain the same overall approach but fix timing/status issues
 - Add status checking loops (e.g., "while status != ACTIVE; do sleep 1; done")
-- Include all fixes in comments so the next attempt understands what changed
+- Include a changelog comment block near the top of the script using this exact format
+  so the report generator can extract and display it (replace N with the attempt number):
+  ```
+  # Attempt N changes vs Attempt N-1:
+  #   - <change 1>
+  #   - <change 2>
+  ```
 
 RESPONSE FORMAT:
 First, write a brief analysis (3-5 sentences) covering:
