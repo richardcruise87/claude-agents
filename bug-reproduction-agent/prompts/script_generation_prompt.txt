@@ -51,4 +51,12 @@ source {openrc_file}
 # Exit 0 if bug reproduced, 1 if not
 ```
 
-Generate the complete bash script below (include the shebang and all sections):
+RESPONSE FORMAT:
+First, write a brief explanation (3-5 sentences) covering:
+- Your understanding of the root cause and which code path triggers the bug
+- The key steps your script will execute to reach that code path
+- How you will detect that the bug fired (exit code, output pattern, provisioning ERROR status, etc.)
+
+Then write the complete bash script.
+
+Generate your explanation and the complete bash script below:

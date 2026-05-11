@@ -9,6 +9,7 @@ from pathlib import Path
 from triage_parser import TriageReport
 from script_executor import ExecutionResult, format_execution_report
 from devstack_health import DevStackHealth, format_health_report
+from script_generator import extract_script_changelog
 
 
 def generate_report(
@@ -17,7 +18,8 @@ def generate_report(
     attempts: List[tuple],  # List of (script, ExecutionResult, usage_dict)
     final_status: str,
     final_script_path: Optional[Path] = None,
-    total_usage: Optional[dict] = None
+    total_usage: Optional[dict] = None,
+    reasonings: Optional[List[Optional[str]]] = None,
 ) -> str:
     """
     Generate comprehensive reproduction report.
@@ -94,6 +96,29 @@ def generate_report(
             script, result = attempt_data
             usage_dict = None
 
+        reasoning = reasonings[i - 1] if reasonings and i <= len(reasonings) else None
+
+        # Agent reasoning section
+        if i == 1 and reasoning:
+            lines.append(f"#### Agent's Approach (Attempt {i})")
+            lines.append("")
+            lines.append(reasoning)
+            lines.append("")
+        elif i > 1 and reasoning:
+            lines.append(f"#### Agent's Analysis (Attempt {i})")
+            lines.append("")
+            lines.append(reasoning)
+            lines.append("")
+
+        # Script changelog extracted from comments (attempt 2+)
+        if i > 1:
+            changelog = extract_script_changelog(script)
+            if changelog:
+                lines.append("#### Changes vs Previous Attempt")
+                lines.append("")
+                lines.append(changelog)
+                lines.append("")
+
         lines.append(format_execution_report(result, i))
         lines.append("")
 
@@ -125,6 +150,26 @@ def generate_report(
         lines.append("")
         lines.append(generate_root_cause_analysis(triage, attempts))
         lines.append("")
+
+    # How the bug was reproduced summary
+    if final_status == "REPRODUCED" and reasonings:
+        final_reasoning = next((r for r in reversed(reasonings) if r), None)
+        lines.append("## How the Bug Was Reproduced")
+        lines.append("")
+        suffix = "See the agent's final analysis below." if final_reasoning else ""
+        lines.append(f"The bug was confirmed after {len(attempts)} attempt(s). {suffix}".strip())
+        lines.append("")
+        if final_reasoning:
+            lines.append(final_reasoning)
+            lines.append("")
+        # Include final script changelog if present
+        final_script_text = attempts[-1][0] if attempts else ""
+        final_changelog = extract_script_changelog(final_script_text)
+        if final_changelog and len(attempts) > 1:
+            lines.append("**Key changes that made reproduction possible:**")
+            lines.append("")
+            lines.append(final_changelog)
+            lines.append("")
 
     # Final Reproduction Script (if successful)
     if final_status == "REPRODUCED" and final_script_path:

@@ -174,6 +174,7 @@ async def process_triage(triage_file: Path) -> bool:
         max_attempts = CONFIG.get("reproduction", {}).get("max_attempts", 3)
         script_timeout = CONFIG.get("reproduction", {}).get("script_timeout", 600)
         attempts = []  # List of (script, ExecutionResult, usage_dict)
+        reasonings = []  # Agent's explanation per attempt (parallel to attempts)
         final_status = "NOT_REPRODUCED"
         successful_script = None
 
@@ -194,11 +195,12 @@ async def process_triage(triage_file: Path) -> bool:
             print(f"\n🔧 Attempt {attempt}/{max_attempts}")
 
             usage_dict = {}
+            reasoning = None
             if attempt == 1:
                 # Generate initial script from triage
                 print("   Generating initial script from triage...")
                 try:
-                    script, usage_dict = await generate_initial_script(triage, CONFIG)
+                    script, reasoning, usage_dict = await generate_initial_script(triage, CONFIG)
                 except Exception as e:
                     print(f"   ⚠️ AI generation failed: {e}")
                     print("   Using fallback script...")
@@ -208,7 +210,7 @@ async def process_triage(triage_file: Path) -> bool:
                 previous_script, previous_result, _ = attempts[-1]
                 print(f"   Refining script (previous attempt: {previous_result.error_type})...")
                 try:
-                    script, usage_dict = await refine_script(
+                    script, reasoning, usage_dict = await refine_script(
                         previous_script,
                         previous_result,
                         attempt,
@@ -239,6 +241,7 @@ async def process_triage(triage_file: Path) -> bool:
             result = execute_script(script, timeout=script_timeout)
 
             attempts.append((script, result, usage_dict))
+            reasonings.append(reasoning)
 
             print(f"   Exit code: {result.exit_code}")
             print(f"   Error type: {result.error_type}")
@@ -248,7 +251,7 @@ async def process_triage(triage_file: Path) -> bool:
             # Always run an audit to confirm the output actually shows the bug —
             # an empty or trivial script can also exit 0 without triggering anything.
             if result.success or result.error_type == "BUG_REPRODUCED":
-                confirmed = await audit_reproduction(script, result, triage, CONFIG)
+                confirmed = await audit_reproduction(script, result, triage, CONFIG, reasoning)
                 if confirmed:
                     print("   ✅ Bug reproduced and confirmed by audit!")
                     final_status = "REPRODUCED"
@@ -294,7 +297,8 @@ async def process_triage(triage_file: Path) -> bool:
             attempts,
             final_status,
             script_path,
-            total_usage
+            total_usage,
+            reasonings=reasonings,
         )
 
         with open(report_file, 'w', encoding='utf-8') as f:
