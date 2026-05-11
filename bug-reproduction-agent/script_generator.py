@@ -126,17 +126,19 @@ async def audit_reproduction(
     Returns:
         True if the AI confirms the bug was triggered, False otherwise.
     """
+    # Check for the explicit marker emitted by well-formed scripts first —
+    # this must come before the heuristic so a valid script that happens to
+    # have short output (e.g. a quick API call that immediately hits the error)
+    # is not incorrectly rejected.
+    if "BUG REPRODUCED" in result.stdout.upper():
+        return True
+
     # Fast heuristic: if the output is tiny and execution trivially fast,
     # the script almost certainly did nothing meaningful (e.g. empty script
     # that only ran the cleanup trap).
-    stdout_stripped = result.stdout.strip()
-    if result.execution_time < 5.0 and len(stdout_stripped) < 150:
+    if result.execution_time < 5.0 and len(result.stdout.strip()) < 150:
         print("   🔍 Audit: output too short and execution too fast — no bug evidence")
         return False
-
-    # Check for the explicit marker emitted by well-formed scripts.
-    if "BUG REPRODUCED" in result.stdout.upper():
-        return True
 
     # Otherwise ask the AI to evaluate the output.
     prompts_dir = Path(__file__).parent / "prompts"
@@ -144,7 +146,11 @@ async def audit_reproduction(
 
     # Extract a hint about what the bug looks like from the root cause.
     root_cause = triage.root_cause_summary[:500] if triage.root_cause_summary else "See triage report."
-    expected_error = f"KeyError, ERROR provisioning status, or exception related to: {triage.bug_title}"
+    # Derive expected error from triage rather than hardcoding Octavia-specific types.
+    expected_error = (
+        f"Any error, exception, or unexpected failure related to: {triage.bug_title}. "
+        f"Root cause: {root_cause[:200]}"
+    )
 
     prompt = template.format(
         bug_number=triage.bug_number,
