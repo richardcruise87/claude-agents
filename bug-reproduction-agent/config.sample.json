@@ -32,5 +32,14 @@
   "notifications": {
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
+  },
+  "context": {
+    "rules_file": "~/.claude-agents/rules.md",
+    "global_context_file": "~/.claude-agents/global_context.md",
+    "agent_context_file": "~/.claude-agents/bug_reproduction_context.md",
+    "extra_files": [],
+    "max_chars_per_file": 2000,
+    "save_learnings": true,
+    "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
   }
 }

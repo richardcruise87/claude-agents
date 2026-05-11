@@ -10,7 +10,7 @@ Loads configuration from:
 """
 import os
 from pathlib import Path
-from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths
+from agents_lib import load_agent_config, apply_cutoff_date, expand_config_paths, expand_context_config
 
 
 def load_config():
@@ -123,6 +123,7 @@ def load_config():
         "feedback_minor_score": config.get("feedback", {}).get("minor_only_score", 0),
     }
 
+    flat_config = expand_context_config(flat_config)
     return flat_config
 
 

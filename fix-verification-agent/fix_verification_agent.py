@@ -30,6 +30,10 @@ from agents_lib import (
     load_agent_config,
     apply_cutoff_date,
     expand_config_paths,
+    expand_context_config,
+    load_context_section,
+    generate_learning,
+    save_learning,
     notify_report,
     load_notifications_config,
     build_feedback_comment,
@@ -166,6 +170,7 @@ def load_config() -> dict:
     config = load_agent_config(_CONFIG_DIR, _ENV_OVERRIDES, _DEFAULTS)
     config = apply_cutoff_date(config, "cutoff_date", default_days=30)
     config = expand_config_paths(config, _PATH_KEYS)
+    config = expand_context_config(config)
     return config
 
 
@@ -273,6 +278,11 @@ async def run_verification(
 
     print("   ✅ Patch applied")
 
+    # Load cross-run context for the failure analyser
+    _ctx = load_context_section(config, "fix_verification")
+    if _ctx:
+        print("   📚 Context loaded from context files")
+
     attempts_data = []
     analyses = []
     final_status = "NOT_RESOLVED"
@@ -312,6 +322,7 @@ async def run_verification(
                 root_cause=root_cause,
                 patch_description=patch_source.description,
                 config=config,
+                context_section=_ctx,
             )
 
             print(f"   🔍 Cause: {analysis.cause}")
@@ -352,6 +363,18 @@ async def run_verification(
         attempts_data=attempts_data,
         analyses=analyses,
     )
+
+    # Save learning on notable outcomes (not RESOLVED)
+    if final_status in ("NOT_RESOLVED", "ENVIRONMENTAL_ERROR"):
+        last_analysis = analyses[-1] if analyses else None
+        _summary = (
+            f"Verification {final_status} for bug #{bug_number} — {bug_title[:60]}. "
+            f"Patch: {patch_source.description}. Attempts: {len(attempts_data)}. "
+            + (last_analysis.explanation[:200] if last_analysis else "")
+        )
+        _learning = await generate_learning(_summary, "Fix Verification Agent", config)
+        if _learning:
+            save_learning(config["context"]["agent_context_file"], _learning, "Fix Verification Agent")
 
     return final_status, report_file, analyses
 

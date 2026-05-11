@@ -26,6 +26,7 @@ from agents_lib import (
     create_model_client,
     format_usage_info,
     create_forge_client,
+    load_context_section,
     load_review_history,
     load_previous_review_context,
     record_review,
@@ -264,8 +265,10 @@ This change has been reviewed before.
         head_sha=change.head_sha,
     )
 
-    # Prompt loaded from prompts/code_review_prompt.txt
-    # This keeps the code clean and makes the prompt easier to maintain and edit.
+    # Prepend cross-run context (rules, global learnings, agent learnings)
+    _ctx = load_context_section(CONFIG, "code_review")
+    if _ctx:
+        prompt = _ctx + "\n\n---\n\n" + prompt
 
     print("🤖 Starting comprehensive code review...\n")
 

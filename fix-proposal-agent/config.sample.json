@@ -16,7 +16,7 @@
     "comment_push": "Set push_wip_draft=true to push the patch to Gerrit as a WIP change",
     "base_url": "https://review.opendev.org",
     "remote_name": "gerrit",
-    "comment_remote": "Git remote name to push to — change if your Gerrit remote is not named 'gerrit'",
+    "comment_remote": "Git remote name to push to \u2014 change if your Gerrit remote is not named 'gerrit'",
     "username_env": "GERRIT_USERNAME",
     "token_env": "GERRIT_HTTP_PASSWORD"
   },
@@ -32,5 +32,14 @@
   "notifications": {
     "enabled": true,
     "comment": "Set enabled=true and configure notifications.json in repo root"
+  },
+  "context": {
+    "rules_file": "~/.claude-agents/rules.md",
+    "global_context_file": "~/.claude-agents/global_context.md",
+    "agent_context_file": "~/.claude-agents/fix_proposal_context.md",
+    "extra_files": [],
+    "max_chars_per_file": 2000,
+    "save_learnings": true,
+    "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
   }
 }

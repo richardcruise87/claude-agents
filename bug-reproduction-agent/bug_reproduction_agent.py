@@ -16,6 +16,10 @@ from agents_lib import (
     load_agent_config,
     apply_cutoff_date,
     expand_config_paths,
+    expand_context_config,
+    load_context_section,
+    generate_learning,
+    save_learning,
     check_devstack_health,
     check_repo_on_main_branch,
     checkout_main_branch,
@@ -75,8 +79,28 @@ def load_config():
         ("reproduction", "working_directory"),
     ]
     CONFIG = expand_config_paths(CONFIG, path_keys)
+    CONFIG = expand_context_config(CONFIG)
 
     return CONFIG
+
+
+async def _maybe_save_reproduction_learning(final_status, triage, attempts, reasonings):
+    """Save a learning to the agent context file on notable reproduction outcomes."""
+    is_notable = (
+        final_status == "NOT_REPRODUCED"
+        or final_status == "ENVIRONMENT_ERROR"
+        or (final_status == "REPRODUCED" and len(attempts) > 1)
+    )
+    if not is_notable:
+        return
+    last_reasoning = next((r for r in reversed(reasonings) if r), "")
+    result_summary = (
+        f"Status: {final_status}. Bug: #{triage.bug_number} — {triage.bug_title}. "
+        f"Attempts: {len(attempts)}. {last_reasoning[:300]}"
+    )
+    learning = await generate_learning(result_summary, "Bug Reproduction Agent", CONFIG)
+    if learning:
+        save_learning(CONFIG["context"]["agent_context_file"], learning, "Bug Reproduction Agent")
 
 
 async def process_triage(triage_file: Path) -> bool:
@@ -170,6 +194,11 @@ async def process_triage(triage_file: Path) -> bool:
                 else:
                     print(f"   ✅ {repo_name}: On {branch_check.current_branch} branch")
 
+        # Load context from rules/global/agent context files and inject into scripts
+        context_section = load_context_section(CONFIG, "bug_reproduction")
+        if context_section:
+            print("   📚 Context loaded from context files")
+
         # Attempt reproduction (up to max_attempts)
         max_attempts = CONFIG.get("reproduction", {}).get("max_attempts", 3)
         script_timeout = CONFIG.get("reproduction", {}).get("script_timeout", 600)
@@ -200,7 +229,9 @@ async def process_triage(triage_file: Path) -> bool:
                 # Generate initial script from triage
                 print("   Generating initial script from triage...")
                 try:
-                    script, reasoning, usage_dict = await generate_initial_script(triage, CONFIG)
+                    script, reasoning, usage_dict = await generate_initial_script(
+                        triage, CONFIG, context_section=context_section
+                    )
                 except Exception as e:
                     print(f"   ⚠️ AI generation failed: {e}")
                     print("   Using fallback script...")
@@ -215,7 +246,8 @@ async def process_triage(triage_file: Path) -> bool:
                         previous_result,
                         attempt,
                         triage,
-                        CONFIG
+                        CONFIG,
+                        context_section=context_section,
                     )
                 except Exception as e:
                     print(f"   ⚠️ AI refinement failed: {e}")
@@ -343,6 +375,9 @@ async def process_triage(triage_file: Path) -> bool:
         else:
             print(f"⚠️ Bug #{triage.bug_number} reproduction: {final_status}")
         print(f"{'='*80}\n")
+
+        # Save a learning on notable outcomes
+        await _maybe_save_reproduction_learning(final_status, triage, attempts, reasonings)
 
         return final_status == "REPRODUCED"
 

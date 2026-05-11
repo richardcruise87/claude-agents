@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 from agents_lib import apply_cutoff_date
-from agents_lib import expand_config_paths
+from agents_lib import expand_config_paths, expand_context_config
 from agents_lib import load_agent_config
 
 
@@ -75,6 +75,7 @@ def load_config() -> dict:
     config["feedback_private"] = feedback.get("private_comments", True)
     config["feedback_visibility_role"] = feedback.get("visibility_role", "Service Desk Team")
 
+    config = expand_context_config(config)
     return config
 
 

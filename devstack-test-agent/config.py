@@ -4,7 +4,7 @@ Configuration loader for DevStack test agent.
 Loads configuration from config.json with environment variable overrides.
 """
 from pathlib import Path
-from agents_lib import load_agent_config, expand_config_paths
+from agents_lib import load_agent_config, expand_config_paths, expand_context_config
 
 
 def load_config():
@@ -43,6 +43,7 @@ def load_config():
     config["openrc_file"] = config["devstack"]["openrc_file"]
     config["gerrit_base_url"] = "https://review.opendev.org"
 
+    config = expand_context_config(config)
     return config
 
 

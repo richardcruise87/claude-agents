@@ -2,16 +2,14 @@
   "comment": "Copy this file to config.json and customize for your environment",
   "model": "claude-sonnet-4-6",
   "model_provider": "anthropic",
-
   "forge": {
     "type": "gerrit",
     "base_url": "https://review.opendev.org",
     "token_env": null,
     "repo_base_path": "/opt/stack",
     "username_env": null,
-    "comment": "type: gerrit | github | gitlab. base_url: API base (e.g. https://api.github.com for GitHub). token_env: env var holding the API token. username_env: (Gerrit only) env var holding your Gerrit username — when set, token_env is used as the HTTP password and Basic auth is used instead of Bearer. repo_base_path: local directory where repos are cloned (default /opt/stack for DevStack)."
+    "comment": "type: gerrit | github | gitlab. base_url: API base (e.g. https://api.github.com for GitHub). token_env: env var holding the API token. username_env: (Gerrit only) env var holding your Gerrit username \u2014 when set, token_env is used as the HTTP password and Basic auth is used instead of Bearer. repo_base_path: local directory where repos are cloned (default /opt/stack for DevStack)."
   },
-
   "repositories": [
     "openstack/octavia",
     "openstack/octavia-lib",
@@ -87,7 +85,6 @@
     "enabled": false,
     "comment": "Set enabled=true and copy notifications.sample.json to notifications.json in the repo root"
   },
-
   "feedback": {
     "post_to_forge": false,
     "enable_voting": true,
@@ -96,5 +93,14 @@
     "major_issues_score": -1,
     "minor_only_score": 0,
     "comment": "post_to_forge: post review summaries and line comments back to the forge after each review. enable_voting: add a Code-Review vote (Gerrit) or APPROVE/REQUEST_CHANGES state (GitHub/GitLab). vote_label: Gerrit label name (default Code-Review). Scores: approval_score=+1 (no blocking issues), major_issues_score=-1 (critical/major issues found), minor_only_score=0 (only suggestions). Requires forge.token_env to be set."
+  },
+  "context": {
+    "rules_file": "~/.claude-agents/rules.md",
+    "global_context_file": "~/.claude-agents/global_context.md",
+    "agent_context_file": "~/.claude-agents/code_review_context.md",
+    "extra_files": [],
+    "max_chars_per_file": 2000,
+    "save_learnings": true,
+    "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
   }
 }
