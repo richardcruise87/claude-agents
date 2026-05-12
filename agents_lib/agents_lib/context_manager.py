@@ -39,14 +39,21 @@ def expand_context_config(config: dict) -> dict:
 
     Call this at the end of each agent's load_config() after expand_config_paths().
     Handles extra_files as a list as well as the individual path keys.
+
+    All context keys are guaranteed to be present after this call (defaulting to
+    empty string / empty list) so callers never receive a KeyError even when the
+    config.json predates the context section being added.
     """
     ctx = config.get("context", {})
     for key in ("rules_file", "global_context_file", "agent_context_file"):
-        if ctx.get(key):
-            ctx[key] = expand_path(ctx[key])
+        value = ctx.get(key, "")
+        ctx[key] = expand_path(value) if value else ""
+    ctx.setdefault("extra_files", [])
     ctx["extra_files"] = [
-        expand_path(f) for f in ctx.get("extra_files", []) if f
+        expand_path(f) for f in ctx["extra_files"] if f
     ]
+    ctx.setdefault("max_chars_per_file", 2000)
+    ctx.setdefault("save_learnings", True)
     config["context"] = ctx
     return config
 

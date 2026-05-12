@@ -29,7 +29,13 @@ class TestExpandContextConfig:
     def test_no_context_section_is_safe(self):
         config = {"model": "claude-sonnet-4-6"}
         result = expand_context_config(config)
-        assert result["context"] == {"extra_files": []}
+        ctx = result["context"]
+        # All keys guaranteed present — no KeyError even without a context section
+        assert ctx["agent_context_file"] == ""
+        assert ctx["rules_file"] == ""
+        assert ctx["global_context_file"] == ""
+        assert ctx["extra_files"] == []
+        assert ctx["save_learnings"] is True
 
     def test_empty_strings_left_empty(self):
         config = {"context": {"rules_file": "", "agent_context_file": ""}}
