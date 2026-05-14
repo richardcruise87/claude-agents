@@ -4,6 +4,49 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-14
+
+### Changed: Launchpad interaction code consolidated into agents_lib
+
+Near-identical Launchpad OAuth posting and comment-reading code that existed
+independently in `bug-triage-agent`, `fix-proposal-agent`, and
+`fix-verification-agent` has been moved into a single shared module,
+eliminating ~170 lines of duplication.
+
+**New module:** `agents_lib/agents_lib/launchpad_client.py`
+
+| Function | Description |
+|----------|-------------|
+| `post_launchpad_comment(bug_id, subject, content, consumer_key, access_token, token_secret)` | Post a comment; returns True on success |
+| `post_launchpad_comment_from_config(bug_id, subject, content, config)` | Post using credentials from agent config / env vars; respects `feedback.post_to_launchpad` flag |
+| `get_launchpad_bug_comments(bug_id, since_iso)` | Fetch comments via public REST API (no auth needed) |
+
+All three are exported from `agents_lib.__init__`.
+
+**Implementation change:** posting now delegates to `launchpadlib` instead of
+the hand-rolled `hmac`/`hashlib` OAuth 1.0a implementation. `launchpadlib`
+handles OAuth signing correctly for all credential types (including system-wide
+credentials). It is an **optional** dependency — agents that never post to
+Launchpad don't need it. If not installed, `post_launchpad_comment()` prints a
+clear warning and returns `False`. Install when needed:
+```bash
+pip install launchpadlib
+```
+
+**Changed files:**
+- `agents_lib/agents_lib/launchpad_client.py` — new
+- `agents_lib/agents_lib/__init__.py` — exports the three new functions
+- `bug-triage-agent/bug_triage_agent.py` — local `_launchpad_auth_header()` /
+  `_post_launchpad_comment()` removed; imports `post_launchpad_comment` from agents_lib
+- `fix-proposal-agent/launchpad_feedback.py` — local posting code removed;
+  delegates to `post_launchpad_comment` and `get_launchpad_bug_comments`
+- `fix-verification-agent/fix_verification_agent.py` — local `_lp_auth_header()` /
+  `_post_launchpad_comment()` removed; uses `post_launchpad_comment_from_config`
+
+No behaviour change for agents with `feedback.post_to_launchpad: false`.
+
+---
+
 ## 2026-05-11
 
 ### Added: Fix Verification Agent

@@ -511,6 +511,7 @@ Common utilities used by all agents:
 | `tracking.py` | `should_process_item()`, `record_processed_item()` |
 | `utils.py` | `expand_path()`, `slugify()`, `format_usage_info()` |
 | `prompt_loader.py` | `load_prompt_template()` |
+| `launchpad_client.py` | `post_launchpad_comment()`, `post_launchpad_comment_from_config()`, `get_launchpad_bug_comments()` |
 | `devstack_checks.py` | `check_devstack_health()`, `check_repo_on_main_branch()` |
 | `devstack_lock.py` | `DevStackLock`, `check_devstack_available()`, `get_unique_resource_prefix()` |
 | `notifications.py` | `notify_report()`, `load_notifications_config()` |
