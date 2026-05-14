@@ -1,0 +1,44 @@
+{
+  "comment": "Copy this file to config.json and customise for your environment",
+  "model": "claude-sonnet-4-6",
+  "model_provider": "anthropic",
+
+  "monitored_repos": ["openstack/octavia"],
+  "source_branch": "master",
+  "backport_branches": ["stable/*"],
+  "backport_label": "Backport-Candidate",
+  "backport_topic_prefix": "backport",
+
+  "repo_path": "/opt/stack/octavia",
+  "gerrit_remote": "gerrit",
+  "lookback_days": 7,
+
+  "backport_tracking_file": "~/.octavia_backports.json",
+  "output_dir": "~/octavia_backport_reviews",
+  "max_reviews_per_cycle": 3,
+
+  "backport_rules_file": null,
+  "comment_rules": "Path to a Markdown file containing backport policy rules. null = no rules file.",
+  "triages_output_dir": "~/octavia_bug_triages",
+
+  "forge": {
+    "type": "gerrit",
+    "base_url": "https://review.opendev.org",
+    "username_env": "GERRIT_USERNAME",
+    "token_env": "GERRIT_HTTP_PASSWORD"
+  },
+
+  "notifications": {
+    "enabled": false,
+    "comment": "Set enabled=true and configure notifications.json in repo root"
+  },
+
+  "context": {
+    "rules_file": "~/.claude-agents/rules.md",
+    "global_context_file": "~/.claude-agents/global_context.md",
+    "agent_context_file": "~/.claude-agents/backport_context.md",
+    "extra_files": [],
+    "max_chars_per_file": 2000,
+    "save_learnings": true
+  }
+}

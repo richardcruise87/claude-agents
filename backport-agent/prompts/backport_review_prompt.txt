@@ -1,0 +1,136 @@
+You are reviewing a backport change for OpenStack Octavia.
+This change was (or should be) cherry-picked from an upstream commit to a stable branch.
+
+**Change details:**
+- Repository: {repo_name}
+- Change number: {change_number}
+- Target branch: {target_branch}
+- Patchset: {current_patchset}
+- Gerrit URL: {gerrit_base_url}/c/{repo_name}/+/{change_number}
+- Source branch (upstream): {source_branch}
+{specific_patchset_note}{previous_review_section}
+
+---
+
+## Step 1: Fetch and examine the backport change
+
+```bash
+cd {repo_path}
+git checkout {source_branch} 2>/dev/null || git checkout main 2>/dev/null || true
+{git_fetch_command}
+git checkout FETCH_HEAD
+```
+
+Examine the backport commit:
+```bash
+git log -1 --format="%H %s"
+git log -1 --format="%B"   # full commit message — look for Original-Change-Id and cherry-pick lines
+git show --stat
+```
+
+## Step 2: Find and fetch the original upstream change
+
+Extract the original Change-Id or commit SHA from the commit message:
+```bash
+git log -1 --format=%B | grep -E "(Original-Change-Id|cherry picked from)"
+```
+
+Fetch the original upstream change:
+```bash
+ORIG_CHANGE_ID=$(git log -1 --format=%B | grep "Original-Change-Id:" | awk '{print $2}')
+if [ -n "$ORIG_CHANGE_ID" ]; then
+    # Look up the change number from the Change-Id
+    curl -s "{gerrit_base_url}/changes/?q=change:$ORIG_CHANGE_ID+project:{repo_name}&o=CURRENT_REVISION" \
+        | tail -c +5 | python3 -c "
+import json,sys
+data = json.load(sys.stdin)
+if data:
+    d = data[0]
+    rev = d.get('current_revision','')
+    ref = d.get('revisions',{}).get(rev,{}).get('ref','')
+    print('Change number:', d.get('_number'))
+    print('Fetch ref:', ref)
+"
+fi
+```
+
+If you can determine the upstream fetch ref, fetch and compare:
+```bash
+git fetch {gerrit_base_url}/{repo_name} <upstream_fetch_ref>
+UPSTREAM_SHA=$(git rev-parse FETCH_HEAD)
+
+# Compare the diffs
+git diff $UPSTREAM_SHA^..$UPSTREAM_SHA > /tmp/upstream.diff
+git diff HEAD^..HEAD > /tmp/backport.diff
+diff /tmp/upstream.diff /tmp/backport.diff || true
+```
+
+## Step 3: Check the Backport-Candidate label on the original
+
+```bash
+if [ -n "$ORIG_CHANGE_ID" ]; then
+    curl -s "{gerrit_base_url}/changes/?q=change:$ORIG_CHANGE_ID+project:{repo_name}&o=LABELS" \
+        | tail -c +5 | python3 -c "
+import json,sys
+data = json.load(sys.stdin)
+if data:
+    labels = data[0].get('labels',{})
+    bp = labels.get('Backport-Candidate',{})
+    print('Backport-Candidate approved by:', bp.get('approved',{}).get('name','(none)'))
+    print('All labels:', json.dumps({k: list(v.keys()) for k,v in labels.items()}, indent=2))
+"
+fi
+```
+
+## Step 4: Check branch appropriateness
+
+{backport_branches_section}
+
+{backport_rules_section}
+
+Check whether the target branch ({target_branch}) should receive this backport:
+- Was the original bug present in this branch? Check the triage report if available:
+  ```bash
+  ls {triage_reports_dir}/bug_*.md 2>/dev/null | xargs grep -l "$ORIG_CHANGE_ID" 2>/dev/null | sort -r | head -1
+  ```
+- Does backporting this change violate any of the rules above?
+
+## Step 5: Review the code quality of the backport itself
+
+Apply the standard code review checklist to the backport diff:
+- Does the code match the upstream change (excluding expected context differences)?
+- Are there any conflicts that were resolved manually — and if so, are the resolutions correct?
+- Are tests included or adapted appropriately for the stable branch?
+
+## Step 6: Write the review report
+
+Save the complete review to: {save_path}
+
+The report must include a "## Backport Assessment" section:
+
+```markdown
+## Backport Assessment
+
+| Check | Result |
+|-------|--------|
+| Original had Backport-Candidate | ✅ Yes (set by <name>) / ❌ No / ⚠️ Could not determine |
+| Upstream change found | ✅ {original_change_url} / ⚠️ Could not locate |
+| Cherry-pick is clean | ✅ Identical to upstream / ⚠️ Differences found: <describe> |
+| Target branch was affected | ✅ Yes / ❌ No (branch unaffected) / ⚠️ Unknown |
+| Follows backporting rules | ✅ Yes / ❌ Violation: <rule violated> |
+
+**Overall verdict:** ✅ Approve backport / ❌ Reject backport / ⚠️ Needs discussion
+
+**Rationale:** <2-3 sentences explaining the verdict>
+```
+
+Also include a standard "## Final Verdict" with the code quality assessment.
+
+## Step 7: Return to original branch
+
+```bash
+cd {repo_path}
+git checkout {source_branch} 2>/dev/null || git checkout main 2>/dev/null || true
+```
+
+**IMPORTANT**: Save the complete review document using the Write tool to exactly this path: `{save_path}`

@@ -1,0 +1,24 @@
+[Unit]
+Description=Octavia Backport Monitor
+Documentation=https://github.com/richardcruise87/claude-agents
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/git/claude-agents/backport-agent
+
+ExecStart=%h/.venv/claude-agents/bin/octavia-backport-monitor
+
+Environment="CLAUDE_CODE_USE_VERTEX=1"
+Environment="CLAUDE_MODEL=claude-sonnet-4-6"
+Environment="PYTHONUNBUFFERED=1"
+
+StandardOutput=append:%h/octavia-logs/octavia-backport-monitor.log
+StandardError=append:%h/octavia-logs/octavia-backport-monitor.log
+SyslogIdentifier=octavia-backport-monitor
+
+TimeoutSec=3600
+
+[Install]
+WantedBy=default.target
