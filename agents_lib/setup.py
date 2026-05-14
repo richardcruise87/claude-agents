@@ -11,8 +11,12 @@ setup(
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[
-        # No external dependencies - uses only stdlib
+        # Core: stdlib only — no mandatory external packages
     ],
+    extras_require={
+        # Install when Launchpad comment posting is needed (post_to_launchpad: true)
+        "launchpad": ["launchpadlib"],
+    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
