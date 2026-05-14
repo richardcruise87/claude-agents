@@ -143,7 +143,7 @@ def attempt_cherry_pick(
     # Fetch the merged change
     fetch_result = _git(repo_path, "fetch", remote, change.git_fetch_ref)
     if fetch_result.returncode != 0:
-        return {"status": "PUSH_FAILED",
+        return {"status": "FETCH_FAILED",
                 "message": f"Could not fetch {change.git_fetch_ref}: {fetch_result.stderr.strip()}"}
 
     # Get the commit SHA
@@ -156,8 +156,16 @@ def attempt_cherry_pick(
         _git(repo_path, "fetch", remote, f"refs/heads/{branch}", check=False)
         checkout = _git(repo_path, "checkout", "-b", backport_branch, f"{remote}/{branch}")
         if checkout.returncode != 0:
-            # Branch may already exist from a previous attempt
-            _git(repo_path, "checkout", backport_branch)
+            # Branch may already exist from a previous attempt; try switching to it.
+            fallback = _git(repo_path, "checkout", backport_branch)
+            if fallback.returncode != 0:
+                return {
+                    "status": "FETCH_FAILED",
+                    "message": (
+                        f"Could not create or switch to {backport_branch}: "
+                        f"{checkout.stderr.strip()[:200]}"
+                    ),
+                }
 
         # Attempt cherry-pick
         pick = _git(repo_path, "cherry-pick", commit_sha)

@@ -16,12 +16,13 @@ Usage:
     octavia-backport-review
     octavia-backport-review --change 923456   # review a specific backport change
 """
+import argparse
 import asyncio
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 # Also expose the code-review-agent config and prompt builder
@@ -44,9 +45,6 @@ from agents_lib import (
     notify_report,
     load_notifications_config,
 )
-
-# Import the code-review-agent config loader so we share the same forge config
-from config import load_config as load_code_review_config  # pylint: disable=import-error
 
 from prompts import get_backport_review_prompt
 
@@ -94,9 +92,12 @@ def load_config() -> dict:
     config = expand_config_paths(config, _PATH_KEYS)
     config = expand_context_config(config)
 
-    # Pull forge credentials from code-review-agent config if available
+    # Pull forge credentials from code-review-agent config if available.
+    # Import inside the try block so a missing code-review-agent installation
+    # is handled gracefully rather than crashing at module import time.
     try:
-        cr_config = load_code_review_config()
+        from config import load_config as _load_cr_config  # noqa: PLC0415
+        cr_config = _load_cr_config()
         for key in ("forge_type", "forge_base_url", "forge_token_env",
                     "gerrit_base_url", "reviewed_changes_file", "repo_base_path"):
             if key not in config and key in cr_config:
@@ -118,11 +119,10 @@ def load_config() -> dict:
 # Backport section builders (same pattern as code-review-agent)
 # ---------------------------------------------------------------------------
 
-class _BackportSections:  # simple container
-    def __init__(self, branches: str, rules: str, triage_dir: str) -> None:
-        self.branches_section = branches
-        self.rules_section = rules
-        self.triage_dir = triage_dir
+class _BackportSections(NamedTuple):
+    branches_section: str
+    rules_section: str
+    triage_dir: str
 
 
 def _build_backport_sections(config: dict) -> _BackportSections:
@@ -353,7 +353,6 @@ async def main(change_url: Optional[str] = None) -> None:
 
 
 def cli_main() -> None:
-    import argparse
     parser = argparse.ArgumentParser(description="Octavia Backport Review Agent")
     parser.add_argument("change", nargs="?", help="Change number or URL to review directly")
     args = parser.parse_args()
