@@ -37,6 +37,7 @@ from agents_lib import (
     notify_report,
     load_notifications_config,
     build_feedback_comment,
+    post_launchpad_comment_from_config,
 )
 from failure_analyser import (
     analyse_failure,
@@ -55,71 +56,6 @@ from verification_tracker import (
     record_verification,
     should_verify_proposal,
 )
-
-# ---------------------------------------------------------------------------
-# Launchpad helpers (reuse OAuth pattern from fix-proposal-agent)
-# ---------------------------------------------------------------------------
-
-import base64
-import hashlib
-import hmac as _hmac
-import os
-import urllib.error
-import urllib.parse
-import urllib.request
-import uuid
-
-
-def _lp_auth_header(method: str, url: str, ck: str, at: str, ts: str) -> str:
-    timestamp = str(int(time.time()))
-    nonce = uuid.uuid4().hex
-    params = {
-        "oauth_consumer_key": ck, "oauth_token": at,
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": timestamp, "oauth_nonce": nonce,
-        "oauth_version": "1.0",
-    }
-    param_str = "&".join(
-        f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}"
-        for k, v in sorted(params.items())
-    )
-    base = "&".join([method.upper(), urllib.parse.quote(url, safe=""),
-                     urllib.parse.quote(param_str, safe="")])
-    key = f"&{urllib.parse.quote(ts, safe='')}"
-    sig = _hmac.new(key.encode(), base.encode(), hashlib.sha1).digest()
-    params["oauth_signature"] = base64.b64encode(sig).decode()
-    return "OAuth " + ", ".join(
-        f'{k}="{urllib.parse.quote(v, safe="")}"' for k, v in params.items()
-    )
-
-
-def _post_launchpad_comment(bug_id: str, subject: str, content: str, config: dict) -> None:
-    """Post a comment to a Launchpad bug. Errors are logged, never raised."""
-    feedback_cfg = config.get("feedback", {})
-    if not feedback_cfg.get("post_to_launchpad"):
-        return
-    ck = os.environ.get(feedback_cfg.get("consumer_key_env", ""), "")
-    at = os.environ.get(feedback_cfg.get("access_token_env", ""), "")
-    ts = os.environ.get(feedback_cfg.get("access_token_secret_env", ""), "")
-    if not all([ck, at, ts]):
-        print("⚠️  Launchpad posting skipped — OAuth credentials not set")
-        return
-    url = f"https://api.launchpad.net/1.0/bugs/{bug_id}/messages"
-    body = urllib.parse.urlencode({"subject": subject, "content": content}).encode()
-    auth = _lp_auth_header("POST", url, ck, at, ts)
-    req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Authorization", auth)
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            if resp.status in (200, 201):
-                print(f"   ✅ Launchpad comment posted to bug #{bug_id}")
-            else:
-                print(f"   ⚠️  Launchpad comment returned {resp.status}")
-    except urllib.error.HTTPError as exc:
-        print(f"   ⚠️  Launchpad comment failed (HTTP {exc.code}): {exc.reason}")
-    except urllib.error.URLError as exc:
-        print(f"   ⚠️  Launchpad comment failed (network): {exc.reason}")
 
 
 # ---------------------------------------------------------------------------
@@ -581,7 +517,7 @@ def _post_verification_to_launchpad(
     else:
         subject = "AI Fix Verification Inconclusive ⚠️ (automated, may contain errors)"
 
-    _post_launchpad_comment(bug_number, subject, comment, config)
+    post_launchpad_comment_from_config(bug_number, subject, comment, config)
 
 
 def _write_proposal_feedback(

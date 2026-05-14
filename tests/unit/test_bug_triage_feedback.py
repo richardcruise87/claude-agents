@@ -1,115 +1,112 @@
-"""Unit tests for Launchpad feedback posting in bug-triage-agent."""
+"""Unit tests for Launchpad feedback posting.
 
+The handcrafted OAuth implementation has been replaced by launchpadlib
+(agents_lib.launchpad_client). Tests now cover the new implementation and
+the _post_bug_feedback helper in bug-triage-agent.
+"""
 import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../bug-triage-agent'))
 
-from bug_triage_agent import _launchpad_auth_header, _post_launchpad_comment, _post_bug_feedback
-
-
-class TestLaunchpadAuthHeader:
-    def _header(self):
-        return _launchpad_auth_header(
-            "POST", "https://api.launchpad.net/1.0/bugs/12345/messages",
-            "my-app", "acc-token", "acc-secret",
-        )
-
-    def test_starts_with_oauth(self):
-        assert self._header().startswith("OAuth ")
-
-    def test_contains_consumer_key(self):
-        assert "my-app" in self._header()
-
-    def test_contains_access_token(self):
-        assert "acc-token" in self._header()
-
-    def test_contains_hmac_sha1_method(self):
-        assert "HMAC-SHA1" in self._header()
-
-    def test_contains_signature(self):
-        assert "oauth_signature" in self._header()
-
-    def test_different_nonces_each_call(self):
-        h1 = self._header()
-        h2 = self._header()
-        # oauth_nonce should differ between calls
-        nonce1 = [p for p in h1.split(", ") if "nonce" in p][0]
-        nonce2 = [p for p in h2.split(", ") if "nonce" in p][0]
-        assert nonce1 != nonce2
+from bug_triage_agent import _post_bug_feedback
+from agents_lib.launchpad_client import post_launchpad_comment, get_launchpad_bug_comments
 
 
 class TestPostLaunchpadComment:
-    def test_returns_false_on_http_error(self, monkeypatch):
-        import urllib.error
-        import urllib.request
+    """Tests for agents_lib.launchpad_client.post_launchpad_comment."""
 
-        def fake_urlopen(req, timeout=30):
-            raise urllib.error.HTTPError(
-                None, 401, "Unauthorized", {}, None
-            )
+    def test_returns_false_when_launchpadlib_missing(self, monkeypatch):
+        """Missing launchpadlib should return False gracefully."""
+        import builtins
+        real_import = builtins.__import__
 
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        result = _post_launchpad_comment(
-            "12345", "Subject", "Body", "app", "tok", "sec"
-        )
+        def mock_import(name, *args, **kwargs):
+            if name == "launchpadlib.launchpad":
+                raise ImportError("No module named 'launchpadlib'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        result = post_launchpad_comment("12345", "Subj", "Body", "ck", "at", "sec")
         assert result is False
 
-    def test_returns_false_on_network_error(self, monkeypatch):
-        import urllib.error
-        import urllib.request
+    def test_returns_false_on_api_error(self, monkeypatch):
+        """Errors from launchpadlib should return False, not raise."""
+        # Patch at the point launchpadlib is imported
+        class FakeLaunchpad:
+            def __init__(self, *a, **k):
+                raise RuntimeError("connection refused")
 
-        def fake_urlopen(req, timeout=30):
-            raise urllib.error.URLError("connection refused")
+        class FakeCredentials:
+            def __init__(self, *a, **k): pass
+            access_token = None
 
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        result = _post_launchpad_comment(
-            "12345", "Subject", "Body", "app", "tok", "sec"
-        )
+        class FakeAccessToken:
+            def __init__(self, *a): pass
+
+        import types
+        fake_mod = types.ModuleType("launchpadlib.launchpad")
+        fake_mod.Launchpad = FakeLaunchpad
+        fake_creds_mod = types.ModuleType("launchpadlib.credentials")
+        fake_creds_mod.Credentials = FakeCredentials
+        fake_creds_mod.AccessToken = FakeAccessToken
+
+        monkeypatch.setitem(sys.modules, "launchpadlib.launchpad", fake_mod)
+        monkeypatch.setitem(sys.modules, "launchpadlib.credentials", fake_creds_mod)
+
+        result = post_launchpad_comment("12345", "Subj", "Body", "ck", "at", "sec")
         assert result is False
 
-    def test_posts_to_correct_url(self, monkeypatch):
+
+class TestGetLaunchpadBugComments:
+    """Tests for agents_lib.launchpad_client.get_launchpad_bug_comments."""
+
+    def test_returns_empty_on_network_error(self, monkeypatch):
+        import urllib.request
+        import urllib.error
+
+        def fail(*a, **k):
+            raise urllib.error.URLError("network error")
+
+        monkeypatch.setattr(urllib.request, "urlopen", fail)
+        result = get_launchpad_bug_comments("12345")
+        assert result == []
+
+    def test_filters_by_since_iso(self, monkeypatch):
+        import json
         import urllib.request
 
-        captured = {}
+        entries = [
+            {"date_created": "2026-01-01T10:00:00", "content": "old", "owner_link": "a"},
+            {"date_created": "2026-06-01T10:00:00", "content": "new", "owner_link": "b"},
+        ]
 
-        class FakeResponse:
-            status = 201
+        class FakeResp:
             def __enter__(self): return self
             def __exit__(self, *a): pass
-            def read(self): return b"{}"
+            def read(self): return json.dumps({"entries": entries}).encode()
 
-        def fake_urlopen(req, timeout=30):
-            captured["url"] = req.full_url
-            captured["method"] = req.method
-            return FakeResponse()
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
+        result = get_launchpad_bug_comments("12345", since_iso="2026-03-01T00:00:00")
+        assert len(result) == 1
+        assert result[0]["content"] == "new"
 
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        _post_launchpad_comment("99999", "Subj", "Body", "app", "tok", "sec")
-        assert "bugs/99999/messages" in captured["url"]
-        assert captured["method"] == "POST"
-
-    def test_includes_subject_and_content(self, monkeypatch):
-        import urllib.parse
+    def test_returns_all_when_no_since(self, monkeypatch):
         import urllib.request
+        import json
 
-        captured = {}
+        entries = [
+            {"date_created": "2026-01-01T10:00:00", "content": "a", "owner_link": "x"},
+            {"date_created": "2026-06-01T10:00:00", "content": "b", "owner_link": "y"},
+        ]
 
-        class FakeResponse:
-            status = 201
+        class FakeResp:
             def __enter__(self): return self
             def __exit__(self, *a): pass
-            def read(self): return b"{}"
+            def read(self): return json.dumps({"entries": entries}).encode()
 
-        def fake_urlopen(req, timeout=30):
-            captured["body"] = req.data
-            return FakeResponse()
-
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-        _post_launchpad_comment("1", "My Subject", "My Content", "app", "tok", "sec")
-        body_str = captured["body"].decode("utf-8")
-        params = dict(urllib.parse.parse_qsl(body_str))
-        assert params.get("subject") == "My Subject"
-        assert params.get("content") == "My Content"
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
+        result = get_launchpad_bug_comments("12345")
+        assert len(result) == 2
 
 
 class TestPostBugFeedback:
@@ -131,18 +128,12 @@ class TestPostBugFeedback:
         monkeypatch.setenv("LP_ATS", "ats")
 
         called = []
-
-        def fake_post(*args, **kwargs):
-            called.append(True)
-            return True
-
-        monkeypatch.setattr(
-            "bug_triage_agent._post_launchpad_comment", fake_post
-        )
+        # Patch the name as imported into bug_triage_agent
+        monkeypatch.setattr("bug_triage_agent.post_launchpad_comment",
+                            lambda *a, **k: called.append(True) or True)
 
         report = tmp_path / "report.md"
         report.write_text("# Report\n\nSome content.", encoding="utf-8")
-
         _post_bug_feedback(self._BUG_INFO, report, self._config(enabled=False))
         assert len(called) == 0
 
@@ -152,18 +143,11 @@ class TestPostBugFeedback:
         monkeypatch.delenv("LP_ATS", raising=False)
 
         called = []
-
-        def fake_post(*args, **kwargs):
-            called.append(True)
-            return True
-
-        monkeypatch.setattr(
-            "bug_triage_agent._post_launchpad_comment", fake_post
-        )
+        monkeypatch.setattr("bug_triage_agent.post_launchpad_comment",
+                            lambda *a, **k: called.append(True) or True)
 
         report = tmp_path / "report.md"
         report.write_text("# Report\n\nContent.", encoding="utf-8")
-
         _post_bug_feedback(self._BUG_INFO, report, self._config(enabled=True))
         assert len(called) == 0
 
@@ -174,18 +158,15 @@ class TestPostBugFeedback:
 
         posted = {}
 
-        def fake_post(bug_id, subject, content, ck, at, ats):
+        def fake_post(bug_id, subject, content, consumer_key, access_token, token_secret):
             posted.update({"bug_id": bug_id, "subject": subject,
-                           "consumer_key": ck, "access_token": at})
+                           "consumer_key": consumer_key, "access_token": access_token})
             return True
 
-        monkeypatch.setattr(
-            "bug_triage_agent._post_launchpad_comment", fake_post
-        )
+        monkeypatch.setattr("bug_triage_agent.post_launchpad_comment", fake_post)
 
         report = tmp_path / "report.md"
         report.write_text("# Report\n\nThe bug is real.\n", encoding="utf-8")
-
         _post_bug_feedback(self._BUG_INFO, report, self._config(enabled=True))
         assert posted["bug_id"] == "12345"
         assert posted["consumer_key"] == "consumer-key"
