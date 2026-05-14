@@ -329,6 +329,8 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         previous_triage_summary=previous_summary,
         previous_sequence=previous_seq,
         provider=_provider,
+        affected_branches=CONFIG.get('affected_branches'),
+        gerrit_base_url=CONFIG.get('gerrit_base_url'),
     )
 
     if _context_section:

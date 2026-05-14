@@ -3,9 +3,12 @@ Prompt templates for the bug triage agent.
 
 Loads and formats prompt templates from external files.
 """
+import json
 from pathlib import Path
 
 from agents_lib import load_agent_prompt
+
+_DEFAULT_GERRIT_BASE_URL = "https://review.opendev.org"
 
 _PROMPTS_DIR = Path(__file__).parent
 
@@ -26,6 +29,8 @@ def get_bug_triage_prompt(
     previous_triage_summary: str = None,
     previous_sequence: int = None,
     provider: str = "anthropic",
+    affected_branches: list = None,
+    gerrit_base_url: str = _DEFAULT_GERRIT_BASE_URL,
 ) -> str:
     """
     Get the formatted bug triage prompt.
@@ -115,6 +120,14 @@ This bug was previously triaged.
     elif "controller" in bug_title.lower() or "worker" in bug_description.lower():
         relevant_files = "octavia/controller/"
 
+    # Build the affected-branches instruction block
+    branch_list = json.dumps(affected_branches or ["master", "stable/*"])
+    affected_branches_section = (
+        f"**Configured branch patterns to check:** `{branch_list}`\n\n"
+        "Expand each pattern to real remote branches, then check each one. "
+        "Only check branches that match these patterns — do not check others."
+    )
+
     # Replace placeholders
     formatted_prompt = template
     formatted_prompt = formatted_prompt.replace('{bug_number}', bug_number)
@@ -131,5 +144,7 @@ This bug was previously triaged.
     formatted_prompt = formatted_prompt.replace('{devstack_path}', devstack_path)
     formatted_prompt = formatted_prompt.replace('{search_keywords}', search_keywords)
     formatted_prompt = formatted_prompt.replace('{relevant_files}', relevant_files)
+    formatted_prompt = formatted_prompt.replace('{affected_branches_section}', affected_branches_section)
+    formatted_prompt = formatted_prompt.replace('{gerrit_base_url}', gerrit_base_url)
 
     return formatted_prompt
