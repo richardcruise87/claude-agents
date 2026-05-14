@@ -127,7 +127,7 @@ def attempt_cherry_pick(
     Attempt to cherry-pick a merged change to a stable branch.
 
     Returns a dict with keys: status, message, backport_change_url, commit_sha.
-    status values: BACKPORTED | CONFLICT | PUSH_FAILED | DRY_RUN
+    status values: BACKPORTED | CONFLICT | FETCH_FAILED | PUSH_FAILED | DRY_RUN
     """
     repo_path = Path(config["repo_path"])
     remote = config.get("gerrit_remote", "gerrit")

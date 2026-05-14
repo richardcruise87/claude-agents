@@ -59,7 +59,7 @@ def record_backport(
         tracking_file:       Path to the tracking JSON file.
         change_id:           Original upstream Gerrit change number.
         branch:              Target stable branch.
-        status:              BACKPORTED | CONFLICT | SKIPPED | PUSH_FAILED.
+        status:              BACKPORTED | CONFLICT | FETCH_FAILED | PUSH_FAILED | SKIPPED.
         backport_change_url: URL of the created backport change (BACKPORTED only).
         commit_sha:          Upstream commit SHA that was cherry-picked.
     """
