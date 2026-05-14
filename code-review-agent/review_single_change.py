@@ -110,7 +110,9 @@ def _build_backport_sections(config: dict) -> tuple:
     branches = config.get("backport_branches", [])
     if branches:
         branches_section = (
-            "The following branches are configured as backport targets:\n"
+            "The following branch patterns are configured as backport targets "
+            "(wildcards like `stable/*` are supported — expand each pattern "
+            "to real branches before checking):\n"
             + "\n".join(f"- `{b}`" for b in branches)
         )
     else:

@@ -404,9 +404,16 @@ Use the Launchpad Importance (Critical/High/Medium/Low) as a proxy for severity.
 
 {backport_branches_section}
 
-For each branch, determine whether the bug being fixed is present there.
-Prefer the **Bug Introduction Analysis** "Affected Branches" table from the
-triage report. If no triage report is available, use:
+Branch patterns may contain wildcards (e.g. `stable/*`). For each pattern,
+first expand it to the real remote branches that currently exist:
+```bash
+git -C {repo_path} fetch --all --quiet 2>/dev/null || true
+git -C {repo_path} branch -r --list "origin/<pattern>" | sed 's|^.*origin/||'
+```
+
+For each real branch found, determine whether the bug being fixed is present
+there. Prefer the **Bug Introduction Analysis** "Affected Branches" table from
+the triage report. If no triage report is available, use:
 ```bash
 git -C {repo_path} merge-base --is-ancestor <introducing_commit> origin/<branch> \
   && echo "AFFECTED" || echo "NOT_AFFECTED"
