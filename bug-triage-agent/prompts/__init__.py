@@ -3,9 +3,12 @@ Prompt templates for the bug triage agent.
 
 Loads and formats prompt templates from external files.
 """
+import json
 from pathlib import Path
 
 from agents_lib import load_agent_prompt
+
+_DEFAULT_GERRIT_BASE_URL = "https://review.opendev.org"
 
 _PROMPTS_DIR = Path(__file__).parent
 
@@ -27,7 +30,7 @@ def get_bug_triage_prompt(
     previous_sequence: int = None,
     provider: str = "anthropic",
     affected_branches: list = None,
-    gerrit_base_url: str = "https://review.opendev.org",
+    gerrit_base_url: str = _DEFAULT_GERRIT_BASE_URL,
 ) -> str:
     """
     Get the formatted bug triage prompt.
@@ -118,8 +121,7 @@ This bug was previously triaged.
         relevant_files = "octavia/controller/"
 
     # Build the affected-branches instruction block
-    import json as _json  # pylint: disable=import-outside-toplevel
-    branch_list = _json.dumps(affected_branches or ["master", "stable/*"])
+    branch_list = json.dumps(affected_branches or ["master", "stable/*"])
     affected_branches_section = (
         f"**Configured branch patterns to check:** `{branch_list}`\n\n"
         "Expand each pattern to real remote branches, then check each one. "
