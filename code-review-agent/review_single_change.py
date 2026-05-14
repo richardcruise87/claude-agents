@@ -15,6 +15,7 @@ import re
 import argparse
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
@@ -91,9 +92,10 @@ def _post_forge_feedback(change_info, review_content: str, config: dict, forge) 
             if bp_vote is not None:
                 bp_label = config.get("feedback_backport_vote_label", "Backport-Candidate")
                 bp_score = config.get("feedback_backport_recommend_score", 1)
-                extra_labels = {bp_label: bp_score if bp_vote else 0}
-                sign = "+" if bp_score > 0 else ""
-                print(f"   Vote ({bp_label}): {sign if bp_vote else ''}{bp_score if bp_vote else 0}")
+                bp_actual_score = bp_score if bp_vote else 0
+                extra_labels = {bp_label: bp_actual_score}
+                sign = "+" if bp_actual_score > 0 else ""
+                print(f"   Vote ({bp_label}): {sign}{bp_actual_score}")
 
         ok = forge.post_feedback(change_info, comment, vote, line_comments,
                                  extra_labels=extra_labels)
@@ -105,8 +107,14 @@ def _post_forge_feedback(change_info, review_content: str, config: dict, forge) 
         print(f"   ⚠️  Could not post forge feedback: {exc}")
 
 
-def _build_backport_sections(config: dict) -> tuple:
-    """Return (branches_section, rules_section, triage_dir) for the prompt."""
+class _BackportSections(NamedTuple):
+    branches_section: str
+    rules_section: str
+    triage_dir: str
+
+
+def _build_backport_sections(config: dict) -> _BackportSections:
+    """Build the backport-related prompt sections from config."""
     branches = config.get("backport_branches", [])
     if branches:
         branches_section = (
@@ -130,7 +138,7 @@ def _build_backport_sections(config: dict) -> tuple:
     triage_dir = str(
         Path(config.get("triages_output_dir", "~/octavia_bug_triages")).expanduser()
     )
-    return branches_section, rules_section, triage_dir
+    return _BackportSections(branches_section, rules_section, triage_dir)
 
 
 async def review_specific_change(change_url_or_number, requested_patchset=None):
@@ -306,9 +314,9 @@ This change has been reviewed before.
         forge_url=change.forge_url,
         sequence=sequence,
         head_sha=change.head_sha,
-        backport_branches_section=_bp[0],
-        backport_rules_section=_bp[1],
-        triage_reports_dir=_bp[2],
+        backport_branches_section=_bp.branches_section,
+        backport_rules_section=_bp.rules_section,
+        triage_reports_dir=_bp.triage_dir,
     )
 
     # Prepend cross-run context (rules, global learnings, agent learnings)

@@ -95,7 +95,8 @@
     "comment": "post_to_forge: post review summaries and line comments back to the forge after each review. enable_voting: add a Code-Review vote (Gerrit) or APPROVE/REQUEST_CHANGES state (GitHub/GitLab). vote_label: Gerrit label name (default Code-Review). Scores: approval_score=+1 (no blocking issues), major_issues_score=-1 (critical/major issues found), minor_only_score=0 (only suggestions). Requires forge.token_env to be set.",
     "backport_voting": false,
     "backport_vote_label": "Backport-Candidate",
-    "backport_recommend_score": 1
+    "backport_recommend_score": 1,
+    "comment_backport_voting": "backport_voting: enable a separate Backport-Candidate Gerrit vote alongside the Code-Review vote (disabled by default). backport_vote_label: the Gerrit label to use (default: Backport-Candidate). backport_recommend_score: vote value when backport IS recommended (default: +1). When backport is NOT recommended the vote is always 0 (neutral). There is currently no separate score for the not-recommended case."
   },
   "context": {
     "rules_file": "~/.claude-agents/rules.md",
