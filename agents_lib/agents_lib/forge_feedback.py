@@ -19,7 +19,8 @@ from .forge_client import LineComment
 def _section(content: str, *headers: str) -> str:
     """Extract the text of the first matching section up to the next heading."""
     for header in headers:
-        level = len(re.match(r'^(#+)', header).group(1)) if re.match(r'^(#+)', header) else 2
+        _hm = re.match(r'^(#+)', header)
+        level = len(_hm.group(1)) if _hm else 2
         pattern = re.escape(header) + r'(.*?)(?=\n#{1,' + str(level) + r'} |\Z)'
         m = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
         if m:

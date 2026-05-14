@@ -376,4 +376,5 @@ Original review content — should be excluded.
     def test_caps_at_max_chars(self):
         long_report = "x" * 10_000
         result = extract_devstack_forge_comment(long_report, "model")
-        assert len(result) < 6_500
+        # MAX_CHARS=5000 body + ~200 chars attribution overhead
+        assert len(result) < 5_500
