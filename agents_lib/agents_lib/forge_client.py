@@ -257,20 +257,28 @@ class GerritClient(ForgeClient):
             description=data.get("commit_message", ""),
         )
 
-    def list_open_changes(
+    def list_changes(
         self,
         repo: str,
+        status: str = "open",
+        label: Optional[str] = None,
         since: Optional[str] = None,
         max_results: int = 50,
     ) -> list[ChangeInfo]:
-        age_filter = ""
-        if since:
-            # Gerrit uses -age:Nd syntax; convert ISO date to days-ago estimate
-            # Simpler: just request all open and filter by created_at below
-            age_filter = "+-age:365d"
+        """List Gerrit changes with flexible status and label filtering.
+
+        Args:
+            repo:        Repository in "owner/repo" format.
+            status:      Gerrit status: "open", "merged", "abandoned", etc.
+            label:       Label filter, e.g. "Backport-Candidate=+1".
+            since:       ISO date string — skip changes created before this date.
+            max_results: Maximum number of results to return.
+        """
+        age_filter = "+-age:365d" if since else ""
+        label_filter = f"+label:{label}" if label else ""
 
         # Build q separately — Gerrit needs :, +, / unencoded in its query syntax
-        q = f"project:{repo}+status:open{age_filter}"
+        q = f"project:{repo}+status:{status}{label_filter}{age_filter}"
         other = urllib.parse.urlencode({
             "o": ["CURRENT_REVISION", "DETAILED_ACCOUNTS"],
             "n": max_results,
@@ -288,6 +296,15 @@ class GerritClient(ForgeClient):
             except Exception:
                 continue
         return changes
+
+    def list_open_changes(
+        self,
+        repo: str,
+        since: Optional[str] = None,
+        max_results: int = 50,
+    ) -> list[ChangeInfo]:
+        """List open changes — thin wrapper around list_changes()."""
+        return self.list_changes(repo, status="open", since=since, max_results=max_results)
 
     def get_change(self, change_id: str, repo: Optional[str] = None) -> ChangeInfo:
         params = urllib.parse.urlencode({"o": ["CURRENT_REVISION", "ALL_REVISIONS"]}, doseq=True)
