@@ -47,5 +47,10 @@
     "max_chars_per_file": 2000,
     "save_learnings": true,
     "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
-  }
+  },
+  "affected_branches": [
+    "master",
+    "stable/*"
+  ],
+  "comment_branches": "Branch patterns to check for the introducing commit. Wildcards supported (e.g. stable/* matches all stable branches). Only these branches will be checked."
 }

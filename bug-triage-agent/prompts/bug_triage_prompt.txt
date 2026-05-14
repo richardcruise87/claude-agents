@@ -123,3 +123,73 @@ Suggest potential approaches to fix the bug:
 - Testing strategy to verify the fix
 - Impact on existing functionality
 
+## Step 10: Analyse Bug Introduction and Affected Branches
+
+Determine which commit(s) introduced the bug and which branches are currently
+affected. This section is mandatory — make a genuine effort even if confidence
+is moderate.
+
+### 10a. Find the introducing commit(s)
+
+Use git commands against {devstack_path}/octavia. Try several approaches:
+
+```bash
+# Search for the string/symbol that causes the failure
+git -C {devstack_path}/octavia log --all -S "problematic_symbol_or_string" --oneline | head -20
+
+# Blame the specific line in the affected file
+git -C {devstack_path}/octavia blame -L <start_line>,<end_line> -- <path/to/file.py>
+
+# Search commit messages for related feature or fix keywords
+git -C {devstack_path}/octavia log --all --grep="keyword" --oneline | head -20
+
+# Get full details for a candidate commit
+git -C {devstack_path}/octavia show <hash>
+
+# Extract the Change-Id from a commit (used to build the Gerrit link)
+git -C {devstack_path}/octavia show <hash> | grep "Change-Id:"
+```
+
+For each introducing commit collect:
+- Full commit hash
+- Change-Id (from the commit message `Change-Id: I...`)
+- One-sentence description of how this change caused the bug
+
+The Gerrit link is: {gerrit_base_url}/q/<Change-Id>
+
+### 10b. Check which configured branches are affected
+
+{affected_branches_section}
+
+For each wildcard pattern in the list, first expand it to real remote branches:
+```bash
+git -C {devstack_path}/octavia fetch --all --quiet 2>/dev/null || true
+git -C {devstack_path}/octavia branch -r --list "origin/<pattern>" | sed 's|^.*origin/||'
+```
+
+Then for each actual branch, check whether the introducing commit is present:
+```bash
+git -C {devstack_path}/octavia merge-base --is-ancestor <hash> origin/<branch> \
+  && echo "AFFECTED" || echo "NOT_AFFECTED"
+```
+
+### 10c. Write the "## Bug Introduction Analysis" section
+
+Include this section in the triage report with two sub-tables:
+
+**Introducing commit(s)** — one row per commit:
+| Commit | Gerrit Change | Description |
+|--------|--------------|-------------|
+| `<first 12 chars of hash>` | [<first 12 chars of Change-Id>]({gerrit_base_url}/q/<Change-Id>) | <one sentence: what the commit changed and how that caused the bug> |
+
+**Affected branches** — one row per branch that matched the configured patterns:
+| Branch | Status |
+|--------|--------|
+| master | ✅ Affected |
+| stable/2024.2 | ✅ Affected |
+| stable/2024.1 | ❌ Not affected |
+
+If the introducing commit cannot be determined with reasonable confidence, write
+"Could not determine introducing commit with confidence — see investigation notes"
+and briefly summarise what was tried.
+
