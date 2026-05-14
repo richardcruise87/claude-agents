@@ -63,6 +63,7 @@ from .forge_feedback import (
     determine_vote,
     extract_ci_forge_comment,
     extract_devstack_forge_comment,
+    determine_backport_vote,
 )
 
 __all__ = [
@@ -121,4 +122,5 @@ __all__ = [
     "determine_vote",
     "extract_ci_forge_comment",
     "extract_devstack_forge_comment",
+    "determine_backport_vote",
 ]

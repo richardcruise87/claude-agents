@@ -362,7 +362,102 @@ Document:
 *Powered by Vertex AI*
 ```
 
-## Step 10: Return to Original Branch
+## Step 10: Backport Recommendation
+
+Determine whether this change should be backported to stable branches.
+This step is mandatory — always include a Backport Recommendation section in the report.
+
+### 10a. Find bug context from the commit message and Launchpad
+
+**Extract bug references from the commit message:**
+```bash
+git -C {repo_path} log -1 --pretty=%B | grep -E "(Closes|Partial|Related)-Bug: #[0-9]+"
+```
+
+For each bug number found:
+
+**First, check for a local triage report:**
+```bash
+ls {triage_reports_dir}/bug_<NUMBER>_*.md 2>/dev/null | sort -r | head -1
+```
+Read the triage report if found. Pay close attention to:
+- Severity and validation status
+- **Bug Introduction Analysis** section — which branches contain the introducing commit
+- Affected component
+
+**If no local triage report exists, query Launchpad directly:**
+```bash
+curl -s "https://api.launchpad.net/1.0/bugs/<NUMBER>" | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); \
+  print('Title:', d.get('title')); \
+  print('Status:', d.get('status')); \
+  print('Importance:', d.get('importance')); \
+  print('Tags:', d.get('tags',[]))"
+```
+Use the Launchpad Importance (Critical/High/Medium/Low) as a proxy for severity.
+
+### 10b. Apply backporting rules
+
+{backport_rules_section}
+
+### 10c. Check configured backport target branches
+
+{backport_branches_section}
+
+Branch patterns may contain wildcards (e.g. `stable/*`). For each pattern,
+first expand it to the real remote branches that currently exist:
+```bash
+git -C {repo_path} fetch --all --quiet 2>/dev/null || true
+git -C {repo_path} branch -r --list "origin/<pattern>" | sed 's|^.*origin/||'
+```
+
+For each real branch found, determine whether the bug being fixed is present
+there. Prefer the **Bug Introduction Analysis** "Affected Branches" table from
+the triage report. If no triage report is available, use:
+```bash
+git -C {repo_path} merge-base --is-ancestor <introducing_commit> origin/<branch> \
+  && echo "AFFECTED" || echo "NOT_AFFECTED"
+```
+
+### 10d. Write the Backport Recommendation section
+
+Include a "## Backport Recommendation" section in the review document.
+
+**When backport is recommended for one or more branches:**
+```markdown
+## Backport Recommendation
+
+**Recommendation:** ✅ Backport recommended
+
+| Branch | Recommended | Reason |
+|--------|-------------|--------|
+| stable/2024.2 | ✅ Yes | High severity bug present (triage confirmed) |
+| stable/2024.1 | ❌ No | Not affected — introducing commit not in this branch |
+
+**Rationale:** <1-2 sentences referencing the severity level and applicable rules>
+```
+
+**When no backport is needed:**
+```markdown
+## Backport Recommendation
+
+**Recommendation:** ❌ No backport needed
+
+**Rationale:** <reason, e.g. new feature, stable branches unaffected, low severity>
+```
+
+**When information is insufficient:**
+```markdown
+## Backport Recommendation
+
+**Recommendation:** ⚠️ Insufficient information
+
+**Rationale:** <what would be needed to make a recommendation>
+```
+
+---
+
+## Step 11: Return to Original Branch
 
 Return to the original git branch:
 ```bash

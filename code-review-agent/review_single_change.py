@@ -15,11 +15,12 @@ import re
 import argparse
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
 from prompts import get_code_review_prompt
-from forge_feedback import extract_forge_comment, extract_line_comments, determine_vote
+from forge_feedback import extract_forge_comment, extract_line_comments, determine_vote, determine_backport_vote
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
@@ -84,13 +85,60 @@ def _post_forge_feedback(change_info, review_content: str, config: dict, forge) 
         if line_comments:
             print(f"   Inline comments: {len(line_comments)}")
 
-        ok = forge.post_feedback(change_info, comment, vote, line_comments)
+        # Backport-Candidate vote (disabled by default, separate from Code-Review)
+        extra_labels = None
+        if config.get("feedback_backport_voting"):
+            bp_vote = determine_backport_vote(review_content)
+            if bp_vote is not None:
+                bp_label = config.get("feedback_backport_vote_label", "Backport-Candidate")
+                bp_score = config.get("feedback_backport_recommend_score", 1)
+                bp_actual_score = bp_score if bp_vote else 0
+                extra_labels = {bp_label: bp_actual_score}
+                sign = "+" if bp_actual_score > 0 else ""
+                print(f"   Vote ({bp_label}): {sign}{bp_actual_score}")
+
+        ok = forge.post_feedback(change_info, comment, vote, line_comments,
+                                 extra_labels=extra_labels)
         if ok:
             print("   ✅ Feedback posted successfully")
         else:
             print("   ⚠️  Feedback post returned failure (see warnings above)")
     except Exception as exc:
         print(f"   ⚠️  Could not post forge feedback: {exc}")
+
+
+class _BackportSections(NamedTuple):
+    branches_section: str
+    rules_section: str
+    triage_dir: str
+
+
+def _build_backport_sections(config: dict) -> _BackportSections:
+    """Build the backport-related prompt sections from config."""
+    branches = config.get("backport_branches", [])
+    if branches:
+        branches_section = (
+            "The following branch patterns are configured as backport targets "
+            "(wildcards like `stable/*` are supported — expand each pattern "
+            "to real branches before checking):\n"
+            + "\n".join(f"- `{b}`" for b in branches)
+        )
+    else:
+        branches_section = "No backport target branches are configured."
+
+    rules_section = ""
+    rules_file = config.get("backport_rules_file")
+    if rules_file:
+        rules_path = Path(str(rules_file)).expanduser()
+        if rules_path.exists():
+            rules_section = rules_path.read_text(encoding="utf-8")
+        else:
+            print(f"⚠️  Backport rules file not found: {rules_path}")
+
+    triage_dir = str(
+        Path(config.get("triages_output_dir", "~/octavia_bug_triages")).expanduser()
+    )
+    return _BackportSections(branches_section, rules_section, triage_dir)
 
 
 async def review_specific_change(change_url_or_number, requested_patchset=None):
@@ -245,6 +293,9 @@ This change has been reviewed before.
             "which may not be the latest version of this change.\n"
         )
 
+    # Build backport-related prompt sections
+    _bp = _build_backport_sections(CONFIG)  # (branches_section, rules_section, triage_dir)
+
     # Build and format the prompt (forge-aware)
     _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_code_review_prompt(
@@ -263,6 +314,9 @@ This change has been reviewed before.
         forge_url=change.forge_url,
         sequence=sequence,
         head_sha=change.head_sha,
+        backport_branches_section=_bp.branches_section,
+        backport_rules_section=_bp.rules_section,
+        triage_reports_dir=_bp.triage_dir,
     )
 
     # Prepend cross-run context (rules, global learnings, agent learnings)

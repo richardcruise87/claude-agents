@@ -92,7 +92,11 @@
     "approval_score": 1,
     "major_issues_score": -1,
     "minor_only_score": 0,
-    "comment": "post_to_forge: post review summaries and line comments back to the forge after each review. enable_voting: add a Code-Review vote (Gerrit) or APPROVE/REQUEST_CHANGES state (GitHub/GitLab). vote_label: Gerrit label name (default Code-Review). Scores: approval_score=+1 (no blocking issues), major_issues_score=-1 (critical/major issues found), minor_only_score=0 (only suggestions). Requires forge.token_env to be set."
+    "comment": "post_to_forge: post review summaries and line comments back to the forge after each review. enable_voting: add a Code-Review vote (Gerrit) or APPROVE/REQUEST_CHANGES state (GitHub/GitLab). vote_label: Gerrit label name (default Code-Review). Scores: approval_score=+1 (no blocking issues), major_issues_score=-1 (critical/major issues found), minor_only_score=0 (only suggestions). Requires forge.token_env to be set.",
+    "backport_voting": false,
+    "backport_vote_label": "Backport-Candidate",
+    "backport_recommend_score": 1,
+    "comment_backport_voting": "backport_voting: enable a separate Backport-Candidate Gerrit vote alongside the Code-Review vote (disabled by default). backport_vote_label: the Gerrit label to use (default: Backport-Candidate). backport_recommend_score: vote value when backport IS recommended (default: +1). When backport is NOT recommended the vote is always 0 (neutral). There is currently no separate score for the not-recommended case."
   },
   "context": {
     "rules_file": "~/.claude-agents/rules.md",
@@ -102,5 +106,12 @@
     "max_chars_per_file": 2000,
     "save_learnings": true,
     "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
-  }
+  },
+  "backport_branches": [
+    "stable/2024.2",
+    "stable/2024.1"
+  ],
+  "backport_rules_file": null,
+  "triages_output_dir": "~/octavia_bug_triages",
+  "comment_backport": "backport_branches: branches changes may be backported to. backport_rules_file: path to a Markdown file containing backport policy rules (null = no rules file). triages_output_dir: where to look for local triage reports when assessing backport need."
 }
