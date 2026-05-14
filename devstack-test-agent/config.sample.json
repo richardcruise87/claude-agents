@@ -45,5 +45,15 @@
     "max_chars_per_file": 2000,
     "save_learnings": true,
     "comment": "Context files are read before each AI call. Learnings are appended after notable outcomes. rules_file is read-only (agents never write it)."
+  },
+  "feedback": {
+    "post_to_forge": false,
+    "comment_feedback": "Post DevStack integration test results as a comment to the forge change (Gerrit, GitHub, or GitLab)."
+  },
+  "forge": {
+    "type": "gerrit",
+    "base_url": "https://review.opendev.org",
+    "username_env": "GERRIT_USERNAME",
+    "token_env": "GERRIT_HTTP_PASSWORD"
   }
 }

@@ -22,6 +22,8 @@ from agents_lib import (
     notify_report,
     load_notifications_config,
     create_model_client,
+    create_forge_client,
+    extract_devstack_forge_comment,
 )
 from config import load_config
 from review_parser import parse_review_file, should_test_review
@@ -147,6 +149,31 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
         print("   DevStack is locked by another agent")
         print("   Will retry on next pass")
         return (False, "")
+
+
+def _post_devstack_feedback(review_info, test_report: Path, config: dict) -> None:
+    """Post DevStack test results as an informational forge comment.
+
+    No vote is cast — the comment is informational only, same as the CI
+    Failure Agent. Errors are logged but never re-raised.
+    """
+    if not config.get("feedback", {}).get("post_to_forge"):
+        return
+    try:
+        forge = create_forge_client(config)
+        change_info = forge.get_change(review_info.change_number)
+        model_name = config.get("model", "claude-sonnet-4-6")
+        comment = extract_devstack_forge_comment(
+            test_report.read_text(encoding="utf-8"), model_name
+        )
+        print(f"\n📤 Posting DevStack test feedback to {change_info.forge_type}...")
+        ok = forge.post_feedback(change_info, comment, vote=None, line_comments=[])
+        if ok:
+            print("   ✅ Feedback posted successfully")
+        else:
+            print("   ⚠️  Feedback post returned failure (see warnings above)")
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"   ⚠️  Could not post forge feedback: {exc}")
 
 
 def create_test_report(
@@ -316,6 +343,7 @@ async def main():
                     agent_config=config,
                     notifications_config=load_notifications_config(),
                 )
+                _post_devstack_feedback(review_info, test_report, config)
             else:
                 print(f"\n⚠️  Test succeeded but failed to create test report in {reviews_dir}")
         else:
