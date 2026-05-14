@@ -121,6 +121,18 @@ def load_config():
         "feedback_approval_score": config.get("feedback", {}).get("approval_score", 1),
         "feedback_major_score": config.get("feedback", {}).get("major_issues_score", -1),
         "feedback_minor_score": config.get("feedback", {}).get("minor_only_score", 0),
+        # Backport-Candidate vote (separate from Code-Review, disabled by default)
+        "feedback_backport_voting": config.get("feedback", {}).get("backport_voting", False),
+        "feedback_backport_vote_label": config.get("feedback", {}).get(
+            "backport_vote_label", "Backport-Candidate"
+        ),
+        "feedback_backport_recommend_score": config.get("feedback", {}).get(
+            "backport_recommend_score", 1
+        ),
+        # Backport configuration
+        "backport_branches": config.get("backport_branches", []),
+        "backport_rules_file": config.get("backport_rules_file"),
+        "triages_output_dir": config.get("triages_output_dir", "~/octavia_bug_triages"),
     }
 
     flat_config = expand_context_config(flat_config)

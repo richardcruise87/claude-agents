@@ -50,6 +50,9 @@ def get_code_review_prompt(
     forge_url: str = "",
     sequence: int = 1,
     head_sha: str = "",
+    backport_rules_section: str = "",
+    backport_branches_section: str = "",
+    triage_reports_dir: str = "",
 ) -> str:
     """
     Get the formatted code review prompt.
@@ -142,6 +145,9 @@ Reference the previous review context provided at the beginning of these instruc
     formatted_prompt = formatted_prompt.replace(git_fetch_expr, git_fetch_command)
 
     formatted_prompt = formatted_prompt.replace('{save_path}', save_path or '')
+    formatted_prompt = formatted_prompt.replace('{backport_rules_section}', backport_rules_section)
+    formatted_prompt = formatted_prompt.replace('{backport_branches_section}', backport_branches_section)
+    formatted_prompt = formatted_prompt.replace('{triage_reports_dir}', triage_reports_dir)
 
     # Replace the patchset comparison conditional
     comparison_expr = '{"" if not previous_patchset else f\'\'\'\n## Step 3a: Compare with Previous Patchset (PS {previous_patchset})\n\n**IMPORTANT**: You have context from a previous review of Patchset {previous_patchset}.\n\nCompare the current patchset with your previous review:\n- Check if issues you identified in PS {previous_patchset} were addressed\n- Identify what changed between patchsets (new files, modifications, deletions)\n- Note if the change is improving or regressing\n- Be specific about what was fixed and what wasn\'t\n\nReference the previous review context provided at the beginning of these instructions.\n\'\'\'}'

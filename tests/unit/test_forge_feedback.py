@@ -4,6 +4,7 @@ from agents_lib.forge_feedback import (
     extract_line_comments,
     extract_ci_forge_comment,
     extract_devstack_forge_comment,
+    determine_backport_vote,
     determine_vote,
     _has_blocking_issues,
 )
@@ -378,3 +379,43 @@ Original review content — should be excluded.
         result = extract_devstack_forge_comment(long_report, "model")
         # MAX_CHARS=5000 body + ~200 chars attribution overhead
         assert len(result) < 5_500
+
+
+# ── determine_backport_vote ───────────────────────────────────────────────────
+
+class TestDetermineBackportVote:
+    _RECOMMEND = (
+        "## Backport Recommendation\n\n"
+        "**Recommendation:** ✅ Backport recommended\n\n"
+        "| Branch | Recommended |\n|--------|-------------|\n| stable/2024.2 | ✅ Yes |\n"
+    )
+    _NO_BACKPORT = (
+        "## Backport Recommendation\n\n"
+        "**Recommendation:** ❌ No backport needed\n\n"
+        "**Rationale:** New feature, not a bug fix.\n"
+    )
+    _INSUFFICIENT = (
+        "## Backport Recommendation\n\n"
+        "**Recommendation:** ⚠️ Insufficient information\n\n"
+        "**Rationale:** No bug reference found in commit message.\n"
+    )
+
+    def test_returns_true_when_recommended(self):
+        assert determine_backport_vote(self._RECOMMEND) is True
+
+    def test_returns_false_when_not_needed(self):
+        assert determine_backport_vote(self._NO_BACKPORT) is False
+
+    def test_returns_none_when_insufficient(self):
+        assert determine_backport_vote(self._INSUFFICIENT) is None
+
+    def test_returns_none_when_section_absent(self):
+        assert determine_backport_vote("# Some review\n\nNo backport section here.") is None
+
+    def test_text_recommendation_pattern(self):
+        report = "## Backport Recommendation\n\n**Recommendation:** Backport recommended for stable/2024.2\n"
+        assert determine_backport_vote(report) is True
+
+    def test_text_no_backport_pattern(self):
+        report = "## Backport Recommendation\n\n**Recommendation:** No backport needed\n"
+        assert determine_backport_vote(report) is False
