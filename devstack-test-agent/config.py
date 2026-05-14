@@ -41,7 +41,15 @@ def load_config():
     # Add derived values for convenience
     config["devstack_path"] = config["devstack"]["path"]
     config["openrc_file"] = config["devstack"]["openrc_file"]
-    config["gerrit_base_url"] = "https://review.opendev.org"
+
+    # Wire forge config (same pattern as code-review-agent)
+    forge_cfg = config.get("forge", {})
+    config["forge_type"] = forge_cfg.get("type", "gerrit")
+    config["forge_base_url"] = forge_cfg.get("base_url", "https://review.opendev.org")
+    config["forge_token_env"] = forge_cfg.get("token_env")
+    config["forge_username_env"] = forge_cfg.get("username_env")
+    # Backward-compat key still used by some prompt templates
+    config["gerrit_base_url"] = config["forge_base_url"]
 
     config = expand_context_config(config)
     return config

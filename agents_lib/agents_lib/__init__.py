@@ -57,6 +57,13 @@ from .context_manager import (
     generate_learning,
     save_learning,
 )
+from .forge_feedback import (
+    extract_forge_comment,
+    extract_line_comments,
+    determine_vote,
+    extract_ci_forge_comment,
+    extract_devstack_forge_comment,
+)
 
 __all__ = [
     "expand_path",
@@ -109,4 +116,9 @@ __all__ = [
     "load_context_section",
     "generate_learning",
     "save_learning",
+    "extract_forge_comment",
+    "extract_line_comments",
+    "determine_vote",
+    "extract_ci_forge_comment",
+    "extract_devstack_forge_comment",
 ]
