@@ -14,6 +14,7 @@ from agents_lib.forge_feedback import (  # noqa: F401
     extract_forge_comment,
     extract_line_comments,
     determine_vote,
+    determine_backport_vote,
     extract_ci_forge_comment,
     extract_devstack_forge_comment,
 )
