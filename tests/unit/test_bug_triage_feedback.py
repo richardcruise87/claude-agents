@@ -31,15 +31,6 @@ class TestPostLaunchpadComment:
 
     def test_returns_false_on_api_error(self, monkeypatch):
         """Errors from launchpadlib should return False, not raise."""
-        import agents_lib.launchpad_client as lpc
-
-        def fake_launchpad(*args, **kwargs):
-            raise RuntimeError("API error")
-
-        monkeypatch.setattr(lpc, "_lp_connect",
-                            lambda *a, **k: (_ for _ in ()).throw(RuntimeError("API error")),
-                            raising=False)
-
         # Patch at the point launchpadlib is imported
         class FakeLaunchpad:
             def __init__(self, *a, **k):

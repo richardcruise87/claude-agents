@@ -6,6 +6,7 @@ launchpadlib (handles OAuth signing correctly for all credential types).
 Reading uses the public Launchpad REST API and requires no authentication.
 """
 import json
+import os
 import urllib.error
 import urllib.request
 from typing import List, Optional
@@ -74,12 +75,17 @@ def post_launchpad_comment_from_config(
         config["feedback_access_token_env"]
         config["feedback_access_token_secret_env"]
 
+    Respects `feedback.post_to_launchpad` — returns False immediately if the
+    flag is False or absent, so callers don't need to check it separately.
+
     Returns False (with a warning) if any credential is missing or posting
     fails.  Errors are never raised.
     """
-    import os  # pylint: disable=import-outside-toplevel
-
     feedback_cfg = config.get("feedback", {})
+
+    # Honour the post_to_launchpad flag from the nested feedback section
+    if not feedback_cfg.get("post_to_launchpad"):
+        return False
 
     # Support both flat keys (legacy) and nested feedback dict
     ck_env = config.get("feedback_consumer_key_env") or feedback_cfg.get("consumer_key_env", "")
