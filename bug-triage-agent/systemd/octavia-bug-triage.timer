@@ -3,8 +3,8 @@ Description=Octavia Bug Triage Agent Timer
 Documentation=https://github.com/richardcruise87/claude-agents
 
 [Timer]
-# Run daily at 9:00 AM
-OnCalendar=*-*-* 09:00:00
+# Run daily at 10:00 AM
+OnCalendar=*-*-* 10:00:00
 
 # Alternative schedules (uncomment one):
 # Every 6 hours:     OnCalendar=00/6:00:00

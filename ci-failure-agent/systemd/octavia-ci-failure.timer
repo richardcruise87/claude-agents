@@ -3,8 +3,8 @@ Description=OpenStack CI Failure Analysis Agent Timer
 Documentation=https://github.com/richardcruise87/claude-agents
 
 [Timer]
-# Run every 4 hours
-OnCalendar=00/4:00:00
+# Run every 1 hours
+OnCalendar=00/1:00:00
 
 # Alternative schedules (uncomment one):
 # Every 2 hours:    OnCalendar=00/2:00:00
