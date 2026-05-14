@@ -57,6 +57,11 @@ from .context_manager import (
     generate_learning,
     save_learning,
 )
+from .launchpad_client import (
+    post_launchpad_comment,
+    post_launchpad_comment_from_config,
+    get_launchpad_bug_comments,
+)
 from .forge_feedback import (
     extract_forge_comment,
     extract_line_comments,
@@ -123,4 +128,7 @@ __all__ = [
     "extract_ci_forge_comment",
     "extract_devstack_forge_comment",
     "determine_backport_vote",
+    "post_launchpad_comment",
+    "post_launchpad_comment_from_config",
+    "get_launchpad_bug_comments",
 ]

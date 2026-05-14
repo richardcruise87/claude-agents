@@ -1,101 +1,17 @@
 """
 Launchpad and Gerrit feedback reading/posting for the Fix Proposal Agent.
 
-Posting uses OAuth 1.0a (same pattern as bug-triage-agent).
-Reading Launchpad comments uses the public REST API (no auth required).
+Launchpad posting delegates to agents_lib.launchpad_client.
+Reading Launchpad comments uses agents_lib.launchpad_client (public API, no auth).
 Reading Gerrit comments uses the ForgeClient.
 """
-import base64
-import hashlib
-import hmac
-import json
 import os
-import time
-import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 from pathlib import Path
 from typing import List, Optional
 
-from agents_lib import build_feedback_comment
-
-
-# ---------------------------------------------------------------------------
-# Launchpad OAuth posting (stdlib only — identical to bug-triage-agent)
-# ---------------------------------------------------------------------------
-
-def _launchpad_auth_header(
-    method: str,
-    url: str,
-    consumer_key: str,
-    access_token: str,
-    token_secret: str,
-) -> str:
-    """Build an OAuth 1.0a HMAC-SHA1 Authorization header for Launchpad."""
-    timestamp = str(int(time.time()))
-    nonce = uuid.uuid4().hex
-    oauth_params = {
-        "oauth_consumer_key": consumer_key,
-        "oauth_token": access_token,
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": timestamp,
-        "oauth_nonce": nonce,
-        "oauth_version": "1.0",
-    }
-    param_string = "&".join(
-        f"{urllib.parse.quote(k, safe='')}={urllib.parse.quote(v, safe='')}"
-        for k, v in sorted(oauth_params.items())
-    )
-    base_string = "&".join([
-        method.upper(),
-        urllib.parse.quote(url, safe=""),
-        urllib.parse.quote(param_string, safe=""),
-    ])
-    # Launchpad desktop integrations use a blank consumer secret
-    signing_key = f"&{urllib.parse.quote(token_secret, safe='')}"
-    raw_sig = hmac.new(
-        signing_key.encode(), base_string.encode(), hashlib.sha1
-    ).digest()
-    oauth_params["oauth_signature"] = base64.b64encode(raw_sig).decode()
-    return "OAuth " + ", ".join(
-        f'{k}="{urllib.parse.quote(v, safe="")}"'
-        for k, v in oauth_params.items()
-    )
-
-
-def post_launchpad_comment(
-    bug_id: str,
-    subject: str,
-    content: str,
-    consumer_key: str,
-    access_token: str,
-    token_secret: str,
-) -> bool:
-    """Post a comment to a Launchpad bug. Returns True on success."""
-    url = f"https://api.launchpad.net/1.0/bugs/{bug_id}/messages"
-    body = urllib.parse.urlencode(
-        {"subject": subject, "content": content}
-    ).encode("utf-8")
-    auth = _launchpad_auth_header(
-        "POST", url, consumer_key, access_token, token_secret
-    )
-    req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Authorization", auth)
-    req.add_header("Content-Type", "application/x-www-form-urlencoded")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return resp.status in (200, 201)
-    except urllib.error.HTTPError as exc:
-        try:
-            detail = exc.read().decode("utf-8", errors="replace")[:300]
-        except Exception:
-            detail = ""
-        print(f"⚠️  Launchpad comment failed (HTTP {exc.code}): {exc.reason} — {detail}")
-        return False
-    except urllib.error.URLError as exc:
-        print(f"⚠️  Launchpad comment failed (network): {exc.reason}")
-        return False
+from agents_lib import build_feedback_comment, post_launchpad_comment, get_launchpad_bug_comments
 
 
 def post_proposal_to_launchpad(
@@ -153,29 +69,9 @@ def get_launchpad_comments_since(
 ) -> List[dict]:
     """Fetch Launchpad bug comments posted after since_iso.
 
-    Uses the public REST API — no authentication required.
-
-    Returns:
-        List of dicts with keys: author, content, date_created.
+    Delegates to agents_lib.get_launchpad_bug_comments (public API, no auth).
     """
-    url = f"https://api.launchpad.net/1.0/bugs/{bug_id}/messages"
-    try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        comments = []
-        for entry in data.get("entries", []):
-            date_created = entry.get("date_created", "")
-            if date_created > since_iso:
-                comments.append({
-                    "author": entry.get("owner_link", "unknown"),
-                    "content": entry.get("content", ""),
-                    "date_created": date_created,
-                })
-        return comments
-    except Exception as exc:
-        print(f"⚠️  Could not fetch Launchpad comments for bug #{bug_id}: {exc}")
-        return []
+    return get_launchpad_bug_comments(bug_id, since_iso=since_iso)
 
 
 # ---------------------------------------------------------------------------
