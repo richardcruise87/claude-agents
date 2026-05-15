@@ -43,7 +43,7 @@ usage() {
     echo "  --no-systemd        Skip systemd installation without prompting"
     echo "  --notifications     Set up notifications without prompting"
     echo "  --no-notifications  Skip notification setup without prompting"
-    echo "  --credentials       Set up credentials file without prompting"
+    echo "  --credentials       Proceed to credential prompts without asking for confirmation"
     echo "  --no-credentials    Skip credentials setup without prompting"
     echo "  --venv PATH         Virtual environment path (default: ~/.venv/claude-agents)"
     echo "  -h, --help          Show this help message"
@@ -258,15 +258,15 @@ if ! $UPDATE_MODE; then
 # ── Gerrit / OpenDev ────────────────────────────────────────────────────────
 # Used by: code-review, ci-failure, devstack-test agents
 # Generate at: https://review.opendev.org/settings/#HTTPCredentials
-GERRIT_USERNAME=
-GERRIT_HTTP_PASSWORD=
+#GERRIT_USERNAME=
+#GERRIT_HTTP_PASSWORD=
 
 # ── Launchpad OAuth ─────────────────────────────────────────────────────────
 # Used by: bug-triage, fix-proposal, fix-verification agents
 # Generate with: python3 scripts/get_launchpad_token.py
-LAUNCHPAD_CONSUMER_KEY=
-LAUNCHPAD_ACCESS_TOKEN=
-LAUNCHPAD_ACCESS_TOKEN_SECRET=
+#LAUNCHPAD_CONSUMER_KEY=
+#LAUNCHPAD_ACCESS_TOKEN=
+#LAUNCHPAD_ACCESS_TOKEN_SECRET=
 CREDSEOF
         fi
         chmod 600 "$CREDS_FILE"
@@ -275,10 +275,11 @@ CREDSEOF
         echo "Enter credentials (press Enter to leave existing value unchanged):"
         echo ""
 
-        # Helper: prompt for a credential, update the file if a value is given
+        # Helper: prompt for a credential, update the file if a value is given.
+        # Uses printf/sed with proper escaping to handle special characters in values.
         _set_cred() {
             local key="$1" prompt="$2"
-            local current
+            local current escaped_val
             current=$(grep -E "^${key}=" "$CREDS_FILE" | cut -d= -f2-)
             if [ -n "$current" ]; then
                 echo -n "  $prompt [currently set, Enter to keep]: "
@@ -287,9 +288,11 @@ CREDSEOF
             fi
             read -r _val
             if [ -n "$_val" ]; then
-                # Replace or append the key=value line
-                if grep -q "^${key}=" "$CREDS_FILE"; then
-                    sed -i "s|^${key}=.*|${key}=${_val}|" "$CREDS_FILE"
+                # Escape characters that would break the sed s|...| delimiter
+                escaped_val=$(printf '%s' "$_val" | sed 's/[|&\]/\\&/g')
+                # Replace existing KEY= or #KEY= line, or append if absent
+                if grep -qE "^#?${key}=" "$CREDS_FILE"; then
+                    sed -i "s|^#\?${key}=.*|${key}=${escaped_val}|" "$CREDS_FILE"
                 else
                     echo "${key}=${_val}" >> "$CREDS_FILE"
                 fi
