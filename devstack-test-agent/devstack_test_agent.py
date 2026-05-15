@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from agents_lib import (
     load_tracking_file,
     save_tracking_file,
+    find_latest_report,
     check_devstack_health,
     devstack_lock,
     get_unique_resource_prefix,
@@ -375,14 +376,8 @@ async def main():
                 review_file, Path(test_results_file), reviews_dir
             )
             if test_report:
-                # Record in tracking
-                tested_reviews[review_id] = {
-                    "tested_at": datetime.now().isoformat(),
-                    "review_file": str(review_file),
-                    "test_report_file": str(test_report),
-                    "test_result": "success"
-                }
-                save_tracking_file(tracking_file, tested_reviews)
+                _record_test_result(review_info, review_file, tracking_file, "success", test_report)
+                tested_reviews = load_tracking_file(tracking_file)  # keep in sync for loop
                 tested_count += 1
                 print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
                 notify_report(
@@ -416,23 +411,47 @@ async def main():
     print("="*80)
 
 
+def _record_test_result(
+    review_info,
+    review_file: Path,
+    tracking_file: Path,
+    test_result: str,
+    test_report_file: "Path | None" = None,
+) -> None:
+    """Write a tracking entry for a tested change (success or failure)."""
+    tested_reviews = load_tracking_file(tracking_file)
+    review_id = (
+        f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
+    )
+    entry = {
+        "tested_at": datetime.now().isoformat(),
+        "review_file": str(review_file),
+        "test_result": test_result,
+    }
+    if test_report_file:
+        entry["test_report_file"] = str(test_report_file)
+    tested_reviews[review_id] = entry
+    save_tracking_file(tracking_file, tested_reviews)
+
+
 async def run_single_change(change_number: str, patchset: "int | None", config: dict) -> None:
     """Find the review file for a specific change and run DevStack tests on it."""
     reviews_dir = Path(config["reviews_directory"])
     ps_glob = f"ps{patchset}_" if patchset else "ps*_"
     pattern = f"review_*_{change_number}_{ps_glob}*.md"
-    matches = sorted(reviews_dir.glob(pattern))
-    if not matches:
+    review_file = find_latest_report(reviews_dir, pattern)
+    if not review_file:
         print(f"❌ No review file found matching {pattern} in {reviews_dir}")
         sys.exit(1)
 
-    review_file = matches[-1]
     print(f"📄 Using review file: {review_file.name}\n")
 
     review_info = parse_review_file(review_file)
     if not review_info:
         print(f"❌ Could not parse review file: {review_file}")
         sys.exit(1)
+
+    tracking_file = Path(config["tracking"]["tested_reviews_file"])
 
     print(f"📌 Testing {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
 
@@ -441,18 +460,7 @@ async def run_single_change(change_number: str, patchset: "int | None", config: 
     if success and test_results_file:
         test_report = create_test_report(review_file, Path(test_results_file), reviews_dir)
         if test_report:
-            tracking_file = Path(config["tracking"]["tested_reviews_file"])
-            tested_reviews = load_tracking_file(tracking_file)
-            review_id = (
-                f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
-            )
-            tested_reviews[review_id] = {
-                "tested_at": datetime.now().isoformat(),
-                "review_file": str(review_file),
-                "test_report_file": str(test_report),
-                "test_result": "success",
-            }
-            save_tracking_file(tracking_file, tested_reviews)
+            _record_test_result(review_info, review_file, tracking_file, "success", test_report)
             print(f"\n✅ Test complete. Report: {test_report.name}")
             notify_report(
                 report_path=test_report,
@@ -469,6 +477,7 @@ async def run_single_change(change_number: str, patchset: "int | None", config: 
             print(f"\n⚠️  Tests ran but report file could not be created in {reviews_dir}")
     else:
         print(f"\n⚠️  Tests failed or were skipped for change #{change_number}")
+        _record_test_result(review_info, review_file, tracking_file, "failure")
         _post_devstack_failure_feedback(review_info, config)
 
 

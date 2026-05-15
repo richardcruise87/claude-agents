@@ -206,11 +206,12 @@ def get_build_by_uuid(uuid, zuul_base_url, tenant):
     """
     url = f"{zuul_base_url}/api/tenant/{tenant}/build/{uuid}"
 
+    build = None
     for attempt in range(1 + _ZUUL_RETRIES):
         try:
             with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
-                build = json.loads(response.read().decode("utf-8"))
-                return normalize_build(build)
+                build = normalize_build(json.loads(response.read().decode("utf-8")))
+            break
         except HTTPError as e:
             if e.code == 404:
                 print(f"  Error: Build {uuid[:12]}... not found in Zuul tenant '{tenant}'")
@@ -227,9 +228,11 @@ def get_build_by_uuid(uuid, zuul_base_url, tenant):
         except Exception as e:  # pylint: disable=broad-except
             print(f"  Warning: Unexpected error fetching build {uuid[:12]}...: {e}")
             return None
-    print(f"  Warning: Zuul API timed out fetching build {uuid[:12]}... "
-          f"after {1 + _ZUUL_RETRIES} attempts")
-    return None
+    else:
+        print(f"  Warning: Zuul API timed out fetching build {uuid[:12]}... "
+              f"after {1 + _ZUUL_RETRIES} attempts")
+        return None
+    return build
 
 
 def get_latest_patchset_failures(builds):

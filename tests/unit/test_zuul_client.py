@@ -200,10 +200,10 @@ class TestFetchRecentFailures:
             )
         assert len(result) == 0
 
-    def test_http_error_returns_empty(self, mocker):
+    def test_http_error_returns_none(self, mocker):
         with patch("zuul_client.urlopen", side_effect=HTTPError(None, 500, "err", {}, None)):
             result = fetch_recent_failures(
                 "openstack/octavia", "check",
                 "https://zuul.opendev.org", "openstack"
             )
-        assert result == []
+        assert result is None
