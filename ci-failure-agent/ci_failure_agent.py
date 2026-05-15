@@ -124,6 +124,8 @@ def list_recent_failures(projects, pipelines, hours_back):
                 tenant=CONFIG["zuul_tenant"],
                 hours_back=hours_back,
             )
+            if builds is None:
+                continue  # warning already printed by fetch_recent_failures
             if not builds:
                 print("    No recent failures found.")
                 continue
@@ -163,6 +165,9 @@ def process_repo(project, pipeline, hours_back, output_dir, analyzed_count, max_
         hours_back=hours_back,
     )
 
+    if builds is None:
+        # fetch_recent_failures already printed a warning
+        return analyzed_count
     if not builds:
         print("    No failures found.")
         return analyzed_count

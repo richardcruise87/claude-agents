@@ -5,10 +5,15 @@ Supports the Zuul REST API as documented at:
 https://zuul-ci.org/docs/zuul/latest/rest-api.html
 """
 import json
+import socket
+import time
 from datetime import datetime, timezone, timedelta
 from urllib.request import urlopen
 from urllib.parse import urlencode
 from urllib.error import URLError, HTTPError
+
+_ZUUL_TIMEOUT = 60      # seconds per attempt
+_ZUUL_RETRIES = 2       # number of retry attempts after first failure
 
 
 def normalize_build(build):
@@ -53,18 +58,27 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
 
     url = f"{zuul_base_url}/api/tenant/{tenant}/builds?{params}"
 
-    try:
-        with urlopen(url, timeout=30) as response:
-            builds = json.loads(response.read().decode("utf-8"))
-    except HTTPError as e:
-        print(f"  Warning: HTTP {e.code} fetching Zuul builds for {project}/{pipeline}: {e}")
-        return []
-    except URLError as e:
-        print(f"  Warning: Failed to connect to Zuul at {zuul_base_url}: {e}")
-        return []
-    except Exception as e:
-        print(f"  Warning: Unexpected error fetching Zuul builds: {e}")
-        return []
+    for attempt in range(1 + _ZUUL_RETRIES):
+        try:
+            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
+                builds = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as e:
+            print(f"  Warning: HTTP {e.code} fetching Zuul builds for {project}/{pipeline}: {e}")
+            return None
+        except (socket.timeout, TimeoutError):
+            if attempt < _ZUUL_RETRIES:
+                time.sleep(5)
+        except URLError as e:
+            print(f"  Warning: Failed to connect to Zuul at {zuul_base_url}: {e}")
+            return None
+        except Exception as e:  # pylint: disable=broad-except
+            print(f"  Warning: Unexpected error fetching Zuul builds: {e}")
+            return None
+    else:
+        print(f"  Warning: Zuul API timed out for {project}/{pipeline} "
+              f"after {1 + _ZUUL_RETRIES} attempts — skipping")
+        return None
 
     if not isinstance(builds, list):
         print("  Warning: Unexpected response format from Zuul API")
@@ -146,17 +160,26 @@ def get_builds_for_change(change_number, zuul_base_url, tenant, pipeline=None, r
 
     url = f"{zuul_base_url}/api/tenant/{tenant}/builds?{urlencode(params)}"
 
-    try:
-        with urlopen(url, timeout=30) as response:
-            builds = json.loads(response.read().decode("utf-8"))
-    except HTTPError as e:
-        print(f"  Warning: HTTP {e.code} fetching builds for change #{change_number}: {e}")
-        return []
-    except URLError as e:
-        print(f"  Warning: Failed to connect to Zuul at {zuul_base_url}: {e}")
-        return []
-    except Exception as e:
-        print(f"  Warning: Unexpected error fetching change builds: {e}")
+    for attempt in range(1 + _ZUUL_RETRIES):
+        try:
+            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
+                builds = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as e:
+            print(f"  Warning: HTTP {e.code} fetching builds for change #{change_number}: {e}")
+            return []
+        except (socket.timeout, TimeoutError):
+            if attempt < _ZUUL_RETRIES:
+                time.sleep(5)
+        except URLError as e:
+            print(f"  Warning: Failed to connect to Zuul at {zuul_base_url}: {e}")
+            return []
+        except Exception as e:  # pylint: disable=broad-except
+            print(f"  Warning: Unexpected error fetching change builds: {e}")
+            return []
+    else:
+        print(f"  Warning: Zuul API timed out fetching builds for change "
+              f"#{change_number} after {1 + _ZUUL_RETRIES} attempts")
         return []
 
     if not isinstance(builds, list):
@@ -183,23 +206,30 @@ def get_build_by_uuid(uuid, zuul_base_url, tenant):
     """
     url = f"{zuul_base_url}/api/tenant/{tenant}/build/{uuid}"
 
-    try:
-        with urlopen(url, timeout=30) as response:
-            build = json.loads(response.read().decode("utf-8"))
-            return normalize_build(build)
-    except HTTPError as e:
-        if e.code == 404:
-            print(f"  Error: Build {uuid[:12]}... not found in Zuul tenant '{tenant}'")
-            print("  Check the UUID and that you are using the correct --zuul-base-url / tenant")
-        else:
-            print(f"  Warning: HTTP {e.code} fetching build {uuid[:12]}...: {e}")
-        return None
-    except URLError as e:
-        print(f"  Warning: Failed to connect to Zuul at {zuul_base_url}: {e}")
-        return None
-    except Exception as e:
-        print(f"  Warning: Unexpected error fetching build {uuid[:12]}...: {e}")
-        return None
+    for attempt in range(1 + _ZUUL_RETRIES):
+        try:
+            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
+                build = json.loads(response.read().decode("utf-8"))
+                return normalize_build(build)
+        except HTTPError as e:
+            if e.code == 404:
+                print(f"  Error: Build {uuid[:12]}... not found in Zuul tenant '{tenant}'")
+                print("  Check the UUID and that you are using the correct --zuul-base-url / tenant")
+            else:
+                print(f"  Warning: HTTP {e.code} fetching build {uuid[:12]}...: {e}")
+            return None
+        except (socket.timeout, TimeoutError):
+            if attempt < _ZUUL_RETRIES:
+                time.sleep(5)
+        except URLError as e:
+            print(f"  Warning: Failed to connect to Zuul at {zuul_base_url}: {e}")
+            return None
+        except Exception as e:  # pylint: disable=broad-except
+            print(f"  Warning: Unexpected error fetching build {uuid[:12]}...: {e}")
+            return None
+    print(f"  Warning: Zuul API timed out fetching build {uuid[:12]}... "
+          f"after {1 + _ZUUL_RETRIES} attempts")
+    return None
 
 
 def get_latest_patchset_failures(builds):
