@@ -5,6 +5,7 @@ DevStack Test Agent
 Watches for new code review files and tests changes in DevStack environment.
 Operates asynchronously from code review agent to improve throughput.
 """
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -393,9 +394,80 @@ async def main():
     print("="*80)
 
 
+async def run_single_change(change_number: str, patchset: "int | None", config: dict) -> None:
+    """Find the review file for a specific change and run DevStack tests on it."""
+    reviews_dir = Path(config["reviews_directory"])
+    ps_glob = f"ps{patchset}_" if patchset else "ps*_"
+    pattern = f"review_*_{change_number}_{ps_glob}*.md"
+    matches = sorted(reviews_dir.glob(pattern))
+    if not matches:
+        print(f"❌ No review file found matching {pattern} in {reviews_dir}")
+        sys.exit(1)
+
+    review_file = matches[-1]
+    print(f"📄 Using review file: {review_file.name}\n")
+
+    review_info = parse_review_file(review_file)
+    if not review_info:
+        print(f"❌ Could not parse review file: {review_file}")
+        sys.exit(1)
+
+    print(f"📌 Testing {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
+
+    success, test_results_file = await test_change_in_devstack(review_info, config)
+
+    if success and test_results_file:
+        test_report = create_test_report(review_file, Path(test_results_file), reviews_dir)
+        if test_report:
+            tracking_file = Path(config["tracking"]["tested_reviews_file"])
+            tested_reviews = load_tracking_file(tracking_file)
+            review_id = (
+                f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
+            )
+            tested_reviews[review_id] = {
+                "tested_at": datetime.now().isoformat(),
+                "review_file": str(review_file),
+                "test_report_file": str(test_report),
+                "test_result": "success",
+            }
+            save_tracking_file(tracking_file, tested_reviews)
+            print(f"\n✅ Test complete. Report: {test_report.name}")
+            notify_report(
+                report_path=test_report,
+                subject=(
+                    f"DevStack Test: {review_info.repo_name} "
+                    f"#{review_info.change_number} PS{review_info.patchset}"
+                ),
+                summary="DevStack integration test passed",
+                agent_config=config,
+                notifications_config=load_notifications_config(),
+            )
+            _post_devstack_feedback(review_info, test_report, config)
+        else:
+            print(f"\n⚠️  Tests ran but report file could not be created in {reviews_dir}")
+    else:
+        print(f"\n⚠️  Tests failed or were skipped for change #{change_number}")
+        _post_devstack_failure_feedback(review_info, config)
+
+
 def cli_main():
     """Main entry point for command-line usage."""
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description='DevStack Test Agent')
+    parser.add_argument(
+        '--change', metavar='N',
+        help='Run tests immediately on this Gerrit change number, bypassing the review queue.',
+    )
+    parser.add_argument(
+        '--patchset', '-p', metavar='N', type=int,
+        help='Patchset to test (default: latest available review file for the change).',
+    )
+    args = parser.parse_args()
+
+    if args.change:
+        config = load_config_module()
+        asyncio.run(run_single_change(str(args.change), args.patchset, config))
+    else:
+        asyncio.run(main())
 
 
 if __name__ == "__main__":
