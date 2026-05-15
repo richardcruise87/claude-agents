@@ -10,6 +10,7 @@ Usage:
     python review_single_change.py https://review.opendev.org/c/openstack/octavia/+/912345 3
 """
 import asyncio
+import dataclasses
 import sys
 import re
 import argparse
@@ -33,6 +34,7 @@ from agents_lib import (
     record_review,
     create_review_filename,
     determine_backport_vote,
+    find_latest_report,
 )
 
 # Load configuration
@@ -386,12 +388,11 @@ This change has been reviewed before.
 
 def _post_only(change_ref: str, patchset: "int | None") -> None:
     """Resolve a change, find the latest saved review file, and post it to the forge."""
-    import re as _re
     forge = create_forge_client(CONFIG)
 
     print(f"🔍 Resolving change: {change_ref}")
     try:
-        if _re.match(r'^https?://', change_ref):
+        if re.match(r'^https?://', change_ref):
             change = forge.get_change_from_url(change_ref)
         else:
             repos = CONFIG.get("octavia_repos", [])
@@ -402,19 +403,17 @@ def _post_only(change_ref: str, patchset: "int | None") -> None:
         return
 
     if patchset and change.forge_type == "gerrit":
-        change = change._replace(patchset=patchset)
+        change = dataclasses.replace(change, patchset=patchset)
 
     output_dir = Path(REVIEWS_OUTPUT_DIR)
     change_id = str(change.change_id)
-    # Match review_<repo>_<change>_ps<n>_<timestamp>.md (any patchset when not specified)
     ps_glob = f"ps{patchset}_" if patchset else "ps*_"
     pattern = f"review_*_{change_id}_{ps_glob}*.md"
-    matches = sorted(output_dir.glob(pattern))
-    if not matches:
+    review_file = find_latest_report(output_dir, pattern)
+    if not review_file:
         print(f"❌ No review file found matching {pattern} in {output_dir}")
         return
 
-    review_file = matches[-1]  # latest by name (timestamp-sorted)
     print(f"📄 Using review file: {review_file.name}")
     review_content = review_file.read_text(encoding="utf-8")
 

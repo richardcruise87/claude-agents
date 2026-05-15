@@ -6,7 +6,10 @@ Shared utilities for Claude-based automation agents.
 
 __version__ = "1.0.0"
 
-from .utils import expand_path, slugify, format_usage_info, sanitize_for_forge, build_feedback_comment, find_latest_report
+from .utils import (
+    expand_path, slugify, format_usage_info,
+    sanitize_for_forge, build_feedback_comment, find_latest_report,
+)
 from .config_loader import (
     load_agent_config,
     apply_cutoff_date,

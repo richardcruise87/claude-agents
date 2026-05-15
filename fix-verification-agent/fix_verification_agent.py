@@ -684,18 +684,15 @@ Examples:
 
     if args.post_only:
         if not args.bug:
-            import sys
             print("❌ --post-only requires --bug N", file=sys.stderr)
             sys.exit(1)
         bug_id = str(args.bug)
         output_dir = Path(config["verifications_output_dir"])
         report = find_latest_report(output_dir, f"verification_{bug_id}_*.md")
         if not report:
-            import sys
             print(f"❌ No verification report found for bug {bug_id} in {output_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
-        # Derive the subject from the outcome recorded in the report
         content = report.read_text(encoding="utf-8")
         if "RESOLVED" in content and "NOT_RESOLVED" not in content:
             subject = "AI Fix Verified ✅ (automated, may contain errors)"
@@ -704,7 +701,6 @@ Examples:
         else:
             subject = "AI Fix Verification Inconclusive ⚠️ (automated, may contain errors)"
         ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=4000)
-        import sys
         sys.exit(0 if ok else 1)
 
     print("\n" + "="*80)

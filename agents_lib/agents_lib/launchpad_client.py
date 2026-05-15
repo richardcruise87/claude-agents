@@ -9,6 +9,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import List, Optional
 
 
@@ -167,11 +168,10 @@ def post_report_to_launchpad(
 
     Returns True on success, False on any failure (errors are printed, not raised).
     """
-    from pathlib import Path as _Path
     from .utils import build_feedback_comment
 
     try:
-        content = _Path(report_file).read_text(encoding="utf-8")
+        content = Path(report_file).read_text(encoding="utf-8")
         model_name = config.get("model", "claude-sonnet-4-6")
         comment = build_feedback_comment(content, model_name, max_chars=max_chars)
         print(f"\n📤 Posting report to Launchpad bug #{bug_id}...")
