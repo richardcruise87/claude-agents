@@ -13,7 +13,9 @@ NC='\033[0m'
 UPDATE_MODE=false
 INSTALL_SYSTEMD=""
 SETUP_NOTIFICATIONS=""
+SETUP_CREDENTIALS=""
 SELECTED_AGENTS=()
+CREDS_FILE="$HOME/.config/claude-agents/credentials.env"
 
 ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test" "jira-triage" "fix-proposal" "fix-verification")
 
@@ -41,6 +43,8 @@ usage() {
     echo "  --no-systemd        Skip systemd installation without prompting"
     echo "  --notifications     Set up notifications without prompting"
     echo "  --no-notifications  Skip notification setup without prompting"
+    echo "  --credentials       Set up credentials file without prompting"
+    echo "  --no-credentials    Skip credentials setup without prompting"
     echo "  --venv PATH         Virtual environment path (default: ~/.venv/claude-agents)"
     echo "  -h, --help          Show this help message"
     echo ""
@@ -70,6 +74,8 @@ while [[ $# -gt 0 ]]; do
         --no-systemd)        INSTALL_SYSTEMD=no; shift ;;
         --notifications)     SETUP_NOTIFICATIONS=yes; shift ;;
         --no-notifications)  SETUP_NOTIFICATIONS=no; shift ;;
+        --credentials)       SETUP_CREDENTIALS=yes; shift ;;
+        --no-credentials)    SETUP_CREDENTIALS=no; shift ;;
         --venv)              VENV_PATH="$2"; shift 2 ;;
         -h|--help)        usage; exit 0 ;;
         bug-triage|code-review|bug-reproduction|ci-failure|devstack-test|jira-triage|fix-proposal|fix-verification)
@@ -215,6 +221,98 @@ PYEOF
     echo ""
 fi
 
+# Step: Credentials file (install mode only)
+if ! $UPDATE_MODE; then
+    echo -e "${BLUE}Step ${STEP}: Credentials (optional)${NC}"
+
+    if [ "$SETUP_CREDENTIALS" = "yes" ]; then
+        : # Flag passed — proceed below
+    elif [ "$SETUP_CREDENTIALS" = "no" ]; then
+        : # Flag passed — skip below
+    elif [ -f "$CREDS_FILE" ]; then
+        echo -e "${GREEN}✓${NC} Credentials file already exists: $CREDS_FILE"
+        echo -n "Update credentials? [y/N] "
+        read -r _response
+        [[ "$_response" =~ ^[Yy]$ ]] && SETUP_CREDENTIALS=yes || SETUP_CREDENTIALS=existing
+    else
+        echo "Sensitive credentials (Gerrit, Launchpad) can be stored in a"
+        echo "chmod 600 file instead of in the systemd service files."
+        echo -n "Set up credentials file? [y/N] "
+        read -r _response
+        [[ "$_response" =~ ^[Yy]$ ]] && SETUP_CREDENTIALS=yes || SETUP_CREDENTIALS=no
+    fi
+
+    if [ "$SETUP_CREDENTIALS" = "yes" ]; then
+        mkdir -p "$(dirname "$CREDS_FILE")"
+
+        # Seed file with current values if it exists, otherwise blank
+        if [ ! -f "$CREDS_FILE" ]; then
+            cat > "$CREDS_FILE" << 'CREDSEOF'
+# Claude Agents credentials
+# Loaded by all agent systemd services via EnvironmentFile=
+# Permissions: 600 (readable only by you)
+#
+# Leave a value blank to skip it — agents that don't use a credential
+# simply ignore the unset variable.
+
+# ── Gerrit / OpenDev ────────────────────────────────────────────────────────
+# Used by: code-review, ci-failure, devstack-test agents
+# Generate at: https://review.opendev.org/settings/#HTTPCredentials
+GERRIT_USERNAME=
+GERRIT_HTTP_PASSWORD=
+
+# ── Launchpad OAuth ─────────────────────────────────────────────────────────
+# Used by: bug-triage, fix-proposal, fix-verification agents
+# Generate with: python3 scripts/get_launchpad_token.py
+LAUNCHPAD_CONSUMER_KEY=
+LAUNCHPAD_ACCESS_TOKEN=
+LAUNCHPAD_ACCESS_TOKEN_SECRET=
+CREDSEOF
+        fi
+        chmod 600 "$CREDS_FILE"
+
+        echo ""
+        echo "Enter credentials (press Enter to leave existing value unchanged):"
+        echo ""
+
+        # Helper: prompt for a credential, update the file if a value is given
+        _set_cred() {
+            local key="$1" prompt="$2"
+            local current
+            current=$(grep -E "^${key}=" "$CREDS_FILE" | cut -d= -f2-)
+            if [ -n "$current" ]; then
+                echo -n "  $prompt [currently set, Enter to keep]: "
+            else
+                echo -n "  $prompt [Enter to skip]: "
+            fi
+            read -r _val
+            if [ -n "$_val" ]; then
+                # Replace or append the key=value line
+                if grep -q "^${key}=" "$CREDS_FILE"; then
+                    sed -i "s|^${key}=.*|${key}=${_val}|" "$CREDS_FILE"
+                else
+                    echo "${key}=${_val}" >> "$CREDS_FILE"
+                fi
+                echo -e "    ${GREEN}✓${NC} $key saved"
+            fi
+        }
+
+        echo "  Gerrit / OpenDev:"
+        _set_cred GERRIT_USERNAME        "Gerrit username"
+        _set_cred GERRIT_HTTP_PASSWORD   "Gerrit HTTP password"
+        echo ""
+        echo "  Launchpad OAuth:"
+        _set_cred LAUNCHPAD_CONSUMER_KEY          "Consumer key"
+        _set_cred LAUNCHPAD_ACCESS_TOKEN          "Access token"
+        _set_cred LAUNCHPAD_ACCESS_TOKEN_SECRET   "Access token secret"
+        echo ""
+        echo -e "${GREEN}✓${NC} Credentials saved to $CREDS_FILE (chmod 600)"
+    fi
+
+    STEP=$((STEP + 1))
+    echo ""
+fi
+
 # Reload systemd if files were installed or in update mode
 if [ "$INSTALL_SYSTEMD" = "yes" ] || $UPDATE_MODE; then
     echo -e "${BLUE}Step ${STEP}: Reloading systemd daemon${NC}"
@@ -284,6 +382,18 @@ if ! $UPDATE_MODE; then
         NEXT=3
     else
         NEXT=2
+    fi
+
+    if [ "$SETUP_CREDENTIALS" = "yes" ]; then
+        echo "${NEXT}. Edit credentials (Gerrit / Launchpad):"
+        echo "     $CREDS_FILE"
+        echo ""
+        NEXT=$((NEXT + 1))
+    elif [ "$SETUP_CREDENTIALS" != "existing" ]; then
+        echo "${NEXT}. (Optional) Store credentials securely:"
+        echo "     $(basename "$0") --credentials"
+        echo ""
+        NEXT=$((NEXT + 1))
     fi
 
     if [ "$INSTALL_SYSTEMD" = "yes" ]; then

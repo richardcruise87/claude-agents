@@ -10,6 +10,7 @@ WorkingDirectory=%h/git/claude-agents/bug-triage-agent
 
 ExecStart=%h/.venv/claude-agents/bin/octavia-triage-bugs
 
+EnvironmentFile=-%h/.config/claude-agents/credentials.env
 Environment="CLAUDE_CODE_USE_VERTEX=1"
 Environment="PYTHONUNBUFFERED=1"
 # Environment="CUTOFF_DATE=2026-03-01"

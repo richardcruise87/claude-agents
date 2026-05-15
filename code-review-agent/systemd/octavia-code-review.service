@@ -10,6 +10,7 @@ WorkingDirectory=%h/git/claude-agents/code-review-agent
 
 ExecStart=%h/.venv/claude-agents/bin/octavia-review-agent
 
+EnvironmentFile=-%h/.config/claude-agents/credentials.env
 Environment="CLAUDE_CODE_USE_VERTEX=1"
 Environment="PYTHONUNBUFFERED=1"
 Environment="CLAUDE_MODEL=claude-sonnet-4-6"
