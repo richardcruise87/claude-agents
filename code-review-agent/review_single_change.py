@@ -65,14 +65,14 @@ def _find_full_review_content(summary_content: str) -> str:
     return ""
 
 
-def _post_forge_feedback(change_info, review_content: str, config: dict, forge) -> None:
+def _post_forge_feedback(change_info, review_content: str, config: dict, forge) -> bool:
     """Parse the review and post a summary comment (and optional vote) to the forge.
 
     review_content is the full consolidated report (already resolved by the caller),
     so no secondary file lookup is needed.
 
-    Errors are logged but never re-raised — a failed post must not prevent the
-    review from being recorded locally.
+    Returns True on success, False on any failure. Errors are logged but never
+    re-raised — a failed post must not prevent the review from being recorded locally.
     """
     model_name = config.get("model", "claude-sonnet-4-6")
     try:
@@ -106,8 +106,10 @@ def _post_forge_feedback(change_info, review_content: str, config: dict, forge) 
             print("   ✅ Feedback posted successfully")
         else:
             print("   ⚠️  Feedback post returned failure (see warnings above)")
+        return ok
     except Exception as exc:
         print(f"   ⚠️  Could not post forge feedback: {exc}")
+        return False
 
 
 class _BackportSections(NamedTuple):
@@ -386,8 +388,11 @@ This change has been reviewed before.
         traceback.print_exc()
 
 
-def _post_only(change_ref: str, patchset: "int | None") -> None:
-    """Resolve a change, find the latest saved review file, and post it to the forge."""
+def _post_only(change_ref: str, patchset: "int | None") -> bool:
+    """Resolve a change, find the latest saved review file, and post it to the forge.
+
+    Returns True on success, False on any failure.
+    """
     forge = create_forge_client(CONFIG)
 
     print(f"🔍 Resolving change: {change_ref}")
@@ -400,7 +405,7 @@ def _post_only(change_ref: str, patchset: "int | None") -> None:
             change = forge.get_change(change_ref.strip(), repo_hint)
     except Exception as exc:
         print(f"❌ Could not fetch change details: {exc}")
-        return
+        return False
 
     if patchset and change.forge_type == "gerrit":
         change = dataclasses.replace(change, patchset=patchset)
@@ -412,12 +417,12 @@ def _post_only(change_ref: str, patchset: "int | None") -> None:
     review_file = find_latest_report(output_dir, pattern)
     if not review_file:
         print(f"❌ No review file found matching {pattern} in {output_dir}")
-        return
+        return False
 
     print(f"📄 Using review file: {review_file.name}")
     review_content = review_file.read_text(encoding="utf-8")
 
-    _post_forge_feedback(change, review_content, CONFIG, forge)
+    return _post_forge_feedback(change, review_content, CONFIG, forge)
 
 
 def main():
@@ -477,8 +482,8 @@ Examples:
     patchset = args.patchset if args.patchset else args.patchset_flag
 
     if args.post_only:
-        _post_only(args.change, patchset)
-        return
+        ok = _post_only(args.change, patchset)
+        sys.exit(0 if ok else 1)
 
     if patchset:
         print(f"📌 Reviewing patchset {patchset}\n")
