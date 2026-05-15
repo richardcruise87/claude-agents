@@ -6,7 +6,7 @@ Shared utilities for Claude-based automation agents.
 
 __version__ = "1.0.0"
 
-from .utils import expand_path, slugify, format_usage_info, sanitize_for_forge, build_feedback_comment
+from .utils import expand_path, slugify, format_usage_info, sanitize_for_forge, build_feedback_comment, find_latest_report
 from .config_loader import (
     load_agent_config,
     apply_cutoff_date,
@@ -61,6 +61,7 @@ from .launchpad_client import (
     post_launchpad_comment,
     post_launchpad_comment_from_config,
     get_launchpad_bug_comments,
+    post_report_to_launchpad,
 )
 from .forge_feedback import (
     extract_forge_comment,
@@ -131,4 +132,6 @@ __all__ = [
     "post_launchpad_comment",
     "post_launchpad_comment_from_config",
     "get_launchpad_bug_comments",
+    "post_report_to_launchpad",
+    "find_latest_report",
 ]

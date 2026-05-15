@@ -43,7 +43,8 @@
     "type": "gerrit",
     "base_url": "https://review.opendev.org",
     "token_env": null,
-    "comment": "type: gerrit | github | gitlab. token_env: env var holding the API token (required for posting feedback). Only needed when feedback.post_to_forge is true."
+    "username_env": null,
+    "comment": "type: gerrit | github | gitlab. token_env: env var holding the API token / HTTP password. username_env: (Gerrit only) env var holding your Gerrit username — when set, Basic auth is used instead of Bearer. Required for OpenDev Gerrit."
   },
   "feedback": {
     "post_to_forge": false,

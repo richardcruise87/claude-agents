@@ -20,7 +20,7 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
 from prompts import get_code_review_prompt
-from forge_feedback import extract_forge_comment, extract_line_comments, determine_vote, determine_backport_vote
+from forge_feedback import extract_forge_comment, extract_line_comments, determine_vote
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
@@ -32,6 +32,7 @@ from agents_lib import (
     load_previous_review_context,
     record_review,
     create_review_filename,
+    determine_backport_vote,
 )
 
 # Load configuration
@@ -383,6 +384,43 @@ This change has been reviewed before.
         traceback.print_exc()
 
 
+def _post_only(change_ref: str, patchset: "int | None") -> None:
+    """Resolve a change, find the latest saved review file, and post it to the forge."""
+    import re as _re
+    forge = create_forge_client(CONFIG)
+
+    print(f"🔍 Resolving change: {change_ref}")
+    try:
+        if _re.match(r'^https?://', change_ref):
+            change = forge.get_change_from_url(change_ref)
+        else:
+            repos = CONFIG.get("octavia_repos", [])
+            repo_hint = repos[0] if repos else None
+            change = forge.get_change(change_ref.strip(), repo_hint)
+    except Exception as exc:
+        print(f"❌ Could not fetch change details: {exc}")
+        return
+
+    if patchset and change.forge_type == "gerrit":
+        change = change._replace(patchset=patchset)
+
+    output_dir = Path(REVIEWS_OUTPUT_DIR)
+    change_id = str(change.change_id)
+    # Match review_<repo>_<change>_ps<n>_<timestamp>.md (any patchset when not specified)
+    ps_glob = f"ps{patchset}_" if patchset else "ps*_"
+    pattern = f"review_*_{change_id}_{ps_glob}*.md"
+    matches = sorted(output_dir.glob(pattern))
+    if not matches:
+        print(f"❌ No review file found matching {pattern} in {output_dir}")
+        return
+
+    review_file = matches[-1]  # latest by name (timestamp-sorted)
+    print(f"📄 Using review file: {review_file.name}")
+    review_content = review_file.read_text(encoding="utf-8")
+
+    _post_forge_feedback(change, review_content, CONFIG, forge)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Review an OpenStack Octavia change from OpenDev',
@@ -401,6 +439,10 @@ Examples:
 
   # Review specific patchset using URL
   %(prog)s https://review.opendev.org/c/openstack/octavia/+/919846 2
+
+  # Re-post an already-completed review to the forge (no re-review)
+  %(prog)s 919846 --post-only
+  %(prog)s 919846 5 --post-only
         """
     )
 
@@ -424,10 +466,20 @@ Examples:
         help='Alternative way to specify patchset number'
     )
 
+    parser.add_argument(
+        '--post-only',
+        action='store_true',
+        help='Skip the review; find the latest saved review file and post it to the forge.'
+    )
+
     args = parser.parse_args()
 
     # Determine which patchset to use (positional arg takes precedence)
     patchset = args.patchset if args.patchset else args.patchset_flag
+
+    if args.post_only:
+        _post_only(args.change, patchset)
+        return
 
     if patchset:
         print(f"📌 Reviewing patchset {patchset}\n")

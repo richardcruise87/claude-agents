@@ -150,3 +150,32 @@ def get_launchpad_bug_comments(
     except Exception as exc:  # pylint: disable=broad-except
         print(f"⚠️  Could not fetch Launchpad comments for bug #{bug_id}: {exc}")
         return []
+
+
+def post_report_to_launchpad(
+    bug_id: str,
+    subject: str,
+    report_file: "Path",
+    config: dict,
+    max_chars: int = 5000,
+) -> bool:
+    """Read a saved report file and post it as a Launchpad bug comment.
+
+    Convenience wrapper used by agents' --post-only paths. Reads the file,
+    builds a sanitised feedback comment via build_feedback_comment(), then
+    delegates to post_launchpad_comment_from_config().
+
+    Returns True on success, False on any failure (errors are printed, not raised).
+    """
+    from pathlib import Path as _Path
+    from .utils import build_feedback_comment
+
+    try:
+        content = _Path(report_file).read_text(encoding="utf-8")
+        model_name = config.get("model", "claude-sonnet-4-6")
+        comment = build_feedback_comment(content, model_name, max_chars=max_chars)
+        print(f"\n📤 Posting report to Launchpad bug #{bug_id}...")
+        return post_launchpad_comment_from_config(bug_id, subject, comment, config)
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"⚠️  Could not post report to Launchpad bug #{bug_id}: {exc}")
+        return False
