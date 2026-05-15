@@ -165,7 +165,10 @@ def _post_devstack_feedback(review_info, test_report: Path, config: dict) -> Non
         change_info = forge.get_change(review_info.change_number)
         model_name = config.get("model", "claude-sonnet-4-6")
         comment = extract_devstack_forge_comment(
-            test_report.read_text(encoding="utf-8"), model_name
+            test_report.read_text(encoding="utf-8"),
+            model_name,
+            change_number=review_info.change_number,
+            patchset=review_info.patchset,
         )
         print(f"\n📤 Posting DevStack test feedback to {change_info.forge_type}...")
         ok = forge.post_feedback(change_info, comment, vote=None, line_comments=[])

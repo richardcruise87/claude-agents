@@ -260,7 +260,12 @@ def _extract_test_table(devstack_section: str) -> str:
     return header + "\n" + "\n".join(rows)
 
 
-def extract_devstack_forge_comment(report_content: str, model_name: str) -> str:
+def extract_devstack_forge_comment(
+    report_content: str,
+    model_name: str,
+    change_number: "str | None" = None,
+    patchset: "int | None" = None,
+) -> str:
     """Build a forge comment from a DevStack testing_report_*.md file.
 
     Extracts the overall status, a per-test results table, and the Test
@@ -270,6 +275,8 @@ def extract_devstack_forge_comment(report_content: str, model_name: str) -> str:
     Args:
         report_content: Full text of the DevStack testing report markdown.
         model_name:     Model identifier for the attribution line.
+        change_number:  Gerrit change number tested (included for auditability).
+        patchset:       Patchset number tested (included for auditability).
 
     Returns:
         Formatted comment string including AI attribution.
@@ -309,6 +316,9 @@ def extract_devstack_forge_comment(report_content: str, model_name: str) -> str:
     summary_section = _section(devstack_section, "## Test Results Summary")
 
     parts = []
+    if change_number:
+        ps_str = f" PS{patchset}" if patchset else ""
+        parts.append(f"**Tested:** change #{change_number}{ps_str}")
     if status_line:
         parts.append(f"**Overall Status**: {status_line}")
     if test_table:
