@@ -227,15 +227,56 @@ def extract_ci_forge_comment(report_content: str, model_name: str) -> str:
     return attribution_header + body + attribution_footer
 
 
-def extract_devstack_forge_comment(report_content: str, model_name: str) -> str:
+def _extract_test_table(devstack_section: str) -> str:
+    """Build a compact markdown table of individual test results.
+
+    Scans the devstack section for ``### Test N: <Name>`` headings and
+    associates each one with the next ``**Result:**`` line before the
+    following test heading.  Avoids using ``_section()`` because code blocks
+    inside test output may contain Python comments (``# ...``) that confuse
+    the heading-level lookahead.  Returns an empty string when no tests are
+    found.
+    """
+    # Find all test heading positions and names
+    headings = list(re.finditer(r'^### Test \d+:\s*(.+)', devstack_section, re.MULTILINE))
+    if not headings:
+        return ""
+
+    rows = []
+    for i, heading_m in enumerate(headings):
+        name = heading_m.group(1).strip()
+        # Search for **Result:** between this heading and the next (or end)
+        start = heading_m.end()
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(devstack_section)
+        block = devstack_section[start:end]
+        result_m = re.search(r'\*\*Result:\*\*\s*(.+?)(?=\n|$)', block)
+        if result_m:
+            rows.append(f"| {name} | {result_m.group(1).strip()} |")
+
+    if not rows:
+        return ""
+
+    header = "## Tests Run\n\n| Test | Result |\n|------|--------|"
+    return header + "\n" + "\n".join(rows)
+
+
+def extract_devstack_forge_comment(
+    report_content: str,
+    model_name: str,
+    change_number: "str | None" = None,
+    patchset: "int | None" = None,
+) -> str:
     """Build a forge comment from a DevStack testing_report_*.md file.
 
-    Extracts the Test Results Summary (overall status, pass/fail counts, key
-    findings). Always informational — no vote, no line comments.
+    Extracts the overall status, a per-test results table, and the Test
+    Results Summary (pass/fail counts, key findings).  Always informational
+    — no vote, no line comments.
 
     Args:
         report_content: Full text of the DevStack testing report markdown.
         model_name:     Model identifier for the attribution line.
+        change_number:  Gerrit change number tested (included for auditability).
+        patchset:       Patchset number tested (included for auditability).
 
     Returns:
         Formatted comment string including AI attribution.
@@ -268,12 +309,20 @@ def extract_devstack_forge_comment(report_content: str, model_name: str) -> str:
     )
     status_line = status_m.group(1).strip() if status_m else ""
 
-    # Extract Test Results Summary section
+    # Build per-test results table from the Tests Executed section
+    test_table = _extract_test_table(devstack_section)
+
+    # Extract Test Results Summary section (key findings, recommendations)
     summary_section = _section(devstack_section, "## Test Results Summary")
 
     parts = []
+    if change_number:
+        ps_str = f" PS{patchset}" if patchset else ""
+        parts.append(f"**Tested:** change #{change_number}{ps_str}")
     if status_line:
         parts.append(f"**Overall Status**: {status_line}")
+    if test_table:
+        parts.append(test_table)
     if summary_section:
         parts.append("## Test Results Summary\n\n" + _first_n_chars(summary_section, 2000))
     if not parts:

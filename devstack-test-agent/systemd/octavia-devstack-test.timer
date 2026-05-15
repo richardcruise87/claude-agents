@@ -1,0 +1,17 @@
+[Unit]
+Description=Octavia DevStack Test Agent Timer
+Documentation=https://github.com/richardcruise87/claude-agents
+
+[Timer]
+# Run every hour at :30 — catches any reviews missed by the path watcher
+OnCalendar=*:30:00
+
+# Alternative schedules (uncomment one):
+# Every 2 hours:  OnCalendar=00/2:30:00
+# Every 4 hours:  OnCalendar=00/4:30:00
+
+# Run if the system was off at the scheduled time
+Persistent=true
+
+[Install]
+WantedBy=timers.target
