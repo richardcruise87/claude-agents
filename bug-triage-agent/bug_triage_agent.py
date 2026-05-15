@@ -26,6 +26,8 @@ from agents_lib import (
     generate_learning,
     save_learning,
     post_launchpad_comment,
+    post_report_to_launchpad,
+    find_latest_report,
 )
 from bug_tracker import (
     load_triage_history,
@@ -550,9 +552,27 @@ def cli_main():
     parser = argparse.ArgumentParser(description='Octavia Bug Triage Agent')
     parser.add_argument('--single-bug', metavar='BUG_DATA_FILE',
                         help='Triage a single bug (used internally for subprocess mode)')
+    parser.add_argument('--bug', metavar='N', type=int,
+                        help='Bug number for --post-only mode')
+    parser.add_argument('--post-only', action='store_true',
+                        help='Skip triage; find the latest saved report for --bug N and post it to Launchpad.')
     args = parser.parse_args()
 
-    if args.single_bug:
+    if args.post_only:
+        if not args.bug:
+            print("❌ --post-only requires --bug N", file=sys.stderr)
+            sys.exit(1)
+        bug_id = str(args.bug)
+        output_dir = Path(CONFIG["triages_output_dir"])
+        report = find_latest_report(output_dir, f"bug_{bug_id}_*.md")
+        if not report:
+            print(f"❌ No triage report found for bug {bug_id} in {output_dir}")
+            sys.exit(1)
+        print(f"📄 Using report: {report.name}")
+        subject = "AI Triage Report (automated, may contain errors)"
+        ok = post_report_to_launchpad(bug_id, subject, report, CONFIG, max_chars=5000)
+        sys.exit(0 if ok else 1)
+    elif args.single_bug:
         # Single-bug mode (called from subprocess)
         success = asyncio.run(main_single_bug(args.single_bug))
         sys.exit(0 if success else 1)

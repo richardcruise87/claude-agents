@@ -57,19 +57,21 @@ from agents_lib import (
     create_forge_client,
     load_context_section,
     extract_ci_forge_comment,
+    find_latest_report,
 )
 from agents_lib.utils import slugify
 
 CONFIG = load_config()
 
 
-def _post_ci_feedback(failure_data: dict, report_content: str) -> None:
+def _post_ci_feedback(failure_data: dict, report_content: str) -> bool:
     """Post the CI analysis summary as a comment on the forge change.
 
-    Errors are logged but never re-raised.
+    Returns True on success, False on any failure. Errors are logged but
+    never re-raised.
     """
     if not CONFIG.get("feedback_enabled"):
-        return
+        return False
 
     try:
         forge = create_forge_client(CONFIG)
@@ -86,8 +88,26 @@ def _post_ci_feedback(failure_data: dict, report_content: str) -> None:
             print("   ✅ Feedback posted successfully")
         else:
             print("   ⚠️  Feedback post returned failure (see warnings above)")
+        return ok
     except Exception as exc:
         print(f"   ⚠️  Could not post forge feedback: {exc}")
+        return False
+
+
+def _post_only_ci(failure_data: dict, output_dir: "str | None") -> bool:
+    """Find the latest saved CI report for a change and post it to the forge."""
+    change_number = str(failure_data["change_number"])
+    patchset = failure_data.get("patchset")
+    reports_dir = Path(
+        output_dir or CONFIG.get("reports_output_dir", "~/octavia_ci_failures")
+    ).expanduser()
+    ps_glob = f"ps{patchset}_" if patchset is not None else "ps*_"
+    report = find_latest_report(reports_dir, f"ci_failure_*_{change_number}_{ps_glob}*.md")
+    if not report:
+        print(f"❌ No CI report found for change {change_number} in {reports_dir}")
+        return False
+    print(f"📄 Using report: {report.name}")
+    return _post_ci_feedback(failure_data, report.read_text(encoding="utf-8"))
 
 
 def create_report_filename(output_dir, project, change_number, patchset, sequence):
@@ -287,6 +307,11 @@ Failure data JSON format:
         metavar="DIR",
         help="Directory to save the report (overrides config)",
     )
+    parser.add_argument(
+        "--post-only",
+        action="store_true",
+        help="Skip analysis; find the latest saved report for this change and post it to the forge.",
+    )
 
     args = parser.parse_args()
 
@@ -297,6 +322,10 @@ Failure data JSON format:
 
     with open(failure_data_file, encoding='utf-8') as f:
         failure_data = json.load(f)
+
+    if args.post_only:
+        ok = _post_only_ci(failure_data, args.output_dir)
+        sys.exit(0 if ok else 1)
 
     asyncio.run(analyze_failure(
         failure_data=failure_data,

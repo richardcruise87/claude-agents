@@ -92,6 +92,7 @@ def load_config():
             "type": forge_cfg.get("type", "gerrit"),
             "base_url": forge_base_url,
             "token_env": forge_cfg.get("token_env"),
+            "username_env": forge_cfg.get("username_env"),
         },
         "feedback_enabled": feedback_cfg.get("post_to_forge", False),
         "feedback_voting": feedback_cfg.get("enable_voting", False),

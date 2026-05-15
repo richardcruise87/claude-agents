@@ -3,6 +3,8 @@ Common utility functions for Claude agents.
 """
 import os
 import re
+from pathlib import Path
+from typing import Optional
 
 
 # ── Sensitive-data sanitization ───────────────────────────────────────────────
@@ -206,3 +208,23 @@ def format_usage_info(usage_data=None, cost_usd=None, model=None, duration_ms=No
 
     lines.append("")
     return "\n".join(lines)
+
+
+def find_latest_report(
+    output_dir: "Path | str",
+    glob_pattern: str,
+    exclude_suffix: Optional[str] = None,
+) -> Optional[Path]:
+    """Return the most recently written report matching glob_pattern in output_dir.
+
+    Files are sorted lexicographically on their names; because all report
+    filenames embed a YYYYMMDD_HHMMSS timestamp, the last entry is always the
+    newest.  Returns None when no files match.
+
+    exclude_suffix: if set, files whose stem ends with this string are skipped
+    (e.g. "_context" to skip fix-proposal context packets).
+    """
+    matches = sorted(Path(output_dir).glob(glob_pattern))
+    if exclude_suffix:
+        matches = [p for p in matches if not p.stem.endswith(exclude_suffix)]
+    return matches[-1] if matches else None

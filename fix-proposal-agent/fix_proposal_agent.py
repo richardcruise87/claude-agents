@@ -11,6 +11,7 @@ The developer receives a proposal document and can:
   - Request changes (write feedback to fix_proposal_{N}_feedback.txt)
   - Abandon (mark the Launchpad bug ai-fix-rejected)
 """
+import argparse
 import asyncio
 import re
 import sys
@@ -31,6 +32,8 @@ from agents_lib import (
     save_learning,
     notify_report,
     load_notifications_config,
+    post_report_to_launchpad,
+    find_latest_report,
 )
 from launchpad_feedback import (
     get_gerrit_comments_since,
@@ -576,6 +579,36 @@ async def main() -> None:
 
 
 def cli_main() -> None:
+    parser = argparse.ArgumentParser(description='Octavia Fix Proposal Agent')
+    parser.add_argument('--bug', metavar='N', type=int,
+                        help='Bug number for --post-only mode')
+    parser.add_argument(
+        '--post-only', action='store_true',
+        help='Skip proposal generation; find the latest saved proposal '
+             'for --bug N and post it to Launchpad.',
+    )
+    args = parser.parse_args()
+
+    if args.post_only:
+        if not args.bug:
+            print("❌ --post-only requires --bug N", file=sys.stderr)
+            sys.exit(1)
+        bug_id = str(args.bug)
+        config = load_config()
+        proposals_dir = Path(config["proposals_output_dir"])
+        report = find_latest_report(
+            proposals_dir,
+            f"fix_proposal_{bug_id}_*.md",
+            exclude_suffix="_context",
+        )
+        if not report:
+            print(f"❌ No proposal report found for bug {bug_id} in {proposals_dir}")
+            sys.exit(1)
+        print(f"📄 Using report: {report.name}")
+        subject = "AI Fix Proposal (automated, may contain errors)"
+        ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=5000)
+        sys.exit(0 if ok else 1)
+
     asyncio.run(main())
 
 

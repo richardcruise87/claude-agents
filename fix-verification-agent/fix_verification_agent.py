@@ -38,6 +38,8 @@ from agents_lib import (
     load_notifications_config,
     build_feedback_comment,
     post_launchpad_comment_from_config,
+    post_report_to_launchpad,
+    find_latest_report,
 )
 from failure_analyser import (
     analyse_failure,
@@ -674,9 +676,32 @@ Examples:
                         help="Fix already applied; just re-run reproduction test")
     parser.add_argument("--title", metavar="TITLE",
                         help="Bug title for the report (manual mode, optional)")
+    parser.add_argument("--post-only", action="store_true",
+                        help="Skip verification; find the latest saved report for --bug N and post it to Launchpad.")
 
     args = parser.parse_args()
     config = load_config()
+
+    if args.post_only:
+        if not args.bug:
+            print("❌ --post-only requires --bug N", file=sys.stderr)
+            sys.exit(1)
+        bug_id = str(args.bug)
+        output_dir = Path(config["verifications_output_dir"])
+        report = find_latest_report(output_dir, f"verification_{bug_id}_*.md")
+        if not report:
+            print(f"❌ No verification report found for bug {bug_id} in {output_dir}")
+            sys.exit(1)
+        print(f"📄 Using report: {report.name}")
+        content = report.read_text(encoding="utf-8")
+        if "RESOLVED" in content and "NOT_RESOLVED" not in content:
+            subject = "AI Fix Verified ✅ (automated, may contain errors)"
+        elif "NOT_RESOLVED" in content:
+            subject = "AI Fix Verification Failed ❌ (automated, may contain errors)"
+        else:
+            subject = "AI Fix Verification Inconclusive ⚠️ (automated, may contain errors)"
+        ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=4000)
+        sys.exit(0 if ok else 1)
 
     print("\n" + "="*80)
     print("Fix Verification Agent")
