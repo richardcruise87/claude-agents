@@ -79,13 +79,19 @@ fi
 if [ "$INSTALL_SYSTEMD" = "yes" ]; then
     USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
     mkdir -p "$USER_SYSTEMD_DIR"
-    for f in "$SCRIPT_DIR/systemd/"*.service "$SCRIPT_DIR/systemd/"*.path; do
+    for f in "$SCRIPT_DIR/systemd/"*.service \
+              "$SCRIPT_DIR/systemd/"*.path \
+              "$SCRIPT_DIR/systemd/"*.timer; do
         [ -f "$f" ] || continue
         base=$(basename "$f")
         sed "s|%h|$HOME|g; s|%u|$USER|g" "$f" > "$USER_SYSTEMD_DIR/$base"
         echo -e "${GREEN}✓${NC} Installed $base"
     done
     echo ""
-    echo "To enable the DevStack test agent (event-driven, watches reviews directory):"
+    echo "To enable the DevStack test agent:"
+    echo "  # Event-driven (runs immediately when a new review file appears):"
     echo "  systemctl --user enable --now octavia-devstack-test.path"
+    echo ""
+    echo "  # Scheduled fallback (every hour at :30, catches any missed reviews):"
+    echo "  systemctl --user enable --now octavia-devstack-test.timer"
 fi

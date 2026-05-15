@@ -79,13 +79,19 @@ fi
 if [ "$INSTALL_SYSTEMD" = "yes" ]; then
     USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
     mkdir -p "$USER_SYSTEMD_DIR"
-    for f in "$SCRIPT_DIR/systemd/"*.service "$SCRIPT_DIR/systemd/"*.path; do
+    for f in "$SCRIPT_DIR/systemd/"*.service \
+              "$SCRIPT_DIR/systemd/"*.path \
+              "$SCRIPT_DIR/systemd/"*.timer; do
         [ -f "$f" ] || continue
         base=$(basename "$f")
         sed "s|%h|$HOME|g; s|%u|$USER|g" "$f" > "$USER_SYSTEMD_DIR/$base"
         echo -e "${GREEN}✓${NC} Installed $base"
     done
     echo ""
-    echo "To enable the bug reproduction agent (event-driven, watches triage directory):"
+    echo "To enable the bug reproduction agent:"
+    echo "  # Event-driven (runs immediately when a new triage report appears):"
     echo "  systemctl --user enable --now octavia-bug-reproduction.path"
+    echo ""
+    echo "  # Scheduled fallback (daily at 12:00, catches any missed reports):"
+    echo "  systemctl --user enable --now octavia-bug-reproduction.timer"
 fi
