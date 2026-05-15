@@ -321,6 +321,16 @@ async def main():
     # Get filter settings
     allowed_repos = config["filters"]["only_test_repositories"]
 
+    # Pre-compute the highest patchset available for each change so we can
+    # skip stale patchsets without waiting for the tracking file.
+    latest_patchset: dict = {}
+    for _rf in review_files:
+        _info = parse_review_file(_rf)
+        if _info:
+            key = (_info.repo_name, _info.change_number)
+            if _info.patchset > latest_patchset.get(key, 0):
+                latest_patchset[key] = _info.patchset
+
     # Process reviews
     tested_count = 0
     skipped_count = 0
@@ -329,6 +339,15 @@ async def main():
         # Parse review
         review_info = parse_review_file(review_file)
         if not review_info:
+            continue
+
+        # Skip if a newer patchset exists for this change
+        change_key = (review_info.repo_name, review_info.change_number)
+        if review_info.patchset < latest_patchset.get(change_key, review_info.patchset):
+            print(
+                f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} "
+                f"PS{review_info.patchset} - newer PS{latest_patchset[change_key]} exists"
+            )
             continue
 
         # Check if should test
