@@ -8,7 +8,7 @@ from typing import List, Optional
 from pathlib import Path
 from triage_parser import TriageReport
 from script_executor import ExecutionResult, format_execution_report
-from devstack_health import DevStackHealth, format_health_report
+from agents_lib import DevStackHealth, format_health_report
 from script_generator import extract_script_changelog
 
 

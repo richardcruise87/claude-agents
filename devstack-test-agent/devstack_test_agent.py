@@ -289,6 +289,27 @@ async def main():
     print(f"  Lock timeout: {config['devstack']['lock_timeout']}s")
     print()
 
+    # Load common inputs used by both the health-fail path and the test path.
+    tracking_file = Path(config["tracking"]["tested_reviews_file"])
+    reviews_dir = Path(config["reviews_directory"])
+    allowed_repos = config["filters"]["only_test_repositories"]
+
+    if not reviews_dir.exists():
+        print(f"❌ Reviews directory does not exist: {reviews_dir}")
+        return
+
+    review_files = sorted(
+        reviews_dir.glob("review_*.md"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+
+    if not review_files:
+        print(f"No review files found in {reviews_dir}")
+        return
+
+    print(f"📋 Found {len(review_files)} review files\n")
+
+    latest_patchset = _compute_latest_patchsets(review_files)
+
     # Check DevStack health
     print("🏥 Checking DevStack health...")
     health = check_devstack_health(config)
@@ -297,74 +318,35 @@ async def main():
         for error in health.errors:
             print(f"      - {error}")
         print("\n⚠️  Cannot run tests - DevStack environment needs attention")
+        # Record env failure for the review that would have been tested so it
+        # gets an audit trail entry and is automatically retried when healthy.
+        tested_reviews = load_tracking_file(tracking_file)
+        review_info, review_file, review_id = _find_next_review(
+            review_files, tested_reviews, latest_patchset, allowed_repos
+        )
+        if review_info and review_file and review_id:
+            _record_test_result(
+                review_info, review_file, tracking_file,
+                "environment_error", retry_on_recovery=True,
+            )
+            print(
+                f"   📝 Recorded env failure for "
+                f"{review_info.repo_name} #{review_info.change_number} "
+                f"(will retry when DevStack is healthy)"
+            )
         return
 
     print("   ✅ DevStack is healthy\n")
 
-    # Load tracking file
-    tracking_file = Path(config["tracking"]["tested_reviews_file"])
-    tested_reviews = load_tracking_file(tracking_file)
-
-    # Find review files
-    reviews_dir = Path(config["reviews_directory"])
-    if not reviews_dir.exists():
-        print(f"❌ Reviews directory does not exist: {reviews_dir}")
-        return
-
-    review_files = sorted(reviews_dir.glob("review_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-
-    if not review_files:
-        print(f"No review files found in {reviews_dir}")
-        return
-
-    print(f"📋 Found {len(review_files)} review files\n")
-
-    # Get filter settings
-    allowed_repos = config["filters"]["only_test_repositories"]
-
-    # Pre-compute the highest patchset available for each change so we can
-    # skip stale patchsets without waiting for the tracking file.
-    latest_patchset: dict = {}
-    for _rf in review_files:
-        _info = parse_review_file(_rf)
-        if _info:
-            key = (_info.repo_name, _info.change_number)
-            if _info.patchset > latest_patchset.get(key, 0):
-                latest_patchset[key] = _info.patchset
-
     # Process reviews
+    tested_reviews = load_tracking_file(tracking_file)
     tested_count = 0
-    skipped_count = 0
 
-    for review_file in review_files:
-        # Parse review
-        review_info = parse_review_file(review_file)
-        if not review_info:
-            continue
+    review_info, review_file, review_id = _find_next_review(
+        review_files, tested_reviews, latest_patchset, allowed_repos
+    )
 
-        # Skip if a newer patchset exists for this change
-        change_key = (review_info.repo_name, review_info.change_number)
-        if review_info.patchset < latest_patchset.get(change_key, review_info.patchset):
-            print(
-                f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} "
-                f"PS{review_info.patchset} - newer PS{latest_patchset[change_key]} exists"
-            )
-            continue
-
-        # Check if should test
-        if not should_test_review(review_info, allowed_repos):
-            if review_info.already_tested:
-                skipped_count += 1
-                if skipped_count <= 3:
-                    print(f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} - Already tested")
-            continue
-
-        # Check tracking file
-        review_id = f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
-        if review_id in tested_reviews:
-            print(f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} - Already in tracking")
-            continue
-
+    if review_info and review_file and review_id:
         print(f"\n📌 Testing {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
 
         # Test in DevStack
@@ -377,7 +359,6 @@ async def main():
             )
             if test_report:
                 _record_test_result(review_info, review_file, tracking_file, "success", test_report)
-                tested_reviews = load_tracking_file(tracking_file)  # keep in sync for loop
                 tested_count += 1
                 print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
                 notify_report(
@@ -398,11 +379,6 @@ async def main():
             # Post a failure notice — forge users most need to know when tests fail
             _post_devstack_failure_feedback(review_info, config)
 
-        # Only test one review per run (to avoid holding DevStack lock too long)
-        if tested_count >= 1:
-            print(f"\n📊 Tested {tested_count} review(s) this pass")
-            break
-
     if tested_count == 0:
         print("\n✓ No new reviews to test")
 
@@ -411,14 +387,84 @@ async def main():
     print("="*80)
 
 
+def _compute_latest_patchsets(review_files: list) -> dict:
+    """Return a dict mapping (repo_name, change_number) → highest patchset seen."""
+    latest: dict = {}
+    for rf in review_files:
+        info = parse_review_file(rf)
+        if info:
+            key = (info.repo_name, info.change_number)
+            if info.patchset > latest.get(key, 0):
+                latest[key] = info.patchset
+    return latest
+
+
+def _find_next_review(
+    review_files: list,
+    tested_reviews: dict,
+    latest_patchset: dict,
+    allowed_repos: list,
+):
+    """
+    Return (review_info, review_file, review_id) for the next review that
+    should be tested, or (None, None, None) if none qualify.
+
+    A review qualifies when:
+    - It is the latest patchset for its change.
+    - ``should_test_review`` returns True.
+    - It is not already in the tracking file, OR it has ``retry_on_recovery``
+      set (meaning a previous run failed due to an unhealthy environment).
+    """
+    skipped_count = 0
+    for review_file in review_files:
+        review_info = parse_review_file(review_file)
+        if not review_info:
+            continue
+
+        # Skip stale patchsets
+        change_key = (review_info.repo_name, review_info.change_number)
+        if review_info.patchset < latest_patchset.get(change_key, review_info.patchset):
+            print(
+                f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} "
+                f"PS{review_info.patchset} - newer PS{latest_patchset[change_key]} exists"
+            )
+            continue
+
+        if not should_test_review(review_info, allowed_repos):
+            if review_info.already_tested:
+                skipped_count += 1
+                if skipped_count <= 3:
+                    print(
+                        f"⏭️  Skipping {review_info.repo_name} "
+                        f"#{review_info.change_number} - Already tested"
+                    )
+            continue
+
+        review_id = (
+            f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
+        )
+        entry = tested_reviews.get(review_id)
+        if entry and not entry.get("retry_on_recovery"):
+            print(
+                f"⏭️  Skipping {review_info.repo_name} "
+                f"#{review_info.change_number} - Already in tracking"
+            )
+            continue
+
+        return review_info, review_file, review_id
+
+    return None, None, None
+
+
 def _record_test_result(
     review_info,
     review_file: Path,
     tracking_file: Path,
     test_result: str,
     test_report_file: "Path | None" = None,
+    retry_on_recovery: bool = False,
 ) -> None:
-    """Write a tracking entry for a tested change (success or failure)."""
+    """Write a tracking entry for a tested change (success, failure, or env error)."""
     tested_reviews = load_tracking_file(tracking_file)
     review_id = (
         f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
@@ -430,6 +476,8 @@ def _record_test_result(
     }
     if test_report_file:
         entry["test_report_file"] = str(test_report_file)
+    if retry_on_recovery:
+        entry["retry_on_recovery"] = True
     tested_reviews[review_id] = entry
     save_tracking_file(tracking_file, tested_reviews)
 

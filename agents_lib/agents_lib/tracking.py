@@ -65,6 +65,12 @@ def should_process_item(
         return (True, 1)
 
     last_processing = history[item_key]
+
+    # Items that failed due to an unhealthy environment are always retried,
+    # keeping the same sequence number so the outcome replaces the env-error entry.
+    if last_processing.get("retry_on_recovery"):
+        return (True, last_processing.get("sequence", 1))
+
     last_updated_tracked = last_processing.get('last_updated', '')
 
     # Compare timestamps
@@ -83,7 +89,8 @@ def record_processed_item(
     item_last_updated,
     sequence,
     id_prefix="",
-    extra_data=None
+    extra_data=None,
+    retry_on_recovery=False,
 ):
     """
     Record that an item was processed.
@@ -95,6 +102,10 @@ def record_processed_item(
         sequence: Sequence number for this processing
         id_prefix: Optional prefix for item key (e.g., "bug_", "change_")
         extra_data: Optional dictionary with additional data to store
+        retry_on_recovery: When True, mark this item so it is retried
+            automatically on the next run once the environment is healthy.
+            Use for ENVIRONMENT_ERROR outcomes.  The flag is absent from
+            successful records so normal de-dup logic resumes afterwards.
     """
     history = load_tracking_file(tracking_file)
     item_key = f"{id_prefix}{item_id}" if id_prefix else item_id
@@ -102,11 +113,14 @@ def record_processed_item(
     record = {
         "last_processed": datetime.now().isoformat(),
         "last_updated": item_last_updated,
-        "sequence": sequence
+        "sequence": sequence,
     }
 
     if extra_data:
         record.update(extra_data)
+
+    if retry_on_recovery:
+        record["retry_on_recovery"] = True
 
     history[item_key] = record
     save_tracking_file(tracking_file, history)

@@ -4,6 +4,83 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-18
+
+### Changed: Pluggable DevStack health check registry (`agents_lib`)
+
+`agents_lib/devstack_checks.py` has been refactored from a monolithic function into
+a named-check registry.
+
+**New types / functions:**
+
+| Symbol | Description |
+|--------|-------------|
+| `CheckResult` | Dataclass holding `name`, `passed`, `message` for a single check |
+| `DevStackChecker` | Registry — call `.register(name, fn, enabled)` to add checks |
+| `build_default_checker(config)` | Factory that pre-loads the three built-in checks |
+| `check_devstack_health(config)` | Unchanged convenience wrapper around the above |
+
+Built-in check names: `services`, `api_connectivity`, `disk_space`.
+
+**Config-driven disable:** add a `disabled_checks` list to the `devstack` config
+block to skip individual checks without code changes:
+
+```json
+"devstack": {
+    "disabled_checks": ["disk_space"]
+}
+```
+
+**Adding agent-specific checks:**
+
+```python
+checker = build_default_checker(config)
+checker.register("valkey", lambda: CheckResult("valkey", ping_valkey(), "Valkey OK/unreachable"))
+health = checker.run()
+```
+
+`DevStackHealth` gains a new `check_results` field (list of `CheckResult`) that
+`format_health_report` uses when present, falling back to the old field-based
+display otherwise.
+
+**Removed:** `bug-reproduction-agent/devstack_health.py` — superseded by the
+shared library (both `check_devstack_health` and `format_health_report` are now
+imported from `agents_lib`).
+
+---
+
+### Changed: Environmental failures no longer permanently block retries (`retry_on_recovery`)
+
+Previously, when any DevStack-dependent agent encountered an unhealthy environment
+it would record the item as processed, causing it to be skipped forever even after
+DevStack recovered.
+
+**New behaviour:** environmental failures are written to the tracking file with
+`"retry_on_recovery": true`.  On the next run, `should_process_item()` treats
+any entry with that flag as unprocessed, allowing the item to be picked up
+automatically once the environment is healthy.  When the attempt eventually
+succeeds (or fails for a non-environmental reason), the flag is absent from the
+new record, so normal de-dup logic resumes.
+
+**Changes per agent:**
+
+| Agent | Before | After |
+|-------|--------|-------|
+| Bug Reproduction | Records `ENVIRONMENT_ERROR`, skips forever | Records with `retry_on_recovery=True`, retries next healthy run |
+| Fix Verification | No upfront health check; records `ENVIRONMENTAL_ERROR` after exhausting retries, skips forever | Upfront health check added; records with `retry_on_recovery=True` for proposals that would have been verified |
+| DevStack Test | Returns silently without recording (correct, but no audit trail) | Records `environment_error` + `retry_on_recovery=True` for the review that would have been tested |
+
+**tracking.py changes:**
+- `should_process_item()` — checks `retry_on_recovery` flag before timestamp comparison; returns `(True, same_sequence)` when set.
+- `record_processed_item()` — new `retry_on_recovery: bool = False` parameter.
+
+**DevStack Test Agent refactor:** the review-selection logic has been extracted
+into two helpers (`_compute_latest_patchsets`, `_find_next_review`) so the
+health-fail path and the test path share identical candidate selection without
+duplication.
+
+---
+
 ## 2026-05-14
 
 ### Changed: Launchpad interaction code consolidated into agents_lib

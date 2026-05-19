@@ -2,22 +2,53 @@
 DevStack health and environment checks shared by all agents.
 
 Provides health checking, branch verification, and cleanup utilities.
+
+The health check system is built around a named-check registry (DevStackChecker).
+Checks can be registered, enabled, or disabled individually — either through code
+or via the ``disabled_checks`` list in the agent's devstack config block:
+
+    "devstack": {
+        "disabled_checks": ["disk_space"]
+    }
+
+Use ``build_default_checker(config)`` to get a checker pre-loaded with the three
+built-in checks (services, api_connectivity, disk_space).  Call
+``check_devstack_health(config)`` as a one-liner convenience wrapper.
+
+To add an agent-specific check:
+
+    checker = build_default_checker(config)
+    checker.register("valkey", lambda: _check_valkey(config))
+    health = checker.run()
 """
 import subprocess
 import shutil
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
+
+
+# ---------------------------------------------------------------------------
+# Result types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CheckResult:
+    """Result of a single named health check."""
+    name: str
+    passed: bool
+    message: str
 
 
 @dataclass
 class DevStackHealth:
-    """DevStack health check results."""
+    """Aggregated results from all health checks."""
     all_healthy: bool
-    service_status: Dict[str, bool]  # service_name → running
+    service_status: Dict[str, bool]   # service_name → running
     api_reachable: bool
     disk_space_gb: float
     errors: List[str]
+    check_results: List[CheckResult] = field(default_factory=list)
 
 
 @dataclass
@@ -29,63 +60,172 @@ class BranchCheck:
     error: Optional[str] = None
 
 
-def check_devstack_health(config: Dict) -> DevStackHealth:
+# ---------------------------------------------------------------------------
+# Registry
+# ---------------------------------------------------------------------------
+
+class DevStackChecker:
     """
-    Comprehensive DevStack health check.
+    Registry of named health checks.
 
-    Args:
-        config: Configuration dictionary with devstack settings
+    Each check is a zero-argument callable that returns a CheckResult.  Checks
+    can be enabled or disabled at registration time, or globally via the
+    ``disabled_checks`` config key.
 
-    Returns:
-        DevStackHealth object with check results
+    Usage::
+
+        checker = DevStackChecker(config)
+        checker.register("my_check", lambda: CheckResult("my_check", True, "OK"))
+        health = checker.run()
     """
-    errors = []
-    devstack_config = config.get("devstack", {})
 
-    # Check services
-    required_services = devstack_config.get("required_services", [])
-    service_status = check_services(required_services)
+    def __init__(self, config: dict) -> None:
+        self._config = config
+        self._checks: List[Tuple[str, Callable[[], CheckResult], bool]] = []
 
-    for service, is_running in service_status.items():
-        if not is_running:
-            errors.append(f"Service not running: {service}")
+    def register(
+        self,
+        name: str,
+        fn: Callable[[], CheckResult],
+        enabled: bool = True,
+    ) -> "DevStackChecker":
+        """Register a check. Returns self for optional chaining."""
+        self._checks.append((name, fn, enabled))
+        return self
 
-    # Check API connectivity
-    openrc_file = Path(devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")).expanduser()
-    api_reachable = check_api_connectivity(openrc_file)
-    if not api_reachable:
-        errors.append("OpenStack API not reachable")
+    def run(self) -> DevStackHealth:
+        """Run all enabled checks and return aggregated health status."""
+        errors: List[str] = []
+        check_results: List[CheckResult] = []
+        service_status: Dict[str, bool] = {}
+        api_reachable = True
+        disk_space_gb = 0.0
 
-    # Check disk space
-    devstack_path = Path(devstack_config.get("path", "/opt/stack"))
-    min_space_gb = devstack_config.get("min_disk_space_gb", 10)
-    disk_space_gb, has_enough_space = check_disk_space(devstack_path, min_space_gb)
-    if not has_enough_space:
-        errors.append(f"Insufficient disk space: {disk_space_gb:.1f}GB (need {min_space_gb}GB)")
+        for name, fn, enabled in self._checks:
+            if not enabled:
+                continue
+            result = fn()
+            check_results.append(result)
+            if not result.passed:
+                errors.append(result.message)
+            # Populate backward-compat fields from well-known check names.
+            if name == "services" and hasattr(result, "_service_status"):
+                service_status = result._service_status  # type: ignore[attr-defined]
+            if name == "api_connectivity":
+                api_reachable = result.passed
+            if name == "disk_space" and hasattr(result, "_disk_space_gb"):
+                disk_space_gb = result._disk_space_gb  # type: ignore[attr-defined]
 
-    all_healthy = len(errors) == 0
+        return DevStackHealth(
+            all_healthy=len(errors) == 0,
+            service_status=service_status,
+            api_reachable=api_reachable,
+            disk_space_gb=disk_space_gb,
+            errors=errors,
+            check_results=check_results,
+        )
 
-    return DevStackHealth(
-        all_healthy=all_healthy,
-        service_status=service_status,
-        api_reachable=api_reachable,
-        disk_space_gb=disk_space_gb,
-        errors=errors
-    )
 
+# ---------------------------------------------------------------------------
+# Built-in check implementations
+# ---------------------------------------------------------------------------
+
+class _ServicesCheckResult(CheckResult):
+    """CheckResult subclass that also carries per-service status."""
+    def __init__(self, service_status: Dict[str, bool], errors: List[str]) -> None:
+        failed = [s for s, ok in service_status.items() if not ok]
+        passed = len(failed) == 0
+        message = (
+            f"Services not running: {', '.join(failed)}" if failed else "All services running"
+        )
+        super().__init__("services", passed, message)
+        self._service_status = service_status
+
+
+class _DiskCheckResult(CheckResult):
+    """CheckResult subclass that also carries the raw disk space value."""
+    def __init__(self, disk_space_gb: float, passed: bool, min_gb: float) -> None:
+        message = (
+            f"Insufficient disk space: {disk_space_gb:.1f}GB (need {min_gb}GB)"
+            if not passed
+            else f"Disk space OK: {disk_space_gb:.1f}GB available"
+        )
+        super().__init__("disk_space", passed, message)
+        self._disk_space_gb = disk_space_gb
+
+
+def _make_services_check(config: dict) -> Callable[[], CheckResult]:
+    def _check() -> CheckResult:
+        devstack_config = config.get("devstack", {})
+        required_services = devstack_config.get("required_services", [])
+        service_status = check_services(required_services)
+        return _ServicesCheckResult(service_status, [])
+    return _check
+
+
+def _make_api_check(config: dict) -> Callable[[], CheckResult]:
+    def _check() -> CheckResult:
+        devstack_config = config.get("devstack", {})
+        openrc_file = Path(
+            devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")
+        ).expanduser()
+        reachable = check_api_connectivity(openrc_file)
+        return CheckResult(
+            "api_connectivity",
+            reachable,
+            "OpenStack API reachable" if reachable else "OpenStack API not reachable",
+        )
+    return _check
+
+
+def _make_disk_check(config: dict) -> Callable[[], CheckResult]:
+    def _check() -> CheckResult:
+        devstack_config = config.get("devstack", {})
+        devstack_path = Path(devstack_config.get("path", "/opt/stack"))
+        min_space_gb = devstack_config.get("min_disk_space_gb", 10)
+        disk_space_gb, has_enough = check_disk_space(devstack_path, min_space_gb)
+        return _DiskCheckResult(disk_space_gb, has_enough, min_space_gb)
+    return _check
+
+
+# ---------------------------------------------------------------------------
+# Public factory and convenience wrapper
+# ---------------------------------------------------------------------------
+
+def build_default_checker(config: dict) -> DevStackChecker:
+    """
+    Build a DevStackChecker pre-loaded with the three built-in checks.
+
+    Checks disabled via ``config["devstack"]["disabled_checks"]`` are registered
+    but skipped at run time.  Any check name not in that list is enabled.
+
+    Built-in check names: ``services``, ``api_connectivity``, ``disk_space``.
+    """
+    disabled = set(config.get("devstack", {}).get("disabled_checks", []))
+    checker = DevStackChecker(config)
+    checker.register("services",         _make_services_check(config), "services"         not in disabled)
+    checker.register("api_connectivity", _make_api_check(config),      "api_connectivity" not in disabled)
+    checker.register("disk_space",       _make_disk_check(config),     "disk_space"       not in disabled)
+    return checker
+
+
+def check_devstack_health(config: dict) -> DevStackHealth:
+    """
+    Run the default set of DevStack health checks.
+
+    Convenience wrapper around ``build_default_checker(config).run()``.
+    Agents that need extra checks should call ``build_default_checker`` directly.
+    """
+    return build_default_checker(config).run()
+
+
+# ---------------------------------------------------------------------------
+# Low-level check helpers (reusable in custom checks)
+# ---------------------------------------------------------------------------
 
 def check_services(required_services: List[str]) -> Dict[str, bool]:
-    """
-    Check systemd service status.
-
-    Args:
-        required_services: List of systemd service names to check
-
-    Returns:
-        Dictionary mapping service name to running status (True/False)
-    """
+    """Return a dict mapping each service name to its running status."""
     service_status = {}
-
     for service in required_services:
         try:
             result = subprocess.run(
@@ -95,31 +235,19 @@ def check_services(required_services: List[str]) -> Dict[str, bool]:
                 timeout=5,
                 check=False,
             )
-            # is-active returns 'active' if running, 0 exit code
-            is_running = result.returncode == 0 and result.stdout.strip() == "active"
-            service_status[service] = is_running
+            service_status[service] = (
+                result.returncode == 0 and result.stdout.strip() == "active"
+            )
         except (subprocess.TimeoutExpired, FileNotFoundError):
             service_status[service] = False
-
     return service_status
 
 
 def check_api_connectivity(openrc_file: Path) -> bool:
-    """
-    Test OpenStack API connectivity with simple command.
-
-    Args:
-        openrc_file: Path to OpenStack credentials file
-
-    Returns:
-        True if API is reachable, False otherwise
-    """
+    """Return True if the OpenStack API is reachable."""
     if not openrc_file.exists():
         return False
-
     try:
-        # Source ~/.bashrc first so PATH/venv fixes made there are available,
-        # then source openrc credentials before running the API check.
         cmd = (
             f"source ~/.bashrc 2>/dev/null; source {openrc_file}"
             " && openstack loadbalancer list --format value --column id"
@@ -133,52 +261,35 @@ def check_api_connectivity(openrc_file: Path) -> bool:
             timeout=30,
             check=False,
         )
-        # Success if command exits 0 (even if list is empty)
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
 
 
 def check_disk_space(path: Path, min_gb: float = 10.0) -> Tuple[float, bool]:
-    """
-    Check available disk space.
-
-    Args:
-        path: Path to check (e.g., /opt/stack)
-        min_gb: Minimum required space in GB
-
-    Returns:
-        Tuple of (available_gb, has_enough_space)
-    """
+    """Return (available_gb, has_enough_space)."""
     try:
         stat = shutil.disk_usage(path)
-        available_gb = stat.free / (1024 ** 3)  # Convert bytes to GB
-        has_enough = available_gb >= min_gb
-        return (available_gb, has_enough)
+        available_gb = stat.free / (1024 ** 3)
+        return (available_gb, available_gb >= min_gb)
     except FileNotFoundError:
         return (0.0, False)
 
 
+# ---------------------------------------------------------------------------
+# Git helpers
+# ---------------------------------------------------------------------------
+
 def check_repo_on_main_branch(repo_path: Path) -> BranchCheck:
-    """
-    Verify repository is on main/master branch.
-
-    Args:
-        repo_path: Path to git repository
-
-    Returns:
-        BranchCheck object with verification results
-    """
+    """Verify that a repository is on main/master branch."""
     if not repo_path.exists():
         return BranchCheck(
             on_main=False,
             current_branch="",
             repo_path=repo_path,
-            error=f"Repository not found: {repo_path}"
+            error=f"Repository not found: {repo_path}",
         )
-
     try:
-        # Get current branch name
         result = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo_path,
@@ -187,106 +298,78 @@ def check_repo_on_main_branch(repo_path: Path) -> BranchCheck:
             timeout=5,
             check=False,
         )
-
         if result.returncode != 0:
             return BranchCheck(
                 on_main=False,
                 current_branch="",
                 repo_path=repo_path,
-                error="Failed to get current branch"
+                error="Failed to get current branch",
             )
-
         current_branch = result.stdout.strip()
-        on_main = current_branch in ["main", "master"]
-
+        on_main = current_branch in ("main", "master")
         return BranchCheck(
             on_main=on_main,
             current_branch=current_branch,
             repo_path=repo_path,
-            error=None if on_main else f"Not on main branch (on '{current_branch}')"
+            error=None if on_main else f"Not on main branch (on '{current_branch}')",
         )
-
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         return BranchCheck(
             on_main=False,
             current_branch="",
             repo_path=repo_path,
-            error=f"Error checking branch: {e}"
+            error=f"Error checking branch: {exc}",
         )
 
 
 def checkout_main_branch(repo_path: Path) -> Tuple[bool, str]:
-    """
-    Checkout main or master branch.
-
-    Args:
-        repo_path: Path to git repository
-
-    Returns:
-        Tuple of (success, message)
-    """
+    """Checkout main or master branch. Returns (success, message)."""
     try:
-        # Try main first
-        result = subprocess.run(
-            ["git", "checkout", "main"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-
-        if result.returncode == 0:
-            return (True, "Checked out main branch")
-
-        # Try master as fallback
-        result = subprocess.run(
-            ["git", "checkout", "master"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-
-        if result.returncode == 0:
-            return (True, "Checked out master branch")
-
+        for branch in ("main", "master"):
+            result = subprocess.run(
+                ["git", "checkout", branch],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0:
+                return (True, f"Checked out {branch} branch")
         return (False, f"Failed to checkout main/master: {result.stderr}")
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        return (False, f"Error: {exc}")
 
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        return (False, f"Error: {e}")
 
+# ---------------------------------------------------------------------------
+# Cleanup helper
+# ---------------------------------------------------------------------------
 
-def cleanup_test_environment(config: Dict, cleanup_commands: Optional[List[str]] = None) -> Tuple[bool, List[str]]:
+def cleanup_test_environment(
+    config: Dict,
+    cleanup_commands: Optional[List[str]] = None,
+) -> Tuple[bool, List[str]]:
     """
     Cleanup test environment (delete test resources, reset state).
 
-    Args:
-        config: Configuration dictionary with devstack settings
-        cleanup_commands: Optional list of custom cleanup commands
-
-    Returns:
-        Tuple of (success, output_lines)
+    Returns (success, output_lines).
     """
-    output = []
+    output: List[str] = []
     devstack_config = config.get("devstack", {})
-    openrc_file = Path(devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")).expanduser()
+    openrc_file = Path(
+        devstack_config.get("openrc_file", "/opt/stack/devstack/openrc")
+    ).expanduser()
 
     if not openrc_file.exists():
         output.append("⚠️  OpenRC file not found, skipping cleanup")
         return (False, output)
 
-    # Default cleanup commands
     if cleanup_commands is None:
         cleanup_commands = [
-            # Delete test load balancers
             "openstack loadbalancer list --format value --column id --name test- 2>/dev/null"
             " | xargs -r -n1 openstack loadbalancer delete --cascade",
-            # Delete test servers
             "openstack server list --format value --column ID --name test- 2>/dev/null"
             " | xargs -r -n1 openstack server delete",
-            # Delete test networks (if orphaned)
             "openstack network list --format value --column ID --name test- 2>/dev/null"
             " | xargs -r -n1 openstack network delete",
         ]
@@ -303,7 +386,6 @@ def cleanup_test_environment(config: Dict, cleanup_commands: Optional[List[str]]
                 timeout=120,
                 check=False,
             )
-
             if result.returncode == 0:
                 output.append(f"✓ Executed: {cmd[:80]}...")
                 if result.stdout.strip():
@@ -312,28 +394,22 @@ def cleanup_test_environment(config: Dict, cleanup_commands: Optional[List[str]]
                 output.append(f"⚠️  Command failed (continuing): {cmd[:80]}...")
                 if result.stderr.strip():
                     output.append(f"  Error: {result.stderr.strip()[:200]}")
-
         output.append("✓ Cleanup completed")
         return (True, output)
-
     except subprocess.TimeoutExpired:
         output.append("❌ Cleanup timed out")
         return (False, output)
-    except Exception as e:
-        output.append(f"❌ Cleanup error: {e}")
+    except Exception as exc:  # pylint: disable=broad-except
+        output.append(f"❌ Cleanup error: {exc}")
         return (False, output)
 
 
+# ---------------------------------------------------------------------------
+# Report formatter
+# ---------------------------------------------------------------------------
+
 def format_health_report(health: DevStackHealth) -> str:
-    """
-    Format health check results as markdown.
-
-    Args:
-        health: DevStackHealth object
-
-    Returns:
-        Formatted markdown string
-    """
+    """Format health check results as markdown."""
     lines = ["## DevStack Health Check", ""]
 
     if health.all_healthy:
@@ -341,29 +417,27 @@ def format_health_report(health: DevStackHealth) -> str:
     else:
         lines.append("❌ **Status:** HEALTH CHECK FAILED")
 
-    lines.append("")
-    lines.append("### Service Status")
-    lines.append("")
+    if health.check_results:
+        lines += ["", "### Check Results", ""]
+        for cr in health.check_results:
+            icon = "✅" if cr.passed else "❌"
+            lines.append(f"- **{cr.name}**: {icon} {cr.message}")
+    else:
+        # Backward-compat display when check_results not populated
+        lines += ["", "### Service Status", ""]
+        for service, is_running in sorted(health.service_status.items()):
+            status = "✅ Running" if is_running else "❌ Not Running"
+            lines.append(f"- **{service}**: {status}")
 
-    for service, is_running in sorted(health.service_status.items()):
-        status = "✅ Running" if is_running else "❌ Not Running"
-        lines.append(f"- **{service}**: {status}")
+        lines += ["", "### API Connectivity", ""]
+        api_status = "✅ Reachable" if health.api_reachable else "❌ Not Reachable"
+        lines.append(f"- **OpenStack API**: {api_status}")
 
-    lines.append("")
-    lines.append("### API Connectivity")
-    lines.append("")
-    api_status = "✅ Reachable" if health.api_reachable else "❌ Not Reachable"
-    lines.append(f"- **OpenStack API**: {api_status}")
-
-    lines.append("")
-    lines.append("### Disk Space")
-    lines.append("")
-    lines.append(f"- **Available**: {health.disk_space_gb:.1f} GB")
+        lines += ["", "### Disk Space", ""]
+        lines.append(f"- **Available**: {health.disk_space_gb:.1f} GB")
 
     if health.errors:
-        lines.append("")
-        lines.append("### Errors")
-        lines.append("")
+        lines += ["", "### Errors", ""]
         for error in health.errors:
             lines.append(f"- ❌ {error}")
 

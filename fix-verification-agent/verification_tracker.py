@@ -52,6 +52,7 @@ def record_verification(
     status: str,
     patch_source: str = "",
     attempts: int = 1,
+    retry_on_recovery: bool = False,
 ) -> None:
     """
     Record that a fix verification was completed.
@@ -65,6 +66,8 @@ def record_verification(
         status:              RESOLVED | NOT_RESOLVED | ENVIRONMENTAL_ERROR.
         patch_source:        Description of where the patch came from.
         attempts:            Number of execution attempts made.
+        retry_on_recovery:   When True, the item will be retried on the next
+            healthy run.  Set for ENVIRONMENTAL_ERROR outcomes.
     """
     record_processed_item(
         tracking_file,
@@ -78,6 +81,7 @@ def record_verification(
             "patch_source": patch_source,
             "attempts": attempts,
         },
+        retry_on_recovery=retry_on_recovery,
     )
 
 

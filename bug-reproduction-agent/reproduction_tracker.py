@@ -62,7 +62,8 @@ def record_reproduction(
     sequence: int,
     status: str,
     attempts: int,
-    script_path: Optional[str] = None
+    script_path: Optional[str] = None,
+    retry_on_recovery: bool = False,
 ):
     """
     Record that a bug reproduction was attempted.
@@ -75,6 +76,8 @@ def record_reproduction(
         status: Reproduction status (REPRODUCED, NOT_REPRODUCED, ENVIRONMENT_ERROR)
         attempts: Number of script execution attempts
         script_path: Path to final successful script (if reproduced)
+        retry_on_recovery: When True, the item will be retried on the next
+            healthy run.  Set for ENVIRONMENT_ERROR outcomes.
     """
     extra_data = {
         "reproduction_status": status,
@@ -89,7 +92,8 @@ def record_reproduction(
         triage_timestamp,
         sequence,
         id_prefix="bug_",
-        extra_data=extra_data
+        extra_data=extra_data,
+        retry_on_recovery=retry_on_recovery,
     )
 
 

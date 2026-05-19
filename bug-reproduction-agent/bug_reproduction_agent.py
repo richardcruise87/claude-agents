@@ -157,7 +157,8 @@ async def process_triage(triage_file: Path) -> bool:
 
             print(f"\n📝 Report saved: {report_file}")
 
-            # Record in tracking
+            # Record in tracking — retry_on_recovery so the bug is picked up
+            # again once DevStack is healthy.
             triage_timestamp = get_triage_timestamp(triage_file)
             tracking_file = Path(CONFIG["reproduction_tracking_file"])
             record_reproduction(
@@ -167,7 +168,8 @@ async def process_triage(triage_file: Path) -> bool:
                 1,
                 "ENVIRONMENT_ERROR",
                 0,
-                None
+                None,
+                retry_on_recovery=True,
             )
 
             return False
