@@ -54,7 +54,7 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
     params = urlencode({
         "project": project,
         "pipeline": pipeline,
-        "limit": 100,
+        "limit": 500,  # covers all results (pass+fail); failures filtered below
         "skip": 0,
     })
 
@@ -91,7 +91,6 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
     recent = []
     for build in builds:
         normalize_build(build)
-        # Server-side result= filter removed (caused HTTP 500); filter here instead.
         if build.get("result") != "FAILURE":
             continue
         end_time_str = build.get("end_time")
