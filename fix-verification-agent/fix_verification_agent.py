@@ -40,6 +40,7 @@ from agents_lib import (
     post_launchpad_comment_from_config,
     post_report_to_launchpad,
     find_latest_report,
+    check_devstack_health,
 )
 from failure_analyser import (
     analyse_failure,
@@ -386,6 +387,70 @@ def _write_report(
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _record_env_failure_for_pending(
+    proposals_dir: Path,
+    tracking_file: Path,
+    output_dir: Path,
+    max_per_run: int,
+) -> None:
+    """
+    Record retry_on_recovery for fix proposals that would have been verified
+    this run but couldn't because DevStack is unhealthy.
+
+    This provides an audit trail and ensures those proposals are automatically
+    picked up on the next run when the environment is healthy.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    history = load_verification_history(tracking_file)
+
+    proposal_files = sorted(
+        [p for p in proposals_dir.glob("fix_proposal_*.md")
+         if not p.stem.endswith("_context")],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    recorded = 0
+    for proposal_file in proposal_files:
+        if recorded >= max_per_run:
+            break
+        bug_number, bug_title = extract_bug_info_from_proposal(proposal_file)
+        if not bug_number:
+            continue
+        proposal_ts = extract_proposal_timestamp(proposal_file)
+        should, sequence = should_verify_proposal(bug_number, proposal_ts, history)
+        if not should:
+            continue
+
+        # Create a minimal env-error report so there's a file to reference.
+        report_file = create_verification_filename(output_dir, bug_number, bug_title, sequence)
+        report_file.write_text(
+            f"# Fix Verification: Bug #{bug_number}\n\n"
+            f"**Status:** ENVIRONMENTAL_ERROR\n\n"
+            f"DevStack was not healthy when this verification was attempted.\n"
+            f"This item will be retried automatically on the next healthy run.\n",
+            encoding="utf-8",
+        )
+
+        record_verification(
+            tracking_file, bug_number, proposal_ts, sequence,
+            report_file, "ENVIRONMENTAL_ERROR",
+            patch_source="",
+            attempts=0,
+            retry_on_recovery=True,
+        )
+        history = load_verification_history(tracking_file)  # keep in sync
+        print(
+            f"   📝 Recorded env failure for bug #{bug_number} "
+            f"(will retry when DevStack is healthy)"
+        )
+        recorded += 1
+
+
+# ---------------------------------------------------------------------------
 # Automated mode: process new fix proposals
 # ---------------------------------------------------------------------------
 
@@ -397,6 +462,23 @@ async def run_automated(config: dict) -> None:
     tracking_file = Path(config["verification_tracking_file"])
     max_per_run = int(config.get("max_proposals_per_run", 2))
     notif_config = load_notifications_config()
+
+    # Health check before doing any work.
+    print("🏥 Checking DevStack health...")
+    health = check_devstack_health(config)
+    if not health.all_healthy:
+        print("   ❌ DevStack is not healthy!")
+        for error in health.errors:
+            print(f"      - {error}")
+        print("\n⚠️  Cannot verify fixes — DevStack environment needs attention")
+        # Record retry_on_recovery for any proposals that would have been verified
+        # so they are automatically retried once the environment is healthy.
+        _record_env_failure_for_pending(
+            proposals_dir, tracking_file, output_dir, max_per_run
+        )
+        return
+
+    print("   ✅ DevStack is healthy\n")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     history = load_verification_history(tracking_file)
@@ -482,11 +564,13 @@ async def run_automated(config: dict) -> None:
             tracking_file, bug_number, proposal_ts, sequence,
             report_file, status, patch_source.description,
             attempts=len(analyses) + 1,
+            retry_on_recovery=(status == "ENVIRONMENTAL_ERROR"),
         )
         history = load_verification_history(tracking_file)
 
-        # Post to Launchpad
-        _post_verification_to_launchpad(bug_number, status, report_file, config)
+        # Post to Launchpad (skip env errors — nothing meaningful to report yet)
+        if status != "ENVIRONMENTAL_ERROR":
+            _post_verification_to_launchpad(bug_number, status, report_file, config)
 
         # Write feedback file for the Fix Proposal Agent if not resolved
         if status == "NOT_RESOLVED" and analyses:

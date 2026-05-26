@@ -4,6 +4,165 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-26
+
+### Added: DevStack test agent user-feedback mechanism
+
+Users can now write a plain-text feedback file to request specific test cases or
+a full re-run for a change that has already been tested:
+
+```
+# Path: {reviews_directory}/devstack_test_{change_number}_ps{patchset}_feedback.txt
+
+Re-run all tests
+# — or —
+Run test: octavia_tempest_plugin.tests.api.v2.test_load_balancer.LoadBalancerScenarioTest.test_lb_crd
+```
+
+The agent validates all test names (rejects shell injection characters, wrong
+prefixes, and non-dotted-path names) before passing them to the AI.  Feedback
+runs are prioritised over unprocessed reviews.  Implemented in
+`devstack-test-agent/feedback_parser.py`; integrated into
+`devstack-test-agent/devstack_test_agent.py`.
+
+### Added: Git stash + branch checkout safety (`agents_lib`, DevStack test agent, code-review agent)
+
+Both the DevStack test agent and the code-review agent now stash any local repo
+changes before checking out `main`/`master`, and restore the stash when done.
+This prevents `git checkout` from failing when a developer has uncommitted edits
+in the repo under test.
+
+New shared utilities in `agents_lib`:
+- `git_stash_save(repo_path, message)` → `bool`
+- `git_stash_pop(repo_path)` → `(bool, str)`
+
+### Refactored: `read_feedback_file` extracted to `agents_lib`
+
+The consumed-once feedback-file reader previously duplicated between the fix-
+proposal agent and the new devstack feedback parser is now a single shared
+function: `agents_lib.read_feedback_file(feedback_path)`.
+`fix-proposal-agent/proposal_tracker.py::read_local_feedback` now delegates to it.
+
+---
+
+## 2026-05-25
+
+### Fixed: Code review report truncated to AI summary text (`review_single_change.py`)
+
+The prompt tells the AI to write the full review directly to `save_path` (the
+output file) via the Write tool.  After the agent finished, the Python code
+called `_find_full_review_content()` — a regex that looks for a "saved to
+/path.md" mention in the agent's text response — to locate the full content.
+This regex was written when the AI saved to a separate working-directory path;
+after the prompt was updated to write directly to `save_path`, the regex never
+matched, so `content_to_save` fell back to the short summary text and
+`review_file.write_text()` overwrote the full review the agent had just written.
+
+Fix: read `review_file` back after the agent finishes (it already contains the
+full review if the agent's Write call succeeded).  Only fall back to the legacy
+regex/text path when the file is absent or smaller than 500 bytes.
+
+---
+
+## 2026-05-25
+
+### Fixed: Bug reproduction agent infinite loop on `## Bug #NNNN:` triage format
+
+`triage_parser.py` did not handle the `## Bug #2147199: Title` heading format, so
+`triage.bug_number` was extracted as an empty string.  This caused a key mismatch:
+`main()` checked tracking for `"bug_2147199"` (from the filename), but
+`process_triage()` recorded `"bug_"` (from the parsed content).  The real key was
+never written, so the agent re-processed the same bug on every run.
+
+**Changes:**
+
+- `triage_parser.py`: added Format 4 regex (`^## Bug #(\d+)`) to
+  `extract_bug_metadata`
+- `bug_reproduction_agent.py`: added defensive fallback — if `triage.bug_number`
+  is empty after parsing, derive it from the filename (format
+  `bug_NUMBER_title_...`)
+- Cleaned up the bogus `"bug_"` entry in `~/.octavia_bug_reproductions.json` and
+  added the correct `"bug_2147199"` entry
+
+---
+
+## 2026-05-18
+
+### Changed: Pluggable DevStack health check registry (`agents_lib`)
+
+`agents_lib/devstack_checks.py` has been refactored from a monolithic function into
+a named-check registry.
+
+**New types / functions:**
+
+| Symbol | Description |
+|--------|-------------|
+| `CheckResult` | Dataclass holding `name`, `passed`, `message` for a single check |
+| `DevStackChecker` | Registry — call `.register(name, fn, enabled)` to add checks |
+| `build_default_checker(config)` | Factory that pre-loads the three built-in checks |
+| `check_devstack_health(config)` | Unchanged convenience wrapper around the above |
+
+Built-in check names: `services`, `api_connectivity`, `disk_space`.
+
+**Config-driven disable:** add a `disabled_checks` list to the `devstack` config
+block to skip individual checks without code changes:
+
+```json
+"devstack": {
+    "disabled_checks": ["disk_space"]
+}
+```
+
+**Adding agent-specific checks:**
+
+```python
+checker = build_default_checker(config)
+checker.register("valkey", lambda: CheckResult("valkey", ping_valkey(), "Valkey OK/unreachable"))
+health = checker.run()
+```
+
+`DevStackHealth` gains a new `check_results` field (list of `CheckResult`) that
+`format_health_report` uses when present, falling back to the old field-based
+display otherwise.
+
+**Removed:** `bug-reproduction-agent/devstack_health.py` — superseded by the
+shared library (both `check_devstack_health` and `format_health_report` are now
+imported from `agents_lib`).
+
+---
+
+### Changed: Environmental failures no longer permanently block retries (`retry_on_recovery`)
+
+Previously, when any DevStack-dependent agent encountered an unhealthy environment
+it would record the item as processed, causing it to be skipped forever even after
+DevStack recovered.
+
+**New behaviour:** environmental failures are written to the tracking file with
+`"retry_on_recovery": true`.  On the next run, `should_process_item()` treats
+any entry with that flag as unprocessed, allowing the item to be picked up
+automatically once the environment is healthy.  When the attempt eventually
+succeeds (or fails for a non-environmental reason), the flag is absent from the
+new record, so normal de-dup logic resumes.
+
+**Changes per agent:**
+
+| Agent | Before | After |
+|-------|--------|-------|
+| Bug Reproduction | Records `ENVIRONMENT_ERROR`, skips forever | Records with `retry_on_recovery=True`, retries next healthy run |
+| Fix Verification | No upfront health check; records `ENVIRONMENTAL_ERROR` after exhausting retries, skips forever | Upfront health check added; records with `retry_on_recovery=True` for proposals that would have been verified |
+| DevStack Test | Returns silently without recording (correct, but no audit trail) | Records `environment_error` + `retry_on_recovery=True` for the review that would have been tested |
+
+**tracking.py changes:**
+- `should_process_item()` — checks `retry_on_recovery` flag before timestamp comparison; returns `(True, same_sequence)` when set.
+- `record_processed_item()` — new `retry_on_recovery: bool = False` parameter.
+
+**DevStack Test Agent refactor:** the review-selection logic has been extracted
+into two helpers (`_compute_latest_patchsets`, `_find_next_review`) so the
+health-fail path and the test path share identical candidate selection without
+duplication.
+
+---
+
 ## 2026-05-14
 
 ### Changed: Launchpad interaction code consolidated into agents_lib

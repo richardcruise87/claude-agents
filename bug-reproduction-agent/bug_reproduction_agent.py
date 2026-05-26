@@ -121,6 +121,15 @@ async def process_triage(triage_file: Path) -> bool:
         # Parse triage report
         print("📄 Parsing triage report...")
         triage = parse_triage_file(triage_file)
+
+        # Fallback: if parser couldn't extract bug number, derive it from the filename.
+        # Filename format: bug_NUMBER_title_timestamp_seq.md
+        if not triage.bug_number:
+            parts = triage_file.stem.split('_')
+            if len(parts) >= 2:
+                triage.bug_number = parts[1]
+                print(f"   ⚠️ Bug number missing from content, derived from filename: {triage.bug_number}")
+
         print(f"   Bug: #{triage.bug_number} - {triage.bug_title}")
         print(f"   Severity: {triage.severity}")
         print(f"   Reproduction steps: {len(triage.reproduction_steps)} bash blocks")
@@ -157,7 +166,8 @@ async def process_triage(triage_file: Path) -> bool:
 
             print(f"\n📝 Report saved: {report_file}")
 
-            # Record in tracking
+            # Record in tracking — retry_on_recovery so the bug is picked up
+            # again once DevStack is healthy.
             triage_timestamp = get_triage_timestamp(triage_file)
             tracking_file = Path(CONFIG["reproduction_tracking_file"])
             record_reproduction(
@@ -167,7 +177,8 @@ async def process_triage(triage_file: Path) -> bool:
                 1,
                 "ENVIRONMENT_ERROR",
                 0,
-                None
+                None,
+                retry_on_recovery=True,
             )
 
             return False

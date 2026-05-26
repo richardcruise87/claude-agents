@@ -1,6 +1,9 @@
 """Unit tests for agents_lib.utils."""
 import os
-from agents_lib.utils import expand_path, slugify, format_usage_info, sanitize_for_forge, build_feedback_comment
+from agents_lib.utils import (
+    expand_path, slugify, format_usage_info, sanitize_for_forge,
+    build_feedback_comment, read_feedback_file,
+)
 
 
 class TestSlugify:
@@ -244,3 +247,34 @@ Apply the patch to octavia/api/v2/controllers/load_balancer.py.
         report = "## Analysis\n\n" + ("word " * 2000)
         result = build_feedback_comment(report, "model", max_chars=200)
         assert len(result) < 600  # cap + header + footer overhead
+
+
+class TestReadFeedbackFile:
+    def test_returns_none_when_no_file(self, tmp_path):
+        assert read_feedback_file(tmp_path / "nonexistent.txt") is None
+
+    def test_returns_content_and_deletes_file(self, tmp_path):
+        f = tmp_path / "feedback.txt"
+        f.write_text("some feedback text", encoding="utf-8")
+        result = read_feedback_file(f)
+        assert result == "some feedback text"
+        assert not f.exists()
+
+    def test_returns_none_for_whitespace_only(self, tmp_path):
+        f = tmp_path / "feedback.txt"
+        f.write_text("   \n  \n  ", encoding="utf-8")
+        result = read_feedback_file(f)
+        assert result is None
+        assert not f.exists()
+
+    def test_strips_leading_trailing_whitespace(self, tmp_path):
+        f = tmp_path / "feedback.txt"
+        f.write_text("  actual content  \n", encoding="utf-8")
+        result = read_feedback_file(f)
+        assert result == "actual content"
+
+    def test_file_deleted_even_when_blank(self, tmp_path):
+        f = tmp_path / "feedback.txt"
+        f.write_text("", encoding="utf-8")
+        read_feedback_file(f)
+        assert not f.exists()

@@ -15,9 +15,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from agents_lib import (
     load_tracking_file,
-    save_tracking_file,
+    should_process_item,
+    record_processed_item,
     find_latest_report,
     check_devstack_health,
+    check_repo_on_main_branch,
+    checkout_main_branch,
+    git_stash_save,
+    git_stash_pop,
     devstack_lock,
     get_unique_resource_prefix,
     load_context_section,
@@ -28,6 +33,7 @@ from agents_lib import (
     extract_devstack_forge_comment,
 )
 from config import load_config
+from feedback_parser import process_feedback
 from review_parser import parse_review_file, should_test_review
 
 # Load configuration
@@ -41,13 +47,19 @@ def load_config_module():
     return CONFIG
 
 
-async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]:
+async def test_change_in_devstack(
+    review_info,
+    config: dict,
+    specific_tests: "list[str] | None" = None,
+) -> tuple[bool, str]:
     """
     Test a code change in DevStack using AI agent.
 
     Args:
-        review_info: Parsed review information
-        config: Configuration dictionary
+        review_info:    Parsed review information.
+        config:         Configuration dictionary.
+        specific_tests: When provided, only these test names are run (user
+                        feedback re-run).  None means run the full suite.
 
     Returns:
         Tuple of (success, test_results_file_path)
@@ -73,6 +85,21 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
 
             # Prepare prompt
             repo_path = Path(config["devstack_path"]) / review_info.repo_name.split('/')[-1]
+
+            # Stash local changes and ensure the repo is on main/master before
+            # the AI fetches and applies the patchset.
+            stashed = False
+            print("📋 Checking repository branch...")
+            branch_check = check_repo_on_main_branch(repo_path)
+            if not branch_check.on_main:
+                print(f"   ⚠️  Not on main branch (on '{branch_check.current_branch}')")
+                stashed = git_stash_save(repo_path)
+                if stashed:
+                    print("   📦 Stashed local changes")
+                ok, msg = checkout_main_branch(repo_path)
+                print(f"   {'✅' if ok else '⚠️ '} {msg}")
+            else:
+                print(f"   ✅ On {branch_check.current_branch} branch")
 
             # Construct patchset ref
             last_two = str(review_info.change_number)[-2:]
@@ -105,6 +132,15 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
                 current_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
 
+            # Append specific-tests section when running a user-requested subset
+            if specific_tests:
+                test_list = "\n".join(f"- `{t}`" for t in specific_tests)
+                prompt += (
+                    "\n\n## Specific Tests Requested (User Feedback)\n\n"
+                    "Run ONLY the following tests — do not run the full suite:\n\n"
+                    f"{test_list}\n"
+                )
+
             # Prepend cross-run context
             _ctx = load_context_section(config, "devstack_test")
             if _ctx:
@@ -112,7 +148,7 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
 
             print("🤖 Starting DevStack integration testing...\n")
 
-            # Run test with AI agent
+            # Run test with AI agent; always pop stash on exit
             test_result = None
             try:
                 _client = create_model_client(config)
@@ -144,6 +180,14 @@ async def test_change_in_devstack(review_info, config: dict) -> tuple[bool, str]
                 import traceback
                 traceback.print_exc()
                 return (False, "")
+
+            finally:
+                if stashed:
+                    pop_ok, pop_msg = git_stash_pop(repo_path)
+                    if pop_ok:
+                        print(f"   📦 Restored stashed changes ({repo_path.name})")
+                    else:
+                        print(f"   ⚠️  Could not restore stash for {repo_path.name}: {pop_msg}")
 
     except RuntimeError as e:
         # Could not acquire lock
@@ -289,6 +333,27 @@ async def main():
     print(f"  Lock timeout: {config['devstack']['lock_timeout']}s")
     print()
 
+    # Load common inputs used by both the health-fail path and the test path.
+    tracking_file = Path(config["tracking"]["tested_reviews_file"])
+    reviews_dir = Path(config["reviews_directory"])
+    allowed_repos = config["filters"]["only_test_repositories"]
+
+    if not reviews_dir.exists():
+        print(f"❌ Reviews directory does not exist: {reviews_dir}")
+        return
+
+    review_files = sorted(
+        reviews_dir.glob("review_*.md"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+
+    if not review_files:
+        print(f"No review files found in {reviews_dir}")
+        return
+
+    print(f"📋 Found {len(review_files)} review files\n")
+
+    latest_patchset = _compute_latest_patchsets(review_files)
+
     # Check DevStack health
     print("🏥 Checking DevStack health...")
     health = check_devstack_health(config)
@@ -297,74 +362,48 @@ async def main():
         for error in health.errors:
             print(f"      - {error}")
         print("\n⚠️  Cannot run tests - DevStack environment needs attention")
+        # Record env failure for the review that would have been tested so it
+        # gets an audit trail entry and is automatically retried when healthy.
+        tested_reviews = load_tracking_file(tracking_file)
+        review_info, review_file, review_id = _find_next_review(
+            review_files, tested_reviews, latest_patchset, allowed_repos
+        )
+        if review_info and review_file and review_id:
+            _record_test_result(
+                review_info, review_file, tracking_file,
+                "environment_error", retry_on_recovery=True,
+            )
+            print(
+                f"   📝 Recorded env failure for "
+                f"{review_info.repo_name} #{review_info.change_number} "
+                f"(will retry when DevStack is healthy)"
+            )
         return
 
     print("   ✅ DevStack is healthy\n")
 
-    # Load tracking file
-    tracking_file = Path(config["tracking"]["tested_reviews_file"])
-    tested_reviews = load_tracking_file(tracking_file)
-
-    # Find review files
-    reviews_dir = Path(config["reviews_directory"])
-    if not reviews_dir.exists():
-        print(f"❌ Reviews directory does not exist: {reviews_dir}")
-        return
-
-    review_files = sorted(reviews_dir.glob("review_*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-
-    if not review_files:
-        print(f"No review files found in {reviews_dir}")
-        return
-
-    print(f"📋 Found {len(review_files)} review files\n")
-
-    # Get filter settings
-    allowed_repos = config["filters"]["only_test_repositories"]
-
-    # Pre-compute the highest patchset available for each change so we can
-    # skip stale patchsets without waiting for the tracking file.
-    latest_patchset: dict = {}
-    for _rf in review_files:
-        _info = parse_review_file(_rf)
-        if _info:
-            key = (_info.repo_name, _info.change_number)
-            if _info.patchset > latest_patchset.get(key, 0):
-                latest_patchset[key] = _info.patchset
-
     # Process reviews
+    tested_reviews = load_tracking_file(tracking_file)
     tested_count = 0
-    skipped_count = 0
 
-    for review_file in review_files:
-        # Parse review
-        review_info = parse_review_file(review_file)
-        if not review_info:
-            continue
+    # Feedback-triggered re-runs take priority over new reviews
+    feedback_ran = await _handle_feedback_run(
+        tested_reviews, reviews_dir, tracking_file, config
+    )
+    if feedback_ran:
+        tested_count += 1
 
-        # Skip if a newer patchset exists for this change
-        change_key = (review_info.repo_name, review_info.change_number)
-        if review_info.patchset < latest_patchset.get(change_key, review_info.patchset):
-            print(
-                f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} "
-                f"PS{review_info.patchset} - newer PS{latest_patchset[change_key]} exists"
-            )
-            continue
+    if tested_count > 0:
+        print("\n" + "="*80)
+        print("✅ DevStack test cycle complete!")
+        print("="*80)
+        return
 
-        # Check if should test
-        if not should_test_review(review_info, allowed_repos):
-            if review_info.already_tested:
-                skipped_count += 1
-                if skipped_count <= 3:
-                    print(f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} - Already tested")
-            continue
+    review_info, review_file, review_id = _find_next_review(
+        review_files, tested_reviews, latest_patchset, allowed_repos
+    )
 
-        # Check tracking file
-        review_id = f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
-        if review_id in tested_reviews:
-            print(f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} - Already in tracking")
-            continue
-
+    if review_info and review_file and review_id:
         print(f"\n📌 Testing {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
 
         # Test in DevStack
@@ -377,7 +416,6 @@ async def main():
             )
             if test_report:
                 _record_test_result(review_info, review_file, tracking_file, "success", test_report)
-                tested_reviews = load_tracking_file(tracking_file)  # keep in sync for loop
                 tested_count += 1
                 print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
                 notify_report(
@@ -398,11 +436,6 @@ async def main():
             # Post a failure notice — forge users most need to know when tests fail
             _post_devstack_failure_feedback(review_info, config)
 
-        # Only test one review per run (to avoid holding DevStack lock too long)
-        if tested_count >= 1:
-            print(f"\n📊 Tested {tested_count} review(s) this pass")
-            break
-
     if tested_count == 0:
         print("\n✓ No new reviews to test")
 
@@ -411,27 +444,205 @@ async def main():
     print("="*80)
 
 
+async def _handle_feedback_run(
+    tested_reviews: dict,
+    reviews_dir: Path,
+    tracking_file: Path,
+    config: dict,
+) -> bool:
+    """Check all tracked changes for user feedback files and run any found.
+
+    Scans ``tested_reviews`` for feedback files.  On the first match, validates
+    and runs the requested tests (or the full suite) and records the result.
+
+    Returns True if a feedback-triggered run was performed, False otherwise.
+    """
+    for review_id, entry in tested_reviews.items():
+        # review_id format: {repo_name}~{change_number}~ps{patchset}
+        parts = review_id.split('~')
+        if len(parts) != 3 or not parts[2].startswith('ps'):
+            continue
+        change_number = parts[1]
+        try:
+            patchset = int(parts[2][2:])
+        except ValueError:
+            continue
+
+        result = process_feedback(change_number, patchset, reviews_dir)
+        if result is None:
+            continue
+
+        rerun_all, valid_tests = result
+
+        # Find the original review file for this change
+        review_file_path = entry.get("review_file")
+        if not review_file_path:
+            # Fall back to glob
+            ps_glob = f"ps{patchset}_"
+            pattern = f"review_*_{change_number}_{ps_glob}*.md"
+            review_file_obj = find_latest_report(reviews_dir, pattern)
+        else:
+            review_file_obj = Path(review_file_path)
+
+        if not review_file_obj or not review_file_obj.exists():
+            print(f"⚠️  Feedback for #{change_number} ps{patchset}: review file not found — skipping")
+            continue
+
+        review_info = parse_review_file(review_file_obj)
+        if not review_info:
+            print(f"⚠️  Feedback for #{change_number} ps{patchset}: could not parse review — skipping")
+            continue
+
+        if not rerun_all and not valid_tests:
+            print(
+                f"⚠️  Feedback for #{change_number} ps{patchset}: "
+                "no valid test names — all were rejected (check feedback file format)"
+            )
+            continue
+
+        specific = None if rerun_all else valid_tests
+        label = "full re-run" if rerun_all else f"{len(valid_tests)} specific test(s)"
+        print(f"\n📬 Feedback-triggered run for #{change_number} ps{patchset}: {label}")
+
+        success, test_results_file = await test_change_in_devstack(
+            review_info, config, specific_tests=specific
+        )
+
+        if success and test_results_file:
+            test_report = create_test_report(
+                review_file_obj, Path(test_results_file), reviews_dir
+            )
+            if test_report:
+                _record_test_result(
+                    review_info, review_file_obj, tracking_file, "success", test_report
+                )
+                notify_report(
+                    report_path=test_report,
+                    subject=(
+                        f"DevStack Test (feedback): {review_info.repo_name} "
+                        f"#{review_info.change_number} PS{review_info.patchset}"
+                    ),
+                    summary=f"Feedback-triggered run: {label}",
+                    agent_config=config,
+                    notifications_config=load_notifications_config(),
+                )
+                _post_devstack_feedback(review_info, test_report, config)
+        else:
+            _record_test_result(review_info, review_file_obj, tracking_file, "failure")
+            _post_devstack_failure_feedback(review_info, config)
+
+        return True  # one feedback run per cycle
+
+    return False
+
+
+def _compute_latest_patchsets(review_files: list) -> dict:
+    """Return a dict mapping (repo_name, change_number) → highest patchset seen."""
+    latest: dict = {}
+    for rf in review_files:
+        info = parse_review_file(rf)
+        if info:
+            key = (info.repo_name, info.change_number)
+            if info.patchset > latest.get(key, 0):
+                latest[key] = info.patchset
+    return latest
+
+
+def _find_next_review(
+    review_files: list,
+    tested_reviews: dict,
+    latest_patchset: dict,
+    allowed_repos: list,
+):
+    """
+    Return (review_info, review_file, review_id) for the next review that
+    should be tested, or (None, None, None) if none qualify.
+
+    A review qualifies when:
+    - It is the latest patchset for its change.
+    - ``should_test_review`` returns True.
+    - It is not already in the tracking file, OR it has ``retry_on_recovery``
+      set (meaning a previous run failed due to an unhealthy environment).
+    """
+    skipped_count = 0
+    for review_file in review_files:
+        review_info = parse_review_file(review_file)
+        if not review_info:
+            continue
+
+        # Skip stale patchsets
+        change_key = (review_info.repo_name, review_info.change_number)
+        if review_info.patchset < latest_patchset.get(change_key, review_info.patchset):
+            print(
+                f"⏭️  Skipping {review_info.repo_name} #{review_info.change_number} "
+                f"PS{review_info.patchset} - newer PS{latest_patchset[change_key]} exists"
+            )
+            continue
+
+        if not should_test_review(review_info, allowed_repos):
+            if review_info.already_tested:
+                skipped_count += 1
+                if skipped_count <= 3:
+                    print(
+                        f"⏭️  Skipping {review_info.repo_name} "
+                        f"#{review_info.change_number} - Already tested"
+                    )
+            continue
+
+        review_id = (
+            f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
+        )
+        should_test, _seq = should_process_item(
+            review_id, review_info.review_timestamp, tested_reviews
+        )
+        if not should_test:
+            print(
+                f"⏭️  Skipping {review_info.repo_name} "
+                f"#{review_info.change_number} - Already in tracking"
+            )
+            continue
+
+        return review_info, review_file, review_id
+
+    return None, None, None
+
+
 def _record_test_result(
     review_info,
     review_file: Path,
     tracking_file: Path,
     test_result: str,
     test_report_file: "Path | None" = None,
+    retry_on_recovery: bool = False,
 ) -> None:
-    """Write a tracking entry for a tested change (success or failure)."""
-    tested_reviews = load_tracking_file(tracking_file)
+    """Write a tracking entry for a tested change (success, failure, or env error)."""
     review_id = (
         f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
     )
-    entry = {
-        "tested_at": datetime.now().isoformat(),
+    # Determine the next sequence number from the current tracking state.
+    existing = load_tracking_file(tracking_file)
+    existing_entry = existing.get(review_id, {})
+    if retry_on_recovery:
+        sequence = existing_entry.get("sequence", 1)
+    else:
+        sequence = existing_entry.get("sequence", 0) + 1
+
+    extra_data: dict = {
         "review_file": str(review_file),
         "test_result": test_result,
     }
     if test_report_file:
-        entry["test_report_file"] = str(test_report_file)
-    tested_reviews[review_id] = entry
-    save_tracking_file(tracking_file, tested_reviews)
+        extra_data["test_report_file"] = str(test_report_file)
+
+    record_processed_item(
+        tracking_file,
+        review_id,
+        review_info.review_timestamp,
+        sequence,
+        id_prefix="",
+        extra_data=extra_data,
+        retry_on_recovery=retry_on_recovery,
+    )
 
 
 async def run_single_change(change_number: str, patchset: "int | None", config: dict) -> None:

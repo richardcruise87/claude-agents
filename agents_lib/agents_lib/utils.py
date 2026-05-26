@@ -228,3 +228,17 @@ def find_latest_report(
     if exclude_suffix:
         matches = [p for p in matches if not p.stem.endswith(exclude_suffix)]
     return matches[-1] if matches else None
+
+
+def read_feedback_file(feedback_path: "Path") -> Optional[str]:
+    """Read a feedback file and delete it so it is only consumed once.
+
+    Returns the stripped file contents, or None if the file does not exist
+    or contains only whitespace.
+    """
+    feedback_path = Path(feedback_path)
+    if not feedback_path.exists():
+        return None
+    text = feedback_path.read_text(encoding="utf-8").strip()
+    feedback_path.unlink()
+    return text if text else None

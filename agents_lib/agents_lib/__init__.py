@@ -9,6 +9,7 @@ __version__ = "1.0.0"
 from .utils import (
     expand_path, slugify, format_usage_info,
     sanitize_for_forge, build_feedback_comment, find_latest_report,
+    read_feedback_file,
 )
 from .config_loader import (
     load_agent_config,
@@ -24,11 +25,16 @@ from .tracking import (
     create_output_filename,
 )
 from .devstack_checks import (
+    CheckResult,
     DevStackHealth,
     BranchCheck,
+    DevStackChecker,
+    build_default_checker,
     check_devstack_health,
     check_repo_on_main_branch,
     checkout_main_branch,
+    git_stash_save,
+    git_stash_pop,
     cleanup_test_environment,
     format_health_report,
 )
@@ -91,11 +97,16 @@ __all__ = [
     "should_process_item",
     "record_processed_item",
     "create_output_filename",
+    "CheckResult",
     "DevStackHealth",
     "BranchCheck",
+    "DevStackChecker",
+    "build_default_checker",
     "check_devstack_health",
     "check_repo_on_main_branch",
     "checkout_main_branch",
+    "git_stash_save",
+    "git_stash_pop",
     "cleanup_test_environment",
     "format_health_report",
     "DevStackLock",
@@ -137,4 +148,5 @@ __all__ = [
     "get_launchpad_bug_comments",
     "post_report_to_launchpad",
     "find_latest_report",
+    "read_feedback_file",
 ]
