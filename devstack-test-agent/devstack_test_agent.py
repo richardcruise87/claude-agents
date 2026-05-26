@@ -51,6 +51,7 @@ async def test_change_in_devstack(
     review_info,
     config: dict,
     specific_tests: "list[str] | None" = None,
+    trigger: str = "new review",
 ) -> tuple[bool, str]:
     """
     Test a code change in DevStack using AI agent.
@@ -60,14 +61,18 @@ async def test_change_in_devstack(
         config:         Configuration dictionary.
         specific_tests: When provided, only these test names are run (user
                         feedback re-run).  None means run the full suite.
+        trigger:        Human-readable string describing why this run was
+                        started, e.g. "new review", "feedback: full re-run",
+                        "feedback: 2 specific test(s)", "manual (CLI)".
 
     Returns:
         Tuple of (success, test_results_file_path)
     """
     print(f"\n{'='*80}")
-    print("🧪 Testing Change in DevStack")
+    print(f"🧪 Testing Change in DevStack  [{trigger}]")
     print(f"📋 Repository: {review_info.repo_name}")
-    print(f"📋 Change: {review_info.change_number} (Patchset {review_info.patchset})")
+    print(f"📋 Change:     #{review_info.change_number} PS{review_info.patchset}")
+    print(f"📋 Gerrit:     {review_info.gerrit_url}")
     print(f"{'='*80}\n")
 
     # Acquire DevStack lock
@@ -350,7 +355,7 @@ async def main():
         print(f"No review files found in {reviews_dir}")
         return
 
-    print(f"📋 Found {len(review_files)} review files\n")
+    print(f"📋 Found {len(review_files)} review file(s)\n")
 
     latest_patchset = _compute_latest_patchsets(review_files)
 
@@ -404,10 +409,12 @@ async def main():
     )
 
     if review_info and review_file and review_id:
-        print(f"\n📌 Testing {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
+        print(f"▶  Next: {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
 
         # Test in DevStack
-        success, test_results_file = await test_change_in_devstack(review_info, config)
+        success, test_results_file = await test_change_in_devstack(
+            review_info, config, trigger="new review"
+        )
 
         if success and test_results_file:
             # Create a new testing_report_* file (review file is not modified)
@@ -437,7 +444,9 @@ async def main():
             _post_devstack_failure_feedback(review_info, config)
 
     if tested_count == 0:
-        print("\n✓ No new reviews to test")
+        if review_info is None:
+            print("   No unprocessed reviews found")
+        print("\n✓ Nothing to test this cycle")
 
     print("\n" + "="*80)
     print("✅ DevStack test cycle complete!")
@@ -501,11 +510,10 @@ async def _handle_feedback_run(
             continue
 
         specific = None if rerun_all else valid_tests
-        label = "full re-run" if rerun_all else f"{len(valid_tests)} specific test(s)"
-        print(f"\n📬 Feedback-triggered run for #{change_number} ps{patchset}: {label}")
+        trigger = "feedback: full re-run" if rerun_all else f"feedback: {len(valid_tests)} specific test(s)"
 
         success, test_results_file = await test_change_in_devstack(
-            review_info, config, specific_tests=specific
+            review_info, config, specific_tests=specific, trigger=trigger
         )
 
         if success and test_results_file:
@@ -522,7 +530,7 @@ async def _handle_feedback_run(
                         f"DevStack Test (feedback): {review_info.repo_name} "
                         f"#{review_info.change_number} PS{review_info.patchset}"
                     ),
-                    summary=f"Feedback-triggered run: {label}",
+                    summary=f"Feedback-triggered run: {trigger}",
                     agent_config=config,
                     notifications_config=load_notifications_config(),
                 )
@@ -664,9 +672,9 @@ async def run_single_change(change_number: str, patchset: "int | None", config: 
 
     tracking_file = Path(config["tracking"]["tested_reviews_file"])
 
-    print(f"📌 Testing {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
-
-    success, test_results_file = await test_change_in_devstack(review_info, config)
+    success, test_results_file = await test_change_in_devstack(
+        review_info, config, trigger="manual (CLI)"
+    )
 
     if success and test_results_file:
         test_report = create_test_report(review_file, Path(test_results_file), reviews_dir)
