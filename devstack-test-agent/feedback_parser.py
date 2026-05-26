@@ -46,6 +46,19 @@ _RERUN_ALL_SENTINEL = "re-run all tests"
 _RUN_TEST_PREFIX = re.compile(r'^run\s+test[s]?\s*:\s*(.+)', re.IGNORECASE)
 
 
+def _feedback_path(change_number: str, patchset: int, reviews_dir: Path) -> Path:
+    """Return the expected feedback file path for a given change/patchset."""
+    return reviews_dir / f"devstack_test_{change_number}_ps{patchset}_feedback.txt"
+
+
+def has_devstack_feedback(change_number: str, patchset: int, reviews_dir: Path) -> bool:
+    """Return True if a feedback file exists for this change/patchset.
+
+    Does NOT consume (delete) the file — use read_devstack_feedback() for that.
+    """
+    return _feedback_path(change_number, patchset, reviews_dir).exists()
+
+
 def read_devstack_feedback(
     change_number: str,
     patchset: int,
@@ -56,8 +69,7 @@ def read_devstack_feedback(
     Returns raw file text, or None if no feedback file exists.
     The file is deleted after reading (consumed-once semantics).
     """
-    feedback_path = reviews_dir / f"devstack_test_{change_number}_ps{patchset}_feedback.txt"
-    return read_feedback_file(feedback_path)
+    return read_feedback_file(_feedback_path(change_number, patchset, reviews_dir))
 
 
 def parse_feedback(raw_text: str) -> Tuple[bool, List[str]]:
