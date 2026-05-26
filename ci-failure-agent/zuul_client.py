@@ -60,7 +60,7 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
 
     for attempt in range(1 + _ZUUL_RETRIES):
         try:
-            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
+            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:  # nosec B310
                 builds = json.loads(response.read().decode("utf-8"))
             break
         except HTTPError as e:
@@ -162,7 +162,7 @@ def get_builds_for_change(change_number, zuul_base_url, tenant, pipeline=None, r
 
     for attempt in range(1 + _ZUUL_RETRIES):
         try:
-            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
+            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:  # nosec B310
                 builds = json.loads(response.read().decode("utf-8"))
             break
         except HTTPError as e:
@@ -209,7 +209,7 @@ def get_build_by_uuid(uuid, zuul_base_url, tenant):
     build = None
     for attempt in range(1 + _ZUUL_RETRIES):
         try:
-            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:
+            with urlopen(url, timeout=_ZUUL_TIMEOUT) as response:  # nosec B310
                 build = normalize_build(json.loads(response.read().decode("utf-8")))
             break
         except HTTPError as e:

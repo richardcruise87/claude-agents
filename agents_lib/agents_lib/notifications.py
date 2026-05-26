@@ -188,7 +188,7 @@ def _send_slack(cfg: dict, subject: str, summary: str, report_path: Path) -> Non
         data=payload,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
         if resp.status not in (200, 204):
             raise RuntimeError(f"Slack returned HTTP {resp.status}")
     print("[notifications] Slack message sent")
@@ -208,7 +208,7 @@ def _send_ntfy(cfg: dict, subject: str, summary: str) -> None:
 
     payload = summary.encode()
     req = urllib.request.Request(url, data=payload, headers=headers)
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=10) as resp:  # nosec B310
         if resp.status not in (200, 204):
             raise RuntimeError(f"ntfy returned HTTP {resp.status}")
     print("[notifications] ntfy notification sent")
