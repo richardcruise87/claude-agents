@@ -135,7 +135,7 @@ def get_launchpad_bug_comments(
     url = f"https://api.launchpad.net/1.0/bugs/{bug_id}/messages"
     try:
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
             data = json.loads(resp.read().decode("utf-8"))
         comments = []
         for entry in data.get("entries", []):

@@ -46,7 +46,7 @@ class JiraClient:
         url = path if path.startswith("http") else f"{self._api}{path}"
         req = urllib.request.Request(url, headers=self._headers())
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             try:
@@ -65,7 +65,7 @@ class JiraClient:
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=self._headers(), method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             try:

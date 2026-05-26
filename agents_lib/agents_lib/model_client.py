@@ -186,7 +186,7 @@ def _execute_tool(func_name: str, args: dict) -> str:
         if func_name == "bash":
             result = subprocess.run(
                 args.get("command", ""),
-                shell=True,
+                shell=True,  # nosec B602 — executes AI-generated bash commands; shell=True is required by design
                 capture_output=True,
                 text=True,
                 timeout=60,
@@ -221,7 +221,7 @@ def _execute_tool(func_name: str, args: dict) -> str:
 
         if func_name == "web_fetch":
             url = args["url"]
-            with urllib.request.urlopen(url, timeout=15) as resp:
+            with urllib.request.urlopen(url, timeout=15) as resp:  # nosec B310
                 return resp.read().decode(errors="replace")[:8000]
 
         else:

@@ -131,7 +131,7 @@ class ForgeClient:
         """Perform a GET request and return parsed JSON."""
         req = urllib.request.Request(url, headers=headers or {})
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310 — URL is always https:// from config
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             # Include the response body when available — APIs often return
@@ -155,7 +155,7 @@ class ForgeClient:
         for k, v in (headers or {}).items():
             req.add_header(k, v)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310 — URL is always https:// from config
                 raw = resp.read().decode("utf-8")
                 return json.loads(raw) if raw.strip() else {}
         except urllib.error.HTTPError as exc:
@@ -207,7 +207,7 @@ class GerritClient(ForgeClient):
     def _http_get_gerrit(self, url: str) -> dict | list:
         req = urllib.request.Request(url, headers=self._headers())
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310 — URL is always https:// from config
                 raw = resp.read().decode("utf-8")
                 return json.loads(self._strip_prefix(raw))
         except urllib.error.HTTPError as exc:
@@ -331,7 +331,7 @@ class GerritClient(ForgeClient):
         for k, v in self._headers().items():
             req.add_header(k, v)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310 — URL is always https:// from config
                 raw = resp.read().decode("utf-8")
                 raw = self._strip_prefix(raw)
                 return json.loads(raw) if raw.strip() else {}

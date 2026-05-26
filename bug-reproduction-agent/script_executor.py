@@ -40,7 +40,7 @@ def execute_script(
         ExecutionResult with execution details and categorized error type
     """
     if working_dir is None:
-        working_dir = Path("/tmp")
+        working_dir = Path("/tmp")  # nosec B108
 
     # Create temporary script file
     with tempfile.NamedTemporaryFile(

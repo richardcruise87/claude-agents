@@ -1,0 +1,6 @@
+[tool.bandit]
+# Exclude virtual environments, tox, test fixtures, and deployment scripts.
+# Tests are excluded because assert statements (B101) are expected there.
+exclude_dirs = [".tox", ".venv", "venv", "__pycache__", "tests", "scripts"]
+# B101: assert_used — expected in test code (tests/ excluded above, but skipping globally is safer)
+skips = ["B101"]

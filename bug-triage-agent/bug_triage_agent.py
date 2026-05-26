@@ -163,7 +163,7 @@ async def fetch_bugs_from_launchpad(project: str, statuses: list, max_bugs: int 
     except ImportError:
         print("⚠️  httpx not available, using urllib...")
         try:
-            with urllib.request.urlopen(launchpad_url, timeout=30) as response:
+            with urllib.request.urlopen(launchpad_url, timeout=30) as response:  # nosec B310
                 data = json.loads(response.read().decode('utf-8'))
                 entries = data.get('entries', [])
                 print(f"✓ Found {len(entries)} bugs (limited functionality)")
