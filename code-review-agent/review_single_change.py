@@ -384,7 +384,7 @@ This change has been reviewed before.
         # Append usage info once if not already present
         if usage_info and "## Token Usage & Cost" not in content_to_save:
             content_to_save += "\n\n---\n\n" + usage_info
-            review_file.write_text(content_to_save, encoding="utf-8")
+        review_file.write_text(content_to_save, encoding="utf-8")
         print(f"\n✓ Full review saved to: {review_file}")
 
         # Record in forge-agnostic tracking

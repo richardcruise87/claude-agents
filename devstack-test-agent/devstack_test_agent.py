@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from agents_lib import (
     load_tracking_file,
-    save_tracking_file,
+    should_process_item,
+    record_processed_item,
     find_latest_report,
     check_devstack_health,
     check_repo_on_main_branch,
@@ -591,8 +592,10 @@ def _find_next_review(
         review_id = (
             f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
         )
-        entry = tested_reviews.get(review_id)
-        if entry and not entry.get("retry_on_recovery"):
+        should_test, _seq = should_process_item(
+            review_id, review_info.review_timestamp, tested_reviews
+        )
+        if not should_test:
             print(
                 f"⏭️  Skipping {review_info.repo_name} "
                 f"#{review_info.change_number} - Already in tracking"
@@ -613,21 +616,33 @@ def _record_test_result(
     retry_on_recovery: bool = False,
 ) -> None:
     """Write a tracking entry for a tested change (success, failure, or env error)."""
-    tested_reviews = load_tracking_file(tracking_file)
     review_id = (
         f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
     )
-    entry = {
-        "tested_at": datetime.now().isoformat(),
+    # Determine the next sequence number from the current tracking state.
+    existing = load_tracking_file(tracking_file)
+    existing_entry = existing.get(review_id, {})
+    if retry_on_recovery:
+        sequence = existing_entry.get("sequence", 1)
+    else:
+        sequence = existing_entry.get("sequence", 0) + 1
+
+    extra_data: dict = {
         "review_file": str(review_file),
         "test_result": test_result,
     }
     if test_report_file:
-        entry["test_report_file"] = str(test_report_file)
-    if retry_on_recovery:
-        entry["retry_on_recovery"] = True
-    tested_reviews[review_id] = entry
-    save_tracking_file(tracking_file, tested_reviews)
+        extra_data["test_report_file"] = str(test_report_file)
+
+    record_processed_item(
+        tracking_file,
+        review_id,
+        review_info.review_timestamp,
+        sequence,
+        id_prefix="",
+        extra_data=extra_data,
+        retry_on_recovery=retry_on_recovery,
+    )
 
 
 async def run_single_change(change_number: str, patchset: "int | None", config: dict) -> None:

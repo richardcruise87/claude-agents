@@ -144,10 +144,10 @@ def process_feedback(
 
     valid, rejected = validate_test_names(raw_names)
     if rejected:
-        logger.warning(
-            "Feedback for change %s ps%s — %d test name(s) rejected: %s",
-            change_number, patchset, len(rejected), "; ".join(rejected),
-        )
+        rejected_str = "; ".join(rejected)
+        msg = f"Feedback for #{change_number} ps{patchset} — {len(rejected)} test name(s) rejected: {rejected_str}"
+        logger.warning(msg)
+        print(f"   ⚠️  {msg}")
     if valid:
         logger.info(
             "Feedback: running %d specific test(s) for change %s ps%s",

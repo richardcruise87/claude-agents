@@ -134,7 +134,7 @@ class DevStackChecker:
 
 class _ServicesCheckResult(CheckResult):
     """CheckResult subclass that also carries per-service status."""
-    def __init__(self, service_status: Dict[str, bool], errors: List[str]) -> None:
+    def __init__(self, service_status: Dict[str, bool]) -> None:
         failed = [s for s, ok in service_status.items() if not ok]
         passed = len(failed) == 0
         message = (
@@ -161,7 +161,7 @@ def _make_services_check(config: dict) -> Callable[[], CheckResult]:
         devstack_config = config.get("devstack", {})
         required_services = devstack_config.get("required_services", [])
         service_status = check_services(required_services)
-        return _ServicesCheckResult(service_status, [])
+        return _ServicesCheckResult(service_status)
     return _check
 
 
