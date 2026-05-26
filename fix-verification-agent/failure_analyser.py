@@ -5,9 +5,9 @@ After a verification script fails, this module asks the model to classify
 the failure as FIX_FAILURE, ENVIRONMENTAL, or INCONCLUSIVE and explain its
 reasoning. Only ENVIRONMENTAL failures trigger a retry.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from agents_lib import create_model_client
+from agents_lib import create_model_client, format_usage_info
 from prompts import get_failure_analysis_prompt
 
 
@@ -17,6 +17,7 @@ class FailureAnalysis:
     cause: str           # "FIX_FAILURE" | "ENVIRONMENTAL" | "INCONCLUSIVE"
     explanation: str     # Plain-text reasoning from the model
     should_retry: bool   # True only for ENVIRONMENTAL failures
+    usage_info: str = field(default="")  # Formatted token usage section for the report
 
 
 async def analyse_failure(
@@ -84,7 +85,14 @@ async def analyse_failure(
     try:
         client = create_model_client(config)
         result = await client.query(prompt=prompt)
-        return _parse_analysis(result.text)
+        analysis = _parse_analysis(result.text)
+        analysis.usage_info = format_usage_info(
+            usage_data=result.usage,
+            cost_usd=result.cost_usd,
+            model=result.model,
+            duration_ms=result.duration_ms,
+        )
+        return analysis
     except Exception as exc:  # pylint: disable=broad-except
         print(f"   ⚠️  Failure analysis call failed: {exc}")
         return FailureAnalysis(

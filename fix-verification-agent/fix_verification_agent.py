@@ -303,9 +303,15 @@ async def run_verification(
         analyses=analyses,
     )
 
+    # Append token usage from the last AI analysis call to the report
+    last_analysis = analyses[-1] if analyses else None
+    if last_analysis and last_analysis.usage_info and report_file.exists():
+        existing = report_file.read_text(encoding="utf-8")
+        if "## Token Usage & Cost" not in existing:
+            report_file.write_text(existing + "\n\n---\n\n" + last_analysis.usage_info, encoding="utf-8")
+
     # Save learning on notable outcomes (not RESOLVED)
     if final_status in ("NOT_RESOLVED", "ENVIRONMENTAL_ERROR"):
-        last_analysis = analyses[-1] if analyses else None
         _summary = (
             f"Verification {final_status} for bug #{bug_number} — {bug_title[:60]}. "
             f"Patch: {patch_source.description}. Attempts: {len(attempts_data)}. "
