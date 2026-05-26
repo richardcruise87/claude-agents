@@ -25,6 +25,8 @@ from forge_feedback import extract_forge_comment, extract_line_comments, determi
 from agents_lib import (
     check_repo_on_main_branch,
     checkout_main_branch,
+    git_stash_save,
+    git_stash_pop,
     create_model_client,
     format_usage_info,
     create_forge_client,
@@ -227,7 +229,9 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
     # Pre-flight checks
     print("🔍 Running pre-flight checks...\n")
 
-    # Check repository is on main/master branch
+    # Check repository is on main/master branch; stash local changes first so
+    # the checkout can succeed even when the developer has uncommitted edits.
+    _stash_saved = False
     devstack_config = CONFIG.get("devstack", {})
     if devstack_config.get("verify_main_branch", True):
         print("📋 Checking repository branch...")
@@ -235,12 +239,18 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         if not branch_check.on_main:
             print(f"   ⚠️  {branch_check.error}")
             print(f"   Current branch: {branch_check.current_branch}")
+            _stash_saved = git_stash_save(repo_path)
+            if _stash_saved:
+                print("   📦 Stashed local changes")
             print("   Attempting to checkout main/master...")
             success, message = checkout_main_branch(repo_path)
             if success:
                 print(f"   ✅ {message}")
             else:
                 print(f"   ❌ {message}")
+                if _stash_saved:
+                    git_stash_pop(repo_path)
+                    _stash_saved = False
                 print("   Review will proceed but may have issues")
         else:
             print(f"   ✅ On {branch_check.current_branch} branch")
@@ -355,13 +365,17 @@ This change has been reviewed before.
         print(f"\nSummary:\n{(review_result or '')[:500]}...")
 
         # Resolve the canonical report content.
-        # The AI often writes the full detailed review to its working directory
-        # (e.g. /opt/stack/octavia/) and outputs only a brief summary as text.
-        # _find_full_review_content() detects the full review path from the
-        # summary text and returns it when available, so that the tracking file
-        # always contains the complete report.
-        full_content = _find_full_review_content(review_result or "")
-        content_to_save = full_content if full_content else review_result
+        # The prompt instructs the AI to write the full review directly to
+        # save_path (= review_file) via the Write tool.  Reading review_file
+        # back is therefore more reliable than parsing a path out of the text
+        # response.  Fall back to the text response only when the file is
+        # absent or suspiciously short (< 500 chars — indicates a failed write).
+        if review_file.exists() and review_file.stat().st_size > 500:
+            content_to_save = review_file.read_text(encoding="utf-8")
+        else:
+            # Legacy fallback: AI may have written to a different path and
+            # mentioned it in its text response.
+            content_to_save = _find_full_review_content(review_result or "") or review_result
 
         if not content_to_save:
             print("\n❌ WARNING: No review content received — aborting.")
@@ -370,9 +384,7 @@ This change has been reviewed before.
         # Append usage info once if not already present
         if usage_info and "## Token Usage & Cost" not in content_to_save:
             content_to_save += "\n\n---\n\n" + usage_info
-
-        # Always write (or overwrite) the tracking file with the full report
-        review_file.write_text(content_to_save, encoding="utf-8")
+            review_file.write_text(content_to_save, encoding="utf-8")
         print(f"\n✓ Full review saved to: {review_file}")
 
         # Record in forge-agnostic tracking
@@ -386,6 +398,14 @@ This change has been reviewed before.
         print(f"\n❌ Error during review: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        if _stash_saved:
+            # Reuse success/message rather than introducing new local names
+            success, message = git_stash_pop(repo_path)
+            if success:
+                print(f"   📦 Restored stashed changes ({repo_path.name})")
+            else:
+                print(f"   ⚠️  Could not restore stash for {repo_path.name}: {message}")
 
 
 def _post_only(change_ref: str, patchset: "int | None") -> bool:

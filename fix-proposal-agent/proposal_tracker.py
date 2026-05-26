@@ -14,6 +14,7 @@ from agents_lib import (
     should_process_item,
     record_processed_item,
     create_output_filename,
+    read_feedback_file,
 )
 
 
@@ -141,20 +142,8 @@ def read_local_feedback(bug_number: str, proposals_dir: Path) -> Optional[str]:
     """
     Check for a local developer feedback file and return its contents.
 
-    The feedback file is deleted after being read so it is only consumed once.
-
+    Delegates to agents_lib.read_feedback_file (consumed-once semantics).
     Expected path: {proposals_dir}/fix_proposal_{bug_number}_feedback.txt
-
-    Args:
-        bug_number:    Launchpad bug number.
-        proposals_dir: Directory containing proposal files.
-
-    Returns:
-        Feedback text, or None if no feedback file exists.
     """
-    feedback_file = proposals_dir / f"fix_proposal_{bug_number}_feedback.txt"
-    if feedback_file.exists():
-        text = feedback_file.read_text(encoding="utf-8").strip()
-        feedback_file.unlink()
-        return text if text else None
-    return None
+    feedback_path = proposals_dir / f"fix_proposal_{bug_number}_feedback.txt"
+    return read_feedback_file(feedback_path)

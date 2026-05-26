@@ -41,7 +41,6 @@ from agents_lib import (
     post_report_to_launchpad,
     find_latest_report,
     check_devstack_health,
-    format_health_report,
 )
 from failure_analyser import (
     analyse_failure,

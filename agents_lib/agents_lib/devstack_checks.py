@@ -110,10 +110,12 @@ class DevStackChecker:
                 errors.append(result.message)
             # Populate backward-compat fields from well-known check names.
             if name == "services" and hasattr(result, "_service_status"):
+                # pylint: disable=protected-access
                 service_status = result._service_status  # type: ignore[attr-defined]
             if name == "api_connectivity":
                 api_reachable = result.passed
             if name == "disk_space" and hasattr(result, "_disk_space_gb"):
+                # pylint: disable=protected-access
                 disk_space_gb = result._disk_space_gb  # type: ignore[attr-defined]
 
         return DevStackHealth(
@@ -203,9 +205,9 @@ def build_default_checker(config: dict) -> DevStackChecker:
     """
     disabled = set(config.get("devstack", {}).get("disabled_checks", []))
     checker = DevStackChecker(config)
-    checker.register("services",         _make_services_check(config), "services"         not in disabled)
-    checker.register("api_connectivity", _make_api_check(config),      "api_connectivity" not in disabled)
-    checker.register("disk_space",       _make_disk_check(config),     "disk_space"       not in disabled)
+    checker.register("services", _make_services_check(config), "services" not in disabled)
+    checker.register("api_connectivity", _make_api_check(config), "api_connectivity" not in disabled)
+    checker.register("disk_space", _make_disk_check(config), "disk_space" not in disabled)
     return checker
 
 
@@ -339,6 +341,44 @@ def checkout_main_branch(repo_path: Path) -> Tuple[bool, str]:
         return (False, f"Failed to checkout main/master: {result.stderr}")
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         return (False, f"Error: {exc}")
+
+
+def git_stash_save(repo_path: Path, message: str = "claude-agents auto-stash") -> bool:
+    """Stash local changes. Returns True if a stash entry was created.
+
+    Returns False when the working tree is already clean, on git error, or on
+    timeout — never raises.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "stash", "push", "-m", message],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return result.returncode == 0 and "No local changes to save" not in result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def git_stash_pop(repo_path: Path) -> Tuple[bool, str]:
+    """Restore the most recent stash entry. Returns (success, message). Never raises."""
+    try:
+        result = subprocess.run(
+            ["git", "stash", "pop"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode == 0:
+            return (True, "Stash popped successfully")
+        return (False, result.stderr.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        return (False, str(exc))
 
 
 # ---------------------------------------------------------------------------
