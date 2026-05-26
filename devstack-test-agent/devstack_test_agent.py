@@ -7,6 +7,7 @@ Operates asynchronously from code review agent to improve throughput.
 """
 import argparse
 import asyncio
+import subprocess
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -33,7 +34,7 @@ from agents_lib import (
     extract_devstack_forge_comment,
 )
 from config import load_config
-from feedback_parser import process_feedback
+from feedback_parser import has_devstack_feedback, process_feedback
 from review_parser import parse_review_file, should_test_review
 
 # Load configuration
@@ -105,8 +106,27 @@ async def test_change_in_devstack(
             last_two = str(review_info.change_number)[-2:]
             patchset_ref = f"refs/changes/{last_two}/{review_info.change_number}/{review_info.patchset}"
 
+            # Pre-flight: fetch the patchset ref in Python to confirm it is
+            # accessible before spending API tokens on the AI agent.
+            print(f"📡 Pre-fetching patchset ref {patchset_ref}...")
+            _fetch = subprocess.run(  # nosec B603 B607
+                ["git", "fetch", review_info.gerrit_url, patchset_ref],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if _fetch.returncode == 0:
+                print("   ✅ Patchset ref fetched successfully")
+            else:
+                print(f"   ⚠️  git fetch returned {_fetch.returncode}: {_fetch.stderr.strip()}")
+                print("   Proceeding — AI agent will re-attempt the fetch")
+
             # Results file (temp location, will be incorporated into review)
-            results_file = Path(f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md")
+            results_file = Path(  # nosec B108
+                f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md"
+            )
 
             # Load prompt template via provider-aware loader
             _prompts_dir = Path(__file__).parent / "prompts"
@@ -468,30 +488,42 @@ async def _handle_feedback_run(
         except ValueError:
             continue
 
+        # Check feedback file exists BEFORE consuming it — so a missing review
+        # file does not silently discard the feedback.
+        if not has_devstack_feedback(change_number, patchset, reviews_dir):
+            continue
+
+        # Resolve the review file.  Prefer the tracked path when it still
+        # exists; fall back to glob when the path is stale or missing.
+        review_file_path = entry.get("review_file")
+        if review_file_path and Path(review_file_path).exists():
+            review_file_obj = Path(review_file_path)
+        else:
+            ps_glob = f"ps{patchset}_"
+            pattern = f"review_*_{change_number}_{ps_glob}*.md"
+            review_file_obj = find_latest_report(reviews_dir, pattern)
+
+        if not review_file_obj or not review_file_obj.exists():
+            print(
+                f"⚠️  Feedback for #{change_number} ps{patchset}: "
+                "review file not found — skipping (feedback preserved)"
+            )
+            continue
+
+        review_info = parse_review_file(review_file_obj)
+        if not review_info:
+            print(
+                f"⚠️  Feedback for #{change_number} ps{patchset}: "
+                "could not parse review — skipping (feedback preserved)"
+            )
+            continue
+
+        # All prerequisites confirmed — now consume and parse the feedback file.
         result = process_feedback(change_number, patchset, reviews_dir)
         if result is None:
             continue
 
         rerun_all, valid_tests = result
-
-        # Find the original review file for this change
-        review_file_path = entry.get("review_file")
-        if not review_file_path:
-            # Fall back to glob
-            ps_glob = f"ps{patchset}_"
-            pattern = f"review_*_{change_number}_{ps_glob}*.md"
-            review_file_obj = find_latest_report(reviews_dir, pattern)
-        else:
-            review_file_obj = Path(review_file_path)
-
-        if not review_file_obj or not review_file_obj.exists():
-            print(f"⚠️  Feedback for #{change_number} ps{patchset}: review file not found — skipping")
-            continue
-
-        review_info = parse_review_file(review_file_obj)
-        if not review_info:
-            print(f"⚠️  Feedback for #{change_number} ps{patchset}: could not parse review — skipping")
-            continue
 
         if not rerun_all and not valid_tests:
             print(

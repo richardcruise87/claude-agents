@@ -1,5 +1,6 @@
 """Unit tests for devstack-test-agent/feedback_parser.py."""
 from feedback_parser import (
+    has_devstack_feedback,
     parse_feedback,
     validate_test_names,
     read_devstack_feedback,
@@ -191,3 +192,26 @@ class TestProcessFeedback:
         assert rerun is False
         assert VALID_OCTAVIA in names
         assert len(names) == 1
+
+
+class TestHasDevstackFeedback:
+    def test_returns_true_when_file_exists(self, tmp_path):
+        f = tmp_path / "devstack_test_982567_ps3_feedback.txt"
+        f.write_text("Re-run all tests", encoding="utf-8")
+        assert has_devstack_feedback("982567", 3, tmp_path) is True
+        assert f.exists()  # file must NOT be consumed
+
+    def test_returns_false_when_no_file(self, tmp_path):
+        assert has_devstack_feedback("982567", 3, tmp_path) is False
+
+    def test_correct_filename_pattern(self, tmp_path):
+        # Wrong patchset — should not be found
+        (tmp_path / "devstack_test_982567_ps99_feedback.txt").write_text("x", encoding="utf-8")
+        assert has_devstack_feedback("982567", 3, tmp_path) is False
+
+    def test_does_not_consume_file(self, tmp_path):
+        f = tmp_path / "devstack_test_982567_ps3_feedback.txt"
+        f.write_text("content", encoding="utf-8")
+        has_devstack_feedback("982567", 3, tmp_path)
+        has_devstack_feedback("982567", 3, tmp_path)  # second call still True
+        assert f.exists()

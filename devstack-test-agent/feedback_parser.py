@@ -46,6 +46,15 @@ _RERUN_ALL_SENTINEL = "re-run all tests"
 _RUN_TEST_PREFIX = re.compile(r'^run\s+test[s]?\s*:\s*(.+)', re.IGNORECASE)
 
 
+def has_devstack_feedback(change_number: str, patchset: int, reviews_dir: Path) -> bool:
+    """Return True if a feedback file exists for this change/patchset.
+
+    Does NOT consume (delete) the file — use read_devstack_feedback() for that.
+    """
+    feedback_path = reviews_dir / f"devstack_test_{change_number}_ps{patchset}_feedback.txt"
+    return feedback_path.exists()
+
+
 def read_devstack_feedback(
     change_number: str,
     patchset: int,
