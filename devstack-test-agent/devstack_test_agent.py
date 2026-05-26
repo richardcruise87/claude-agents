@@ -446,7 +446,8 @@ async def main():
     if tested_count == 0:
         if review_info is None:
             print("   No unprocessed reviews found")
-        print("\n✓ Nothing to test this cycle")
+            print("\n\u2713 Nothing to test this cycle")
+        # else: a review ran but failed — failure logging already handled above
 
     print("\n" + "="*80)
     print("✅ DevStack test cycle complete!")
