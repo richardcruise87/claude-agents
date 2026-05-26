@@ -48,11 +48,13 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
         Each build dict contains: uuid, job_name, project, pipeline, change, patchset,
         result, log_url, duration, voting, end_time, ref_url, nodeset, etc.
     """
+    # Note: "result" is intentionally omitted here. Zuul's /builds endpoint
+    # returns HTTP 500 when result= is combined with project+pipeline without
+    # a specific change number. Filter for FAILURE in Python instead (below).
     params = urlencode({
         "project": project,
         "pipeline": pipeline,
-        "result": "FAILURE",
-        "limit": 100,
+        "limit": 500,  # covers all results (pass+fail); failures filtered below
         "skip": 0,
     })
 
@@ -89,6 +91,8 @@ def fetch_recent_failures(project, pipeline, zuul_base_url, tenant, hours_back=2
     recent = []
     for build in builds:
         normalize_build(build)
+        if build.get("result") != "FAILURE":
+            continue
         end_time_str = build.get("end_time")
         if not end_time_str:
             continue
