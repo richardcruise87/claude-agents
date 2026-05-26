@@ -221,6 +221,7 @@ def _execute_tool(func_name: str, args: dict) -> str:
 
         if func_name == "web_fetch":
             url = args["url"]
+            # nosec B310 — fetching AI-requested URLs is the intended purpose of web_fetch
             with urllib.request.urlopen(url, timeout=15) as resp:  # nosec B310
                 return resp.read().decode(errors="replace")[:8000]
 
