@@ -26,7 +26,7 @@ class DevStackLock:
             timeout: Maximum seconds to wait for lock (default: 300 = 5 minutes)
         """
         if lock_file is None:
-            lock_file = Path("/tmp/devstack-agent.lock")
+            lock_file = Path("/tmp/devstack-agent.lock")  # nosec B108 — fixed, well-known lock path
         self.lock_file = lock_file
         self.timeout = timeout
         self.lock_fd: Optional[int] = None

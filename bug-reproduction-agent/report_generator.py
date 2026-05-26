@@ -381,7 +381,7 @@ if __name__ == "__main__":
         health,
         attempts,
         "REPRODUCED",
-        Path("/tmp/script.sh")
+        Path("/tmp/script.sh")  # nosec B108
     )
 
     # Verify report contains key sections

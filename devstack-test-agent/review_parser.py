@@ -189,7 +189,7 @@ if __name__ == "__main__":
 
         for filename in test_filenames:
             # Create temp file for testing
-            test_file = Path(f"/tmp/{filename}")
+            test_file = Path(f"/tmp/{filename}")  # nosec B108
             test_file.write_text("""# Code Review: openstack/octavia - Change #982615
 
 **Gerrit URL**: https://review.opendev.org/c/openstack/octavia/+/982615

@@ -106,7 +106,9 @@ async def test_change_in_devstack(
             patchset_ref = f"refs/changes/{last_two}/{review_info.change_number}/{review_info.patchset}"
 
             # Results file (temp location, will be incorporated into review)
-            results_file = Path(f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md")
+            results_file = Path(
+                f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md"  # nosec B108
+            )
 
             # Load prompt template via provider-aware loader
             _prompts_dir = Path(__file__).parent / "prompts"

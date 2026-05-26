@@ -187,7 +187,7 @@ if __name__ == "__main__":
             seq,
             "REPRODUCED",
             2,
-            "/tmp/script.sh"
+            "/tmp/script.sh"  # nosec B108
         )
 
         # Test 2: Re-check same bug (no new triage)

@@ -256,7 +256,7 @@ def check_api_connectivity(openrc_file: Path) -> bool:
         )
         result = subprocess.run(
             cmd,
-            shell=True,
+            shell=True,  # nosec B602 — cmd is constructed from trusted config paths, not user input
             executable="/bin/bash",
             capture_output=True,
             text=True,
@@ -419,7 +419,7 @@ def cleanup_test_environment(
             full_cmd = f"source {openrc_file} && {cmd}"
             result = subprocess.run(
                 full_cmd,
-                shell=True,
+                shell=True,  # nosec B602 — full_cmd is built from trusted config cleanup_commands
                 executable="/bin/bash",
                 capture_output=True,
                 text=True,
