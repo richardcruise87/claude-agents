@@ -256,10 +256,19 @@ async def propose_fix(
             fallback = create_proposal_filename(proposals_dir, bug_number, bug_title, sequence)
             fallback.write_text(result.text, encoding="utf-8")
             print(f"   Saved manually to: {fallback.name}")
-            return fallback
-        return None
+            proposal_file = fallback
+        else:
+            return None
+    else:
+        proposal_file = max(candidates, key=lambda p: p.stat().st_mtime)
 
-    proposal_file = max(candidates, key=lambda p: p.stat().st_mtime)
+    # Append token usage to the proposal file (same pattern as code-review and CI-failure agents)
+    usage_info = format_usage_info(result.usage, result.cost_usd, result.model, result.duration_ms)
+    if usage_info:
+        existing = proposal_file.read_text(encoding="utf-8")
+        if "## Token Usage & Cost" not in existing:
+            proposal_file.write_text(existing + "\n\n---\n\n" + usage_info, encoding="utf-8")
+
     print(f"\n✓ Proposal saved to: {proposal_file.name}")
     return proposal_file
 
