@@ -431,37 +431,58 @@ async def main():
     if review_info and review_file and review_id:
         print(f"▶  Next: {review_info.repo_name} #{review_info.change_number} PS{review_info.patchset}")
 
-        # Test in DevStack
-        success, test_results_file = await test_change_in_devstack(
-            review_info, config, trigger="new review"
-        )
+        # Verify the change is still open in Gerrit before spending DevStack resources.
+        # Changes that are MERGED or ABANDONED are recorded as skipped so they are not
+        # re-selected on future cycles.
+        _run_test = True
+        if config.get("filters", {}).get("skip_merged", True):
+            try:
+                _forge = create_forge_client(config)
+                _ci = _forge.get_change(review_info.change_number, review_info.repo_name)
+                if _ci.status and _ci.status.upper() not in ("NEW", "DRAFT", ""):
+                    print(
+                        f"⏭️  Change #{review_info.change_number} is {_ci.status} "
+                        f"— skipping and recording so it is not re-selected"
+                    )
+                    _record_test_result(
+                        review_info, review_file, tracking_file,
+                        f"skipped_{_ci.status.lower()}",
+                    )
+                    _run_test = False
+            except Exception as _status_err:  # pylint: disable=broad-except
+                print(f"   ⚠️  Could not verify change status: {_status_err} — proceeding")
 
-        if success and test_results_file:
-            # Create a new testing_report_* file (review file is not modified)
-            test_report = create_test_report(
-                review_file, Path(test_results_file), reviews_dir
+        if _run_test:
+            success, test_results_file = await test_change_in_devstack(
+                review_info, config, trigger="new review"
             )
-            if test_report:
-                _record_test_result(review_info, review_file, tracking_file, "success", test_report)
-                tested_count += 1
-                print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
-                notify_report(
-                    report_path=test_report,
-                    subject=(
-                        f"DevStack Test: {review_info.repo_name} "
-                        f"#{review_info.change_number} PS{review_info.patchset}"
-                    ),
-                    summary="DevStack integration test passed",
-                    agent_config=config,
-                    notifications_config=load_notifications_config(),
+
+            if success and test_results_file:
+                # Create a new testing_report_* file (review file is not modified)
+                test_report = create_test_report(
+                    review_file, Path(test_results_file), reviews_dir
                 )
-                _post_devstack_feedback(review_info, test_report, config)
+                if test_report:
+                    _record_test_result(review_info, review_file, tracking_file, "success", test_report)
+                    tested_count += 1
+                    print(f"\n✅ Test complete for {review_info.repo_name} #{review_info.change_number}")
+                    notify_report(
+                        report_path=test_report,
+                        subject=(
+                            f"DevStack Test: {review_info.repo_name} "
+                            f"#{review_info.change_number} PS{review_info.patchset}"
+                        ),
+                        summary="DevStack integration test passed",
+                        agent_config=config,
+                        notifications_config=load_notifications_config(),
+                    )
+                    _post_devstack_feedback(review_info, test_report, config)
+                else:
+                    print(f"\n⚠️  Test succeeded but failed to create test report in {reviews_dir}")
             else:
-                print(f"\n⚠️  Test succeeded but failed to create test report in {reviews_dir}")
-        else:
-            print(f"\n⚠️  Test failed or skipped for {review_info.repo_name} #{review_info.change_number}")
-            # Post a failure notice — forge users most need to know when tests fail
-            _post_devstack_failure_feedback(review_info, config)
+                print(f"\n⚠️  Test failed or skipped for {review_info.repo_name} #{review_info.change_number}")
+                # Post a failure notice — forge users most need to know when tests fail
+                _post_devstack_failure_feedback(review_info, config)
 
     if tested_count == 0:
         if review_info is None:

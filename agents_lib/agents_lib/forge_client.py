@@ -54,6 +54,7 @@ class ChangeInfo:
     author: str
     forge_type: str  # "gerrit" | "github" | "gitlab"
     description: str = ""   # PR/MR body / Gerrit change description
+    status: str = ""         # "NEW" | "MERGED" | "ABANDONED" for Gerrit; "open"/"closed" for GitHub/GitLab
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +256,7 @@ class GerritClient(ForgeClient):
             author=author,
             forge_type="gerrit",
             description=data.get("commit_message", ""),
+            status=data.get("status", ""),
         )
 
     def list_changes(
