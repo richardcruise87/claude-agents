@@ -439,7 +439,7 @@ async def main():
             try:
                 _forge = create_forge_client(config)
                 _ci = _forge.get_change(review_info.change_number, review_info.repo_name)
-                if _ci.status and _ci.status.upper() not in ("NEW", "DRAFT", ""):
+                if _ci.status and _ci.status.upper() not in ("NEW", "DRAFT"):
                     print(
                         f"⏭️  Change #{review_info.change_number} is {_ci.status} "
                         f"— skipping and recording so it is not re-selected"
