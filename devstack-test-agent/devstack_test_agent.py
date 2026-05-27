@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 # Add current directory to path
@@ -35,6 +36,7 @@ from agents_lib import (
 )
 from config import load_config
 from feedback_parser import has_devstack_feedback, process_feedback
+from report_validator import validate_report
 from review_parser import parse_review_file, should_test_review
 
 # Load configuration
@@ -133,6 +135,26 @@ async def test_change_in_devstack(
                 f"/tmp/devstack_test_{review_info.change_number}_ps{review_info.patchset}.md"  # nosec B108
             )
 
+            # Load and pre-fill the report template with known values.
+            # The AI fills in the [instruction] markers; Python fills {UPPERCASE} vars.
+            class _SafeDict(defaultdict):
+                """Leaves unknown {KEYS} unchanged so the AI sees them verbatim."""
+                def __missing__(self, key):
+                    return f"{{{key}}}"
+
+            _template_path = Path(__file__).parent / "report_template.md"
+            _template_filled = _template_path.read_text(encoding="utf-8").format_map(
+                _SafeDict(
+                    REPO_NAME=review_info.repo_name,
+                    CHANGE_NUMBER=str(review_info.change_number),
+                    PATCHSET=str(review_info.patchset),
+                    GERRIT_URL=review_info.gerrit_url,
+                    TIMESTAMP=datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                    MODEL_NAME=config.get("model", "claude-sonnet-4-6"),
+                    RESOURCE_PREFIX=resource_prefix,
+                )
+            )
+
             # Load prompt template via provider-aware loader
             _prompts_dir = Path(__file__).parent / "prompts"
             _provider = config.get("model_provider", "anthropic")
@@ -155,6 +177,7 @@ async def test_change_in_devstack(
                 openrc_file=config["openrc_file"],
                 results_file=str(results_file),
                 current_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                report_template=_template_filled,
             )
 
             # Append specific-tests section when running a user-requested subset
@@ -188,17 +211,56 @@ async def test_change_in_devstack(
                 print(f"{'='*80}")
 
                 # Check if results file was created
-                if results_file.exists():
-                    print(f"\n✓ Test results saved to: {results_file}")
-                    return (True, str(results_file))
-                if test_result:
-                    # Save result manually if AI didn't write file
-                    print("\n⚠️  Results file not found - saving manually...")
-                    results_file.write_text(test_result, encoding="utf-8")
-                    print(f"✓ Saved results to: {results_file}")
-                    return (True, str(results_file))
-                print("\n❌ No test results generated")
-                return (False, "")
+                if not results_file.exists():
+                    if test_result:
+                        print("\n⚠️  Results file not found - saving manually...")
+                        results_file.write_text(test_result, encoding="utf-8")
+                        print(f"✓ Saved results to: {results_file}")
+                    else:
+                        print("\n❌ No test results generated")
+                        return (False, "")
+
+                print(f"\n✓ Test results saved to: {results_file}")
+
+                # Audit loop: validate report format; ask AI to fix if needed.
+                _MAX_AUDIT_RETRIES = 2
+                for _audit_attempt in range(_MAX_AUDIT_RETRIES + 1):
+                    _audit_errors = validate_report(results_file)
+                    if not _audit_errors:
+                        print("   ✅ Report format validated")
+                        break
+                    print(
+                        f"\n   ⚠️  Report format issues "
+                        f"(attempt {_audit_attempt + 1}/{_MAX_AUDIT_RETRIES + 1}):"
+                    )
+                    for _err in _audit_errors:
+                        print(f"      - {_err}")
+                    if _audit_attempt < _MAX_AUDIT_RETRIES:
+                        _error_list = "\n".join(f"- {e}" for e in _audit_errors)
+                        _fix_prompt = (
+                            f"The report at {results_file} has these format problems:\n"
+                            f"{_error_list}\n\n"
+                            f"Read the report, fix every issue, and rewrite the entire "
+                            f"file to {results_file}. Required sections:\n"
+                            f"- '# DevStack Integration Testing' as the first heading\n"
+                            f"- '## Summary' section\n"
+                            f"- '## Test Results Summary' section with "
+                            f"'**Overall Status:**'\n"
+                            f"- At least one '### Test N: Name' section\n"
+                            f"- 'END OF REPORT' as the final line"
+                        )
+                        await _client.query(
+                            prompt=_fix_prompt,
+                            tools=["Read", "Write"],
+                            on_progress=lambda text: print(f"  {text}"),
+                        )
+                    else:
+                        print(
+                            "   ⚠️  Report still invalid after retries "
+                            "— proceeding with best effort"
+                        )
+
+                return (True, str(results_file))
 
             except Exception as e:
                 print(f"\n❌ Error during testing: {e}")
@@ -302,18 +364,9 @@ def create_test_report(
 
     try:
         review_content = review_file.read_text(encoding="utf-8")
-        test_results = Path(test_results_file).read_text(encoding="utf-8")
-
-        # Extract from "## Test Environment" onwards — skip the AI preamble
-        # since the review already contains the change details.
-        test_sections = []
-        in_section = False
-        for line in test_results.split('\n'):
-            if line.startswith('## Test Environment'):
-                in_section = True
-            if in_section:
-                test_sections.append(line)
-        test_content = '\n'.join(test_sections)
+        # The AI now writes a fully structured report following the template.
+        # Use the complete output; no preamble stripping needed.
+        test_content = Path(test_results_file).read_text(encoding="utf-8")
 
         # Derive test report filename from review filename, replacing prefix and timestamp.
         # review_openstack_octavia_932847_ps1_20260402_090051.md
@@ -324,10 +377,12 @@ def create_test_report(
         new_stem = 'testing_report_' + '_'.join(middle_parts) + '_' + new_timestamp
         test_report_file = output_dir / f"{new_stem}.md"
 
+        # Combine: code review content + separator + template-based test report.
+        # The test_content starts with "# DevStack Integration Testing" (from the
+        # template), so extract_devstack_forge_comment() will find it correctly.
         combined = (
             review_content.rstrip() +
             "\n\n---\n\n" +
-            "# DevStack Integration Testing\n\n" +
             test_content
         )
         test_report_file.write_text(combined, encoding="utf-8")
