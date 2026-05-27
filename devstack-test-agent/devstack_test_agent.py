@@ -9,7 +9,6 @@ import argparse
 import asyncio
 import subprocess
 import sys
-from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 # Add current directory to path
@@ -38,6 +37,17 @@ from config import load_config
 from feedback_parser import has_devstack_feedback, process_feedback
 from report_validator import validate_report
 from review_parser import parse_review_file, should_test_review
+
+
+class _SafeDict(dict):
+    """dict subclass used with format_map() to leave unknown {KEYS} unchanged.
+
+    When the report template is pre-filled, known variables are substituted
+    and any unrecognised keys survive intact so the AI sees them verbatim.
+    """
+    def __missing__(self, key: str) -> str:
+        return f"{{{key}}}"
+
 
 # Load configuration
 CONFIG = None
@@ -137,11 +147,6 @@ async def test_change_in_devstack(
 
             # Load and pre-fill the report template with known values.
             # The AI fills in the [instruction] markers; Python fills {UPPERCASE} vars.
-            class _SafeDict(defaultdict):
-                """Leaves unknown {KEYS} unchanged so the AI sees them verbatim."""
-                def __missing__(self, key):
-                    return f"{{{key}}}"
-
             _template_path = Path(__file__).parent / "report_template.md"
             _template_filled = _template_path.read_text(encoding="utf-8").format_map(
                 _SafeDict(
@@ -196,10 +201,13 @@ async def test_change_in_devstack(
 
             print("🤖 Starting DevStack integration testing...\n")
 
+            # Create the model client before the try-block so it is always in
+            # scope for the audit retry calls that come after the main query.
+            _client = create_model_client(config)
+
             # Run test with AI agent; always pop stash on exit
             test_result = None
             try:
-                _client = create_model_client(config)
                 _res = await _client.query(
                     prompt=prompt,
                     tools=["Bash", "Read", "Write", "Grep"],

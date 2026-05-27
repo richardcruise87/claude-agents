@@ -1,4 +1,5 @@
 """Unit tests for devstack-test-agent/report_validator.py."""
+import re
 import pytest
 from report_validator import validate_report, REQUIRED_SECTIONS
 
@@ -125,8 +126,7 @@ class TestValidateReport:
 
     def test_missing_test_sections(self, tmp_path):
         # Replace numbered test headings so none match '### Test \d'
-        import re as _re
-        content = _re.sub(r'^### Test (\d)', r'#### Subtest \1', _VALID_REPORT, flags=_re.MULTILINE)
+        content = re.sub(r'^### Test (\d)', r'#### Subtest \1', _VALID_REPORT, flags=re.MULTILINE)
         f = tmp_path / "report.md"
         f.write_text(content, encoding="utf-8")
         errors = validate_report(f)
