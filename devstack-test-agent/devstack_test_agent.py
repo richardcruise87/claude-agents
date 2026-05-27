@@ -633,8 +633,15 @@ def _find_next_review(
         review_id = (
             f"{review_info.repo_name}~{review_info.change_number}~ps{review_info.patchset}"
         )
+        # Use the patchset number as the stable deduplication key rather than
+        # the review file timestamp.  The code review agent creates a new file
+        # (with a fresh timestamp) each time it runs, even for the same patchset,
+        # so review_info.review_timestamp changes every cycle and causes the agent
+        # to re-test an already-tested patchset.  The patchset number is immutable
+        # for a given patchset, and the tracking key already encodes it (~psN), so
+        # using "psN" here ensures the same patchset is only tested once.
         should_test, _seq = should_process_item(
-            review_id, review_info.review_timestamp, tested_reviews
+            review_id, f"ps{review_info.patchset}", tested_reviews
         )
         if not should_test:
             print(
@@ -678,7 +685,7 @@ def _record_test_result(
     record_processed_item(
         tracking_file,
         review_id,
-        review_info.review_timestamp,
+        f"ps{review_info.patchset}",  # stable per-patchset key; see _find_next_review comment
         sequence,
         id_prefix="",
         extra_data=extra_data,
