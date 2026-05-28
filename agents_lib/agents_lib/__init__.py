@@ -45,7 +45,6 @@ from .report_builder import (
     ReportSection,
     parse_section_markers,
     build_report,
-    section_prompt_instructions,
 )
 from .report_auditor import (
     AuditRule,
@@ -133,7 +132,6 @@ __all__ = [
     "ReportSection",
     "parse_section_markers",
     "build_report",
-    "section_prompt_instructions",
     # report_auditor
     "AuditRule",
     "audit_report",

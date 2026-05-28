@@ -12,6 +12,7 @@ import urllib.error
 import os
 import sys
 import subprocess
+from datetime import datetime
 from pathlib import Path
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -312,11 +313,21 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
             return None
 
         # Parse section markers from AI text response and assemble the report.
-        from datetime import datetime as _dt
         sections = parse_section_markers(triage_result)
         print(f"   Parsed {len(sections)} section(s) from AI response")
 
-        template = _TRIAGE_TEMPLATE_PATH.read_text(encoding="utf-8")
+        if _TRIAGE_TEMPLATE_PATH.exists():
+            template = _TRIAGE_TEMPLATE_PATH.read_text(encoding="utf-8")
+        else:
+            print(f"⚠️  Triage template not found at {_TRIAGE_TEMPLATE_PATH} — using minimal fallback")
+            template = (
+                "# Octavia Bug Triage Report\n\n**Bug ID:** {BUG_NUMBER}\n"
+                "**Title:** {BUG_TITLE}\n**Triage Date:** {DATE}\n\n"
+                + "\n\n".join(
+                    f"## {s.name.replace('_', ' ').title()}\n\n{{{{SECTION:{s.name}}}}}"
+                    for s in _TRIAGE_SECTION_DEFS
+                )
+            )
         # Fill metadata placeholders
         template = template.replace("{BUG_NUMBER}", bug_number)
         template = template.replace("{BUG_TITLE}", bug_title)
@@ -326,7 +337,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         template = template.replace("{DATE_CREATED}", bug_info['date_created'])
         template = template.replace("{DATE_UPDATED}", bug_info['date_last_updated'])
         template = template.replace("{LAUNCHPAD_URL}", bug_info['web_link'])
-        template = template.replace("{DATE}", _dt.now().strftime("%Y-%m-%d %H:%M:%S"))
+        template = template.replace("{DATE}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         report_content = build_report(template, sections, _TRIAGE_SECTION_DEFS)
 

@@ -72,7 +72,17 @@ def generate_report(
     }
     status_line = status_map.get(final_status, f"❓ {final_status}")
 
-    template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    if _TEMPLATE_PATH.exists():
+        template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    else:
+        template = (
+            "# Bug Reproduction Report\n\n**Bug ID:** {BUG_NUMBER}\n"
+            "**Title:** {BUG_TITLE}\n**Status:** {STATUS_LINE}\n\n"
+            + "\n\n".join(
+                f"## {s.name.replace('_', ' ').title()}\n\n{{{{SECTION:{s.name}}}}}"
+                for s in _SECTION_DEFS
+            )
+        )
 
     # Fill {UPPERCASE} metadata placeholders
     template = template.replace("{BUG_NUMBER}", triage.bug_number)
@@ -143,15 +153,21 @@ def _build_executive_summary(
             f"Reproduction of bug #{triage.bug_number} was aborted due to a **DevStack "
             f"environment error**. The agent will retry when the environment is healthy."
         )
-    if not attempts:
+    if final_status == "NOT_REPRODUCED":
+        if not attempts:
+            return (
+                f"Bug #{triage.bug_number} could not be processed — no reproduction attempts "
+                f"were made."
+            )
         return (
-            f"Bug #{triage.bug_number} could not be processed — no reproduction attempts "
-            f"were made."
+            f"Bug #{triage.bug_number} ({triage.bug_title}) could **not be reproduced** "
+            f"after {len(attempts)} attempt(s). The issue may require additional context "
+            f"or a different reproduction approach."
         )
+    # Unknown status — return a safe fallback rather than silently using NOT_REPRODUCED message.
     return (
-        f"Bug #{triage.bug_number} ({triage.bug_title}) could **not be reproduced** "
-        f"after {len(attempts)} attempt(s). The issue may require additional context "
-        f"or a different reproduction approach."
+        f"Bug #{triage.bug_number} reproduction completed with status: {final_status}. "
+        f"Attempts: {len(attempts)}."
     )
 
 

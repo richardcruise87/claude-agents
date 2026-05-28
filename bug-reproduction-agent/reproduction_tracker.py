@@ -72,7 +72,6 @@ def create_bug_reproduction_dir(base_output_dir: Path, bug_number: str, bug_titl
     slug = slugify(bug_title, max_length=40)
     bug_dir = base_output_dir / f"bug_{bug_number}_{slug}"
     bug_dir.mkdir(parents=True, exist_ok=True)
-    (bug_dir / "scripts").mkdir(exist_ok=True)
     return bug_dir
 
 

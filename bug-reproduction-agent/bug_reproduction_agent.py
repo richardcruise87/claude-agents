@@ -332,6 +332,7 @@ async def process_triage(triage_file: Path) -> bool:
         script_path = None
         if final_status == "REPRODUCED" and successful_script:
             script_path = bug_dir / "scripts" / "01_reproduce.sh"
+            script_path.parent.mkdir(exist_ok=True)
             script_path.write_text(successful_script, encoding="utf-8")
             script_path.chmod(0o755)
             print(f"   💾 Saved reproduction script: {script_path}")
