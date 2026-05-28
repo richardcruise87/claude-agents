@@ -33,7 +33,9 @@ from .git_info import (
     format_commit_info,
     format_changed_files,
     git_fetch_and_checkout_patchset,
+    git_fetch_and_checkout_ref,
 )
+from .log_fetcher import fetch_log_section
 from .run_commands import (
     CommandResult,
     run_command_list,
@@ -57,6 +59,7 @@ from .devstack_checks import (
     checkout_main_branch,
     git_stash_save,
     git_stash_pop,
+    check_api_connectivity,
     cleanup_test_environment,
     format_health_report,
 )
@@ -112,6 +115,10 @@ __all__ = [
     "expand_remote_branches",
     "format_commit_info",
     "format_changed_files",
+    "git_fetch_and_checkout_patchset",
+    "git_fetch_and_checkout_ref",
+    # log_fetcher
+    "fetch_log_section",
     # run_commands
     "CommandResult",
     "run_command_list",
@@ -148,7 +155,7 @@ __all__ = [
     "checkout_main_branch",
     "git_stash_save",
     "git_stash_pop",
-    "git_fetch_and_checkout_patchset",
+    "check_api_connectivity",
     "cleanup_test_environment",
     "format_health_report",
     "DevStackLock",

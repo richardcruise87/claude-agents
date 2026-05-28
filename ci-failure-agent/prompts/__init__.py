@@ -21,6 +21,8 @@ def get_ci_failure_prompt(
     output_file,
     provider: str = "anthropic",
     save_path: str = None,
+    job_log_excerpts: str = "",
+    report_template: str = "",
 ):
     """
     Return a formatted CI failure analysis prompt.
@@ -84,6 +86,9 @@ def get_ci_failure_prompt(
     gerrit_url = f"{gerrit_base_url}/c/{project}/+/{change_number}"
     analysis_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    _job_log_excerpts = job_log_excerpts or "_No logs were pre-fetched._"
+    _report_template = report_template or f"[Write the CI failure analysis report here for change #{change_number}]"
+
     formatted = template
     formatted = formatted.replace("{project}", project)
     formatted = formatted.replace("{change_number}", str(change_number))
@@ -98,5 +103,7 @@ def get_ci_failure_prompt(
     formatted = formatted.replace("{total_failures}", str(len(failing_jobs)))
     formatted = formatted.replace("{output_file}", str(output_file))
     formatted = formatted.replace("{analysis_date}", analysis_date)
+    formatted = formatted.replace("{job_log_excerpts}", _job_log_excerpts)
+    formatted = formatted.replace("{report_template}", _report_template)
 
     return formatted
