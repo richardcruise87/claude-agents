@@ -41,6 +41,11 @@ from .run_commands import (
     run_command_list,
     format_command_results,
 )
+from .report_builder import (
+    ReportSection,
+    parse_section_markers,
+    build_report,
+)
 from .report_auditor import (
     AuditRule,
     audit_report,
@@ -123,6 +128,10 @@ __all__ = [
     "CommandResult",
     "run_command_list",
     "format_command_results",
+    # report_builder
+    "ReportSection",
+    "parse_section_markers",
+    "build_report",
     # report_auditor
     "AuditRule",
     "audit_report",

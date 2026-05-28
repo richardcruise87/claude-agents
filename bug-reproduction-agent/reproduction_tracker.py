@@ -12,6 +12,7 @@ from agents_lib import (
     should_process_item,
     record_processed_item,
     create_output_filename,
+    slugify,
 )
 
 
@@ -55,6 +56,25 @@ def should_reproduce_bug(
     )
 
 
+def create_bug_reproduction_dir(base_output_dir: Path, bug_number: str, bug_title: str) -> Path:
+    """Return the per-bug subdirectory path (creates it if needed).
+
+    Structure: ``<base_output_dir>/bug_<number>_<title-slug>/``
+
+    Args:
+        base_output_dir: Root reproductions directory from config.
+        bug_number:      Launchpad bug number.
+        bug_title:       Bug title (will be slugified).
+
+    Returns:
+        Path to the per-bug subdirectory.
+    """
+    slug = slugify(bug_title, max_length=40)
+    bug_dir = base_output_dir / f"bug_{bug_number}_{slug}"
+    bug_dir.mkdir(parents=True, exist_ok=True)
+    return bug_dir
+
+
 def record_reproduction(
     tracking_file: Path,
     bug_number: str,
@@ -64,6 +84,7 @@ def record_reproduction(
     attempts: int,
     script_path: Optional[str] = None,
     retry_on_recovery: bool = False,
+    bug_directory: Optional[str] = None,
 ):
     """
     Record that a bug reproduction was attempted.
@@ -81,10 +102,12 @@ def record_reproduction(
     """
     extra_data = {
         "reproduction_status": status,
-        "attempts": attempts
+        "attempts": attempts,
     }
     if script_path:
         extra_data["final_script_path"] = script_path
+    if bug_directory:
+        extra_data["bug_directory"] = bug_directory
 
     record_processed_item(
         tracking_file,

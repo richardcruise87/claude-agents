@@ -39,7 +39,7 @@ from reproduction_tracker import (
     load_reproduction_history,
     should_reproduce_bug,
     record_reproduction,
-    create_reproduction_filename,
+    create_bug_reproduction_dir,
 )
 
 # Load configuration
@@ -82,6 +82,19 @@ def load_config():
     CONFIG = expand_context_config(CONFIG)
 
     return CONFIG
+
+
+def _save_context_md(bug_dir: Path, reasonings: list) -> None:
+    """Write the AI's per-attempt reasoning to bug_dir/context.md."""
+    lines = [
+        f"## Attempt {idx} reasoning\n\n{r}\n"
+        for idx, r in enumerate(reasonings, start=1)
+        if r
+    ]
+    if lines:
+        context_file = bug_dir / "context.md"
+        context_file.write_text("\n".join(lines), encoding="utf-8")
+        print(f"   💾 Saved agent context: {context_file}")
 
 
 async def _maybe_save_reproduction_learning(final_status, triage, attempts, reasonings):
@@ -143,14 +156,9 @@ async def process_triage(triage_file: Path) -> bool:
                 print(f"      - {error}")
 
             # Generate report with environment error
-            output_dir = Path(CONFIG["reproductions_output_dir"])
-            output_dir.mkdir(parents=True, exist_ok=True)
-            report_file = create_reproduction_filename(
-                output_dir,
-                triage.bug_number,
-                triage.bug_title,
-                1
-            )
+            base_output_dir = Path(CONFIG["reproductions_output_dir"])
+            bug_dir = create_bug_reproduction_dir(base_output_dir, triage.bug_number, triage.bug_title)
+            report_file = bug_dir / f"bug_{triage.bug_number}_report.md"
 
             report = generate_report(
                 triage,
@@ -158,11 +166,10 @@ async def process_triage(triage_file: Path) -> bool:
                 [],
                 "ENVIRONMENT_ERROR",
                 None,
-                None
+                None,
             )
 
-            with open(report_file, 'w', encoding='utf-8') as f:
-                f.write(report)
+            report_file.write_text(report, encoding="utf-8")
 
             print(f"\n📝 Report saved: {report_file}")
 
@@ -312,25 +319,21 @@ async def process_triage(triage_file: Path) -> bool:
             # Continue to next attempt
             print(f"   ❌ Attempt {attempt} failed, will {'retry' if attempt < max_attempts else 'stop'}")
 
-        # Generate reproduction report
+        # Create per-bug output directory and save artefacts.
         print("\n📝 Generating reproduction report...")
-        output_dir = Path(CONFIG["reproductions_output_dir"])
-        output_dir.mkdir(parents=True, exist_ok=True)
+        base_output_dir = Path(CONFIG["reproductions_output_dir"])
+        bug_dir = create_bug_reproduction_dir(base_output_dir, triage.bug_number, triage.bug_title)
+        report_file = bug_dir / f"bug_{triage.bug_number}_report.md"
 
-        report_file = create_reproduction_filename(
-            output_dir,
-            triage.bug_number,
-            triage.bug_title,
-            1
-        )
+        # Save the AI's reasoning across all attempts as context.md.
+        _save_context_md(bug_dir, reasonings)
 
-        # Save successful script if reproduced
+        # Save successful script if reproduced.
         script_path = None
         if final_status == "REPRODUCED" and successful_script:
-            script_path = output_dir / "scripts" / f"bug_{triage.bug_number}_reproduction.sh"
-            script_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(script_path, 'w', encoding='utf-8') as f:
-                f.write(successful_script)
+            script_path = bug_dir / "scripts" / "01_reproduce.sh"
+            script_path.parent.mkdir(exist_ok=True)
+            script_path.write_text(successful_script, encoding="utf-8")
             script_path.chmod(0o755)
             print(f"   💾 Saved reproduction script: {script_path}")
 
@@ -344,19 +347,17 @@ async def process_triage(triage_file: Path) -> bool:
             reasonings=reasonings,
         )
 
-        with open(report_file, 'w', encoding='utf-8') as f:
-            f.write(report)
-
+        report_file.write_text(report, encoding="utf-8")
         print(f"   💾 Saved report: {report_file}")
 
-        # Verify report file was created before marking as complete
+        # Verify report file was created before marking as complete.
         if not report_file.exists():
             print("\n❌ ERROR: Report file not found after write!")
             print(f"   Expected: {report_file}")
             print("   Will retry on next pass")
             return False
 
-        # Record in tracking (only after confirming file exists)
+        # Record in tracking (only after confirming file exists).
         triage_timestamp = get_triage_timestamp(triage_file)
         tracking_file = Path(CONFIG["reproduction_tracking_file"])
         record_reproduction(
@@ -366,7 +367,8 @@ async def process_triage(triage_file: Path) -> bool:
             1,
             final_status,
             len(attempts),
-            str(script_path) if script_path else None
+            str(script_path) if script_path else None,
+            bug_directory=str(bug_dir),
         )
         print("   ✓ Recorded in tracking file")
 

@@ -4,6 +4,46 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-28 (PR 3)
+
+### Added: ReportBuilder framework + applied to bug reproduction and bug triage agents
+
+**agents_lib — `report_builder.py`** (new):
+- `ReportSection(name, default, required)` — defines a section in a report
+- `parse_section_markers(text)` — extracts `<!-- SECTION:name -->…<!-- /SECTION -->`
+  blocks from AI text responses, returning a `{name: content}` dict
+- `build_report(template, sections, section_defs)` — fills `{{SECTION:name}}`
+  placeholders in a template; applies per-section defaults (default: "Agent
+  provided no data") for any sections the AI did not provide
+- `section_prompt_instructions(section_defs)` — generates the "how to return your
+  analysis" instruction block for inclusion in AI prompts
+
+**Bug reproduction agent** (new directory structure + ReportBuilder):
+- Output restructured from flat files to per-bug subdirectories:
+  `bug_XXXXX_<slug>/bug_XXXXX_report.md`, `bug_XXXXX_<slug>/scripts/01_reproduce.sh`,
+  `bug_XXXXX_<slug>/context.md`
+- `reproduction_tracker.py`: new `create_bug_reproduction_dir()` helper; tracking
+  records now include `bug_directory` field; imports `slugify` from agents_lib
+- `report_generator.py`: refactored to build each section as a string and call
+  `build_report()` for final assembly; `report_template.md` created
+- `bug_reproduction_agent.py`: uses new directory helpers; saves AI reasoning to
+  `context.md` after each attempt; scripts saved as `01_reproduce.sh`
+
+**Bug triage agent** (section markers + fix proposal):
+- AI now returns analysis as `<!-- SECTION:name -->` markers in text response
+  instead of writing the report file with the Write tool
+- `report_template.md` created with `{UPPERCASE}` metadata + `{{SECTION:name}}`
+  placeholders for the ten analysis sections
+- Prompt updated: Steps 1–10 unchanged (research instructions); output format
+  instruction replaced with section marker syntax; Step 9 extended to write a
+  separate `bug_XXXXX_fix_proposal.patch` file (draft patch + sample commit
+  message with `Generated-by: {model}` trailer)
+- `bug_triage_agent.py`: imports `parse_section_markers`, `build_report`,
+  `ReportSection`; after AI call, parses sections, fills template, writes report;
+  checks and logs whether the fix proposal patch was created
+- `prompts/__init__.py`: adds `fix_proposal_file` and `model_name` parameters;
+  `save_path=None` since Python now writes the report
+
 ## 2026-05-28 (PR 2)
 
 ### Refactored: Move deterministic work from AI prompts into Python (PR 2)

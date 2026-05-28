@@ -117,11 +117,40 @@ Based on the bug description, suggest where to investigate:
 - Configuration options to review
 
 ## Step 9: Propose Fix Strategy
-Suggest potential approaches to fix the bug:
+
+Provide a concise fix strategy (your `fix_strategy` section) covering:
 - What needs to be changed (high-level)
 - Potential challenges or complications
 - Testing strategy to verify the fix
 - Impact on existing functionality
+
+**Additionally**, use the Write tool to save a draft fix proposal to:
+`{fix_proposal_file}`
+
+The patch file must follow this format exactly:
+
+```
+# DRAFT FIX PROPOSAL — Bug #{bug_number}
+# This is an illustrative patch only. It may not apply cleanly.
+# Review and adapt before use.
+#
+# --- Sample Commit Message ---
+# <one-line subject following OpenStack convention>
+#
+# <body describing the fix and the problem it solves>
+#
+# Closes-Bug: #{bug_number}
+# Generated-by: {model_name} (AI-assisted triage)
+# Change-Id: I<placeholder>
+# ---
+
+--- a/octavia/path/to/file.py
++++ b/octavia/path/to/file.py
+[unified diff here, OR a clear narrative description if a diff cannot be reliably produced]
+```
+
+If you cannot produce a valid unified diff, replace the diff section with a clear
+narrative description of what lines to add/remove and why.
 
 ## Step 10: Analyse Bug Introduction and Affected Branches
 
@@ -193,3 +222,63 @@ If the introducing commit cannot be determined with reasonable confidence, write
 "Could not determine introducing commit with confidence — see investigation notes"
 and briefly summarise what was tried.
 
+---
+
+## Output Format — IMPORTANT
+
+**Do NOT use the Write tool to create the main triage report.** Python will
+assemble and save it automatically from your section content.
+
+Return your analysis using **section markers** — one per step:
+
+```
+<!-- SECTION:executive_summary -->
+2-3 sentence summary of the bug and your key findings.
+<!-- /SECTION -->
+
+<!-- SECTION:bug_analysis -->
+Your Step 1 analysis here.
+<!-- /SECTION -->
+
+<!-- SECTION:validation -->
+Your Step 2 conclusion here (Valid Bug / Invalid, with reasoning).
+<!-- /SECTION -->
+
+<!-- SECTION:duplicate_check -->
+Your Step 3 findings here.
+<!-- /SECTION -->
+
+<!-- SECTION:fix_search -->
+Your Step 4 findings here.
+<!-- /SECTION -->
+
+<!-- SECTION:affected_components -->
+Your Step 5 findings here.
+<!-- /SECTION -->
+
+<!-- SECTION:severity_assessment -->
+Your Step 6 assessment here.
+<!-- /SECTION -->
+
+<!-- SECTION:reproduction_strategy -->
+Your Step 7 reproduction steps here.
+<!-- /SECTION -->
+
+<!-- SECTION:investigation_areas -->
+Your Step 8 suggestions here.
+<!-- /SECTION -->
+
+<!-- SECTION:fix_strategy -->
+Your Step 9 fix strategy (prose) here.
+<!-- /SECTION -->
+
+<!-- SECTION:bug_introduction -->
+Your Step 10 analysis here (tables for commits and affected branches).
+<!-- /SECTION -->
+```
+
+You **must** include all sections.  If a section cannot be completed (e.g. no
+introducing commit found), include the marker with a brief explanation rather
+than omitting it.
+
+**Use the Write tool only for the fix proposal patch file (`{fix_proposal_file}`).**
