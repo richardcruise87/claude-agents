@@ -6,6 +6,7 @@ prompts receive deterministic pre-captured output rather than instructing
 the AI to execute shell commands itself.
 """
 
+import os
 import subprocess
 import time
 from dataclasses import dataclass
@@ -15,13 +16,19 @@ from typing import List, Optional
 
 @dataclass
 class CommandResult:
-    """Result of a single command execution."""
+    """Result of a single command execution.
+
+    When ``output_truncated`` is True the ``stdout`` and ``stderr`` fields each
+    hold the *tail* of their respective stream, trimmed proportionally so that
+    their combined line count does not exceed ``max_output_lines``.  Both fields
+    remain independently accurate — stderr is never silently discarded.
+    """
 
     name: str           # human-readable label (e.g. "unit tests")
     command: List[str]  # the command as a list (e.g. ["tox", "-e", "py3"])
     returncode: int
-    stdout: str         # trimmed to max_output_lines
-    stderr: str         # trimmed to max_output_lines
+    stdout: str
+    stderr: str
     duration_s: float
     timed_out: bool
     output_truncated: bool = False
@@ -72,7 +79,6 @@ def run_command_list(
     Returns:
         List of CommandResult objects in execution order.
     """
-    import os
     full_env = os.environ.copy()
     if env:
         full_env.update(env)
@@ -115,15 +121,18 @@ def run_command_list(
 
         duration = time.monotonic() - t0
 
-        # Trim output to last max_output_lines lines (most relevant for failures)
+        # Trim output proportionally so both stdout and stderr retain their tail.
         stdout_lines = raw_stdout.splitlines()
         stderr_lines = raw_stderr.splitlines()
-        combined_lines = stdout_lines + stderr_lines
-        truncated = len(combined_lines) > max_output_lines
+        total_lines = len(stdout_lines) + len(stderr_lines)
+        truncated = total_lines > max_output_lines
         if truncated:
-            kept = combined_lines[-max_output_lines:]
-            stdout_trimmed = "\n".join(kept)
-            stderr_trimmed = ""
+            # Allocate budget proportionally; give stderr at least its actual size
+            # (up to half the budget) so errors are never silently dropped.
+            stderr_budget = min(len(stderr_lines), max_output_lines // 2)
+            stdout_budget = max_output_lines - stderr_budget
+            stdout_trimmed = "\n".join(stdout_lines[-stdout_budget:]) if stdout_lines else ""
+            stderr_trimmed = "\n".join(stderr_lines[-stderr_budget:]) if stderr_lines else ""
         else:
             stdout_trimmed = raw_stdout
             stderr_trimmed = raw_stderr

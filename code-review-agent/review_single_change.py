@@ -17,7 +17,7 @@ import argparse
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 # Add current directory to path to import config
 sys.path.insert(0, str(Path(__file__).parent))
 from config import load_config
@@ -51,6 +51,8 @@ from agents_lib import (
     create_review_filename,
     determine_backport_vote,
     find_latest_report,
+    ChangeInfo,
+    ModelClient,
 )
 
 # Load configuration
@@ -189,8 +191,10 @@ def _build_bug_context(bug_refs: list, triage_dir: str) -> str:
             latest = reports[0]
             parts.append(f"**Local triage report**: `{latest.name}`")
             # Include the first 1500 chars as a summary
-            excerpt = latest.read_text(encoding="utf-8", errors="replace")[:1500]
-            parts.append(f"```\n{excerpt}\n...(truncated)\n```")
+            text = latest.read_text(encoding="utf-8", errors="replace")
+            excerpt = text[:1500]
+            suffix = "\n...(truncated)" if len(text) > 1500 else ""
+            parts.append(f"```\n{excerpt}{suffix}\n```")
         else:
             parts.append(
                 f"_No local triage report found. If needed, the AI can query "
@@ -271,7 +275,9 @@ def _checkout_patchset_with_retry(
     return False
 
 
-def _prefetch_review_data(repo_path: Path, config: dict, change, bp) -> _ReviewPrefetch:
+def _prefetch_review_data(
+    repo_path: Path, config: dict, change: ChangeInfo, bp: _BackportSections
+) -> _ReviewPrefetch:
     """Run all deterministic Python pre-flight data gathering before the AI runs."""
     original_branch = get_branch_name(repo_path) or "master"
 
@@ -311,7 +317,11 @@ def _prefetch_review_data(repo_path: Path, config: dict, change, bp) -> _ReviewP
 
 
 def _load_report_template(
-    change, current_patchset, previous_patchset, test_results_text, config
+    change: ChangeInfo,
+    current_patchset: Optional[int],
+    previous_patchset: Optional[int],
+    test_results_text: str,
+    config: dict,
 ) -> str:
     """Pre-fill the review report template with known metadata."""
     template_path = Path(__file__).parent / "report_template.md"
@@ -332,7 +342,9 @@ def _load_report_template(
     )
 
 
-async def _audit_and_fix_report(client, review_file: Path, max_retries: int = 2) -> None:
+async def _audit_and_fix_report(
+    client: ModelClient, review_file: Path, max_retries: int = 2
+) -> None:
     """Validate report format; ask the AI to fix issues if needed."""
     for attempt in range(max_retries + 1):
         passed, errors = audit_report_file(review_file, _CODE_REVIEW_AUDIT_RULES)

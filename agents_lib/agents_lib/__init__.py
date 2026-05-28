@@ -32,6 +32,7 @@ from .git_info import (
     expand_remote_branches,
     format_commit_info,
     format_changed_files,
+    git_fetch_and_checkout_patchset,
 )
 from .run_commands import (
     CommandResult,
@@ -56,7 +57,6 @@ from .devstack_checks import (
     checkout_main_branch,
     git_stash_save,
     git_stash_pop,
-    git_fetch_and_checkout_patchset,
     cleanup_test_environment,
     format_health_report,
 )
