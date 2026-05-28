@@ -234,6 +234,129 @@ _CODE_REVIEW_AUDIT_RULES = [
 ]
 
 
+class _ReviewPrefetch(NamedTuple):
+    """Pre-fetched deterministic data gathered before the AI runs."""
+    commit_info_text: str
+    changed_files_text: str
+    test_results_text: str
+    bug_context_text: str
+    expanded_backport_branches_text: str
+    original_branch: str
+
+
+def _checkout_patchset_with_retry(
+    repo_path: Path,
+    patchset_ref: str,
+    head_sha: str,
+    change_id: str,
+    repo_name: str,
+    max_retries: int = 3,
+) -> bool:
+    """Fetch and checkout a Gerrit patchset SHA with retry.  Returns True on success."""
+    fetch_url = f"{GERRIT_BASE_URL}/{repo_name}"
+    for attempt in range(1, max_retries + 1):
+        print(f"🔄 Fetching patchset (attempt {attempt}/{max_retries})...")
+        ok, msg = git_fetch_and_checkout_patchset(repo_path, fetch_url, patchset_ref, head_sha)
+        if ok:
+            print(f"   ✅ {msg}")
+            return True
+        print(f"   ❌ {msg}")
+        if attempt < max_retries:
+            delay = 5 * attempt
+            print(f"   ⏳ Retrying in {delay}s...")
+            time.sleep(delay)
+    print(f"\n❌ Pre-flight checkout failed after {max_retries} attempts.")
+    print(f"   Change: #{change_id}  Expected SHA: {head_sha}")
+    print("   Aborting — review not recorded to avoid reviewing the wrong change.")
+    return False
+
+
+def _prefetch_review_data(repo_path: Path, config: dict, change, bp) -> _ReviewPrefetch:
+    """Run all deterministic Python pre-flight data gathering before the AI runs."""
+    original_branch = get_branch_name(repo_path) or "master"
+
+    print("📊 Collecting git information...")
+    commit_info = get_commit_info(repo_path)
+    changed_files = get_changed_files(repo_path, max_diff_lines=config.get("max_diff_lines", 300))
+    commit_info_text = format_commit_info(commit_info)
+    changed_files_text = format_changed_files(changed_files, config.get("max_diff_lines", 300))
+    if commit_info.get("error"):
+        print(f"   ⚠️  git commit info: {commit_info['error']}")
+    else:
+        print(f"   ✅ Commit: {commit_info['short_sha']} — {commit_info['subject'][:60]}")
+    if changed_files.get("error"):
+        print(f"   ⚠️  git changed files: {changed_files['error']}")
+    else:
+        print(f"   ✅ {len(changed_files['names'])} file(s) changed")
+
+    test_commands = config.get("test_commands", [])
+    test_results_text = "_No test commands configured._"
+    if test_commands and change.forge_type == "gerrit":
+        print(f"\n🧪 Running {len(test_commands)} test command(s)...")
+        test_results_text = format_command_results(run_command_list(test_commands, cwd=repo_path))
+    else:
+        print("   ℹ️  Skipping tests (not configured or non-Gerrit change)")
+
+    bug_context_text = _build_bug_context(commit_info.get("bug_refs", []), bp.triage_dir)
+    expanded_branches = _build_expanded_branches(repo_path, config)
+
+    return _ReviewPrefetch(
+        commit_info_text=commit_info_text,
+        changed_files_text=changed_files_text,
+        test_results_text=test_results_text,
+        bug_context_text=bug_context_text,
+        expanded_backport_branches_text=expanded_branches,
+        original_branch=original_branch,
+    )
+
+
+def _load_report_template(
+    change, current_patchset, previous_patchset, test_results_text, config
+) -> str:
+    """Pre-fill the review report template with known metadata."""
+    template_path = Path(__file__).parent / "report_template.md"
+    if not template_path.exists():
+        return f"[Write the full review report here for change #{change.change_id}]"
+    previous_label = f"Patchset {previous_patchset}" if previous_patchset else "First Review"
+    return template_path.read_text(encoding="utf-8").format_map(
+        _SafeDict(
+            REPO_NAME=change.repo_name,
+            CHANGE_NUMBER=str(change.change_id),
+            PATCHSET=str(current_patchset or "unknown"),
+            GERRIT_URL=change.forge_url,
+            TIMESTAMP=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            MODEL_NAME=config.get("model", "claude-sonnet-4-6"),
+            PREVIOUS_REVIEW=previous_label,
+            TEST_RESULTS=test_results_text,
+        )
+    )
+
+
+async def _audit_and_fix_report(client, review_file: Path, max_retries: int = 2) -> None:
+    """Validate report format; ask the AI to fix issues if needed."""
+    for attempt in range(max_retries + 1):
+        passed, errors = audit_report_file(review_file, _CODE_REVIEW_AUDIT_RULES)
+        if passed:
+            print("   ✅ Report format validated")
+            return
+        print(f"\n   ⚠️  Report format issues (attempt {attempt + 1}/{max_retries + 1}):")
+        for err in errors:
+            print(f"      - {err}")
+        if attempt < max_retries:
+            fix_prompt = (
+                f"Read the review at {review_file} and fix these format problems, "
+                f"then rewrite the entire file.\n\n"
+                + build_audit_prompt(errors, str(review_file))
+            )
+            await client.query(
+                prompt=fix_prompt,
+                tools=["Read", "Write"],
+                on_progress=lambda text: print(f"  {text}"),
+            )
+        else:
+            print("   ⚠️  Report still invalid after retries — proceeding with best effort")
+
+
 async def review_specific_change(change_url_or_number, requested_patchset=None):
     """Review a specific change by URL, change/PR/MR number, or forge URL.
 
@@ -251,8 +374,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             change = forge.get_change_from_url(change_url_or_number)
         else:
             # Bare number — require repo in config for GitHub/GitLab
-            repos = CONFIG.get("octavia_repos", [])
-            repo_hint = repos[0] if repos else None
+            repo_hint = next(iter(CONFIG.get("octavia_repos", [])), None)
             change = forge.get_change(change_url_or_number.strip(), repo_hint)
     except Exception as e:
         print(f"❌ Could not fetch change details: {e}")
@@ -295,8 +417,7 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
         output_dir, change, history
     )
     previous_patchset = previous_record.patchset if previous_record else None
-    previous_sequence = previous_record.sequence if previous_record else 0
-    sequence = previous_sequence + 1
+    sequence = (previous_record.sequence if previous_record else 0) + 1
 
     # Create the review filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -346,67 +467,18 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
     # Pre-flight patchset checkout with SHA verification and retry.
     # This runs before the AI so that if git fetch fails or FETCH_HEAD is
     # stale the review is aborted rather than silently reviewing the wrong code.
-    _MAX_CHECKOUT_RETRIES = 3
     if change.forge_type == "gerrit" and change.head_sha and patchset_ref:
-        fetch_url = f"{GERRIT_BASE_URL}/{repo_name}"
-        _checkout_ok = False
-        for _attempt in range(1, _MAX_CHECKOUT_RETRIES + 1):
-            print(f"🔄 Fetching patchset (attempt {_attempt}/{_MAX_CHECKOUT_RETRIES})...")
-            _ok, _msg = git_fetch_and_checkout_patchset(
-                repo_path, fetch_url, patchset_ref, change.head_sha
-            )
-            if _ok:
-                print(f"   ✅ {_msg}")
-                _checkout_ok = True
-                break
-            print(f"   ❌ {_msg}")
-            if _attempt < _MAX_CHECKOUT_RETRIES:
-                _delay = 5 * _attempt
-                print(f"   ⏳ Retrying in {_delay}s...")
-                time.sleep(_delay)
-
-        if not _checkout_ok:
-            print(f"\n❌ Pre-flight checkout failed after {_MAX_CHECKOUT_RETRIES} attempts.")
-            print(f"   Change: #{change.change_id}  Expected SHA: {change.head_sha}")
-            print("   Aborting — review not recorded to avoid reviewing the wrong change.")
+        if not _checkout_patchset_with_retry(
+            repo_path, patchset_ref, change.head_sha, change.change_id, repo_name
+        ):
             if _stash_saved:
                 git_stash_pop(repo_path)
             return
-
         print()
 
-    # Save the branch to restore after the review (detached HEAD after patchset checkout)
-    _original_branch = get_branch_name(repo_path) or "master"
-
-    # --- Pre-fetch deterministic git data ---
-    print("📊 Collecting git information...")
-    _commit_info = get_commit_info(repo_path)
-    _changed_files = get_changed_files(repo_path, max_diff_lines=CONFIG.get("max_diff_lines", 300))
-    commit_info_text = format_commit_info(_commit_info)
-    changed_files_text = format_changed_files(_changed_files, CONFIG.get("max_diff_lines", 300))
-    if _commit_info.get("error"):
-        print(f"   ⚠️  git commit info: {_commit_info['error']}")
-    else:
-        print(f"   ✅ Commit: {_commit_info['short_sha']} — {_commit_info['subject'][:60]}")
-    if _changed_files.get("error"):
-        print(f"   ⚠️  git changed files: {_changed_files['error']}")
-    else:
-        print(f"   ✅ {len(_changed_files['names'])} file(s) changed")
-
-    # --- Run test commands in Python ---
-    _test_commands = CONFIG.get("test_commands", [])
-    test_results_text = "_No test commands configured._"
-    if _test_commands and change.forge_type == "gerrit":
-        print(f"\n🧪 Running {len(_test_commands)} test command(s)...")
-        _test_results = run_command_list(_test_commands, cwd=repo_path)
-        test_results_text = format_command_results(_test_results)
-    else:
-        print("   ℹ️  Skipping tests (not configured or non-Gerrit change)")
-
-    # --- Pre-fetch bug context and expand backport branches ---
+    # Pre-fetch all deterministic data (git info, test results, bug context, branches)
     _bp = _build_backport_sections(CONFIG)
-    bug_context_text = _build_bug_context(_commit_info.get("bug_refs", []), _bp.triage_dir)
-    expanded_backport_branches_text = _build_expanded_branches(repo_path, CONFIG)
+    prefetch = _prefetch_review_data(repo_path, CONFIG, change, _bp)
 
     # Build the prompt with previous review context if available
     previous_review_section = ""
@@ -459,30 +531,11 @@ This change has been reviewed before.
             "which may not be the latest version of this change.\n"
         )
 
-    # Load the report template (pre-fill known metadata; AI fills [instruction] markers)
-    _template_path = Path(__file__).parent / "report_template.md"
-    if _template_path.exists():
-        from datetime import datetime as _dt
-        _previous_review_label = (
-            f"Patchset {previous_patchset}" if previous_patchset else "First Review"
-        )
-        report_template = _template_path.read_text(encoding="utf-8").format_map(
-            _SafeDict(
-                REPO_NAME=repo_name,
-                CHANGE_NUMBER=str(change.change_id),
-                PATCHSET=str(current_patchset or "unknown"),
-                GERRIT_URL=change.forge_url,
-                TIMESTAMP=_dt.now().strftime("%Y-%m-%d %H:%M:%S"),
-                MODEL_NAME=CONFIG.get("model", "claude-sonnet-4-6"),
-                PREVIOUS_REVIEW=_previous_review_label,
-                TEST_RESULTS=test_results_text,
-            )
-        )
-    else:
-        report_template = f"[Write the full review report here for change #{change.change_id}]"
+    report_template = _load_report_template(
+        change, current_patchset, previous_patchset, prefetch.test_results_text, CONFIG
+    )
 
     # Build and format the prompt (forge-aware)
-    _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_code_review_prompt(
         repo_name=repo_name,
         change_number=change.change_id,
@@ -493,7 +546,7 @@ This change has been reviewed before.
         specific_patchset_note=specific_patchset_note,
         previous_review_section=previous_review_section,
         previous_patchset=previous_patchset,
-        provider=_provider,
+        provider=CONFIG.get("model_provider", "anthropic"),
         save_path=str(review_file),
         forge_type=change.forge_type,
         forge_url=change.forge_url,
@@ -502,11 +555,11 @@ This change has been reviewed before.
         backport_branches_section=_bp.branches_section,
         backport_rules_section=_bp.rules_section,
         triage_reports_dir=_bp.triage_dir,
-        commit_info_text=commit_info_text,
-        changed_files_text=changed_files_text,
-        test_results_text=test_results_text,
-        bug_context_text=bug_context_text,
-        expanded_backport_branches_text=expanded_backport_branches_text,
+        commit_info_text=prefetch.commit_info_text,
+        changed_files_text=prefetch.changed_files_text,
+        test_results_text=prefetch.test_results_text,
+        bug_context_text=prefetch.bug_context_text,
+        expanded_backport_branches_text=prefetch.expanded_backport_branches_text,
         report_template=report_template,
     )
 
@@ -564,36 +617,7 @@ This change has been reviewed before.
         print(f"\n✓ Full review saved to: {review_file}")
 
         # Audit loop: validate report format; ask AI to fix if needed
-        _MAX_AUDIT_RETRIES = 2
-        for _audit_attempt in range(_MAX_AUDIT_RETRIES + 1):
-            _audit_passed, _audit_errors = audit_report_file(review_file, _CODE_REVIEW_AUDIT_RULES)
-            if _audit_passed:
-                print("   ✅ Report format validated")
-                break
-            print(
-                f"\n   ⚠️  Report format issues "
-                f"(attempt {_audit_attempt + 1}/{_MAX_AUDIT_RETRIES + 1}):"
-            )
-            for _err in _audit_errors:
-                print(f"      - {_err}")
-            if _audit_attempt < _MAX_AUDIT_RETRIES:
-                _fix_prompt = (
-                    f"Read the review at {review_file} and fix these format problems, "
-                    f"then rewrite the entire file.\n\n"
-                    + build_audit_prompt(_audit_errors, str(review_file))
-                )
-                await _client.query(
-                    prompt=_fix_prompt,
-                    tools=["Read", "Write"],
-                    on_progress=lambda text: print(f"  {text}"),
-                )
-                # Re-read after fix attempt
-                if review_file.exists():
-                    content_to_save = review_file.read_text(encoding="utf-8")
-            else:
-                print(
-                    "   ⚠️  Report still invalid after retries — proceeding with best effort"
-                )
+        await _audit_and_fix_report(_client, review_file)
 
         # Record in forge-agnostic tracking
         record_review(tracking_file, change, sequence, review_file)
@@ -610,11 +634,11 @@ This change has been reviewed before.
         # Restore repo to the branch it was on before the review checkout.
         # Python handles this so the prompt no longer needs a "return to branch" step.
         if change.forge_type == "gerrit" and change.head_sha:
-            _restore_ok, _restore_msg = checkout_ref(repo_path, _original_branch)
-            if _restore_ok:
-                print(f"   🔀 Restored branch: {_original_branch}")
+            _ok, _msg = checkout_ref(repo_path, prefetch.original_branch)
+            if _ok:
+                print(f"   🔀 Restored branch: {prefetch.original_branch}")
             else:
-                print(f"   ⚠️  Could not restore branch '{_original_branch}': {_restore_msg}")
+                print(f"   ⚠️  Could not restore branch '{prefetch.original_branch}': {_msg}")
         if _stash_saved:
             success, message = git_stash_pop(repo_path)
             if success:
