@@ -52,16 +52,74 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import load_config
 from prompts import get_ci_failure_prompt
+from log_scanner import scan_log_for_errors, format_scan_results
 from agents_lib import (
     format_usage_info,
     create_forge_client,
     load_context_section,
     extract_ci_forge_comment,
     find_latest_report,
+    fetch_log_section,
+    AuditRule,
+    audit_report_file,
+    build_audit_prompt,
 )
 from agents_lib.utils import slugify
 
 CONFIG = load_config()
+
+
+class _SafeDict(dict):
+    """dict subclass for format_map() that leaves unknown {KEYS} unchanged."""
+    def __missing__(self, key: str) -> str:
+        return f"{{{key}}}"
+
+
+# Audit rules for CI failure analysis reports
+_CI_AUDIT_RULES = [
+    AuditRule.must_start_with("# CI Failure Analysis:"),
+    AuditRule.must_contain("## Failing Jobs Overview"),
+    AuditRule.must_contain("## Detailed Analysis"),
+    AuditRule.must_contain("## Overall Recommendation"),
+    AuditRule.must_contain("**Category:**"),
+    AuditRule.must_contain("END OF REPORT"),
+]
+
+
+def _prefetch_job_logs(jobs: list, scan_patterns: list) -> str:
+    """Pre-fetch job-output.txt for each failing job and run the error scanner.
+
+    Returns a formatted markdown block ready to embed in the AI prompt.
+    """
+    sections = []
+    for job in jobs:
+        job_name = job.get("job_name", "unknown")
+        log_url = job.get("log_url", "")
+        sections.append(f"### Job: {job_name}")
+
+        if not log_url:
+            sections.append("_Log URL not available._\n")
+            continue
+
+        fetch_url = log_url.rstrip("/") + "/job-output.txt"
+        ok, content = fetch_log_section(fetch_url)
+
+        if ok:
+            scan = scan_log_for_errors(content, scan_patterns)
+            scan_block = format_scan_results(scan, job_name)
+            if scan_block:
+                sections.append(scan_block)
+                sections.append("")
+            sections.append("**Log excerpt (last lines of job-output.txt):**")
+            sections.append(f"```\n{content}\n```")
+        else:
+            sections.append(
+                f"_Could not pre-fetch log: {content}_\n"
+                "_The AI agent may attempt to fetch secondary log files if needed._"
+            )
+        sections.append("")
+
+    return "\n".join(sections)
 
 
 def _post_ci_feedback(failure_data: dict, report_content: str) -> bool:
@@ -162,6 +220,35 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
     print(f"  Report:       {report_file.name}")
     print(f"{'='*80}\n")
 
+    # Pre-fetch logs and run error scanner before calling the AI.
+    scan_patterns = CONFIG.get("log_scan_patterns", [])
+    print(f"📡 Pre-fetching logs for {len(jobs)} job(s)...")
+    job_log_excerpts = _prefetch_job_logs(jobs, scan_patterns)
+    print("   ✅ Log pre-fetch complete\n")
+
+    # Load and pre-fill the report template.
+    _template_path = Path(__file__).parent / "report_template.md"
+    _zuul_search = (
+        f"{CONFIG['zuul_base_url']}/t/{CONFIG['zuul_tenant']}/builds?change={change_number}"
+    )
+    _analysis_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+    _gerrit_url = f"{CONFIG['gerrit_base_url']}/c/{project}/+/{change_number}"
+    if _template_path.exists():
+        report_template = _template_path.read_text(encoding="utf-8").format_map(
+            _SafeDict(
+                PROJECT=project,
+                CHANGE_NUMBER=str(change_number),
+                PATCHSET=str(patchset),
+                PIPELINE=pipeline,
+                ANALYSIS_DATE=_analysis_date,
+                GERRIT_URL=_gerrit_url,
+                TOTAL_FAILURES=str(len(jobs)),
+                ZUUL_BUILD_SEARCH_URL=_zuul_search,
+            )
+        )
+    else:
+        report_template = f"[Write the CI failure analysis report here for change #{change_number}]"
+
     _provider = CONFIG.get("model_provider", "anthropic")
     prompt = get_ci_failure_prompt(
         project=project,
@@ -175,6 +262,8 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         output_file=str(report_file),
         provider=_provider,
         save_path=str(report_file),
+        job_log_excerpts=job_log_excerpts,
+        report_template=report_template,
     )
 
     _ctx = load_context_section(CONFIG, "ci_failure")
@@ -196,7 +285,7 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         return None
 
     print("Starting AI-powered CI failure analysis...\n")
-    print("  (The AI agent will fetch logs from Zuul and analyze each failing job)\n")
+    print("  (Logs are pre-fetched; the AI focuses on root cause analysis)\n")
 
     result = None
     usage_info = None
@@ -205,6 +294,8 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         _client = _create_model_client(CONFIG)
         _res = await _client.query(
             prompt=prompt,
+            # WebFetch kept as fallback for secondary log files the AI may need;
+            # primary job-output.txt is already embedded in the prompt.
             tools=["Bash", "WebFetch", "Write"],
             on_progress=lambda text: print(f"  {text}"),
         )
@@ -219,30 +310,49 @@ async def analyze_failure(failure_data, output_dir=None, print_prompt=False):
         print(f"\n{'='*80}")
         print("  Analysis Complete!")
         print(f"{'='*80}")
-        if result:
-            preview = result[:400].replace("\n", " ")
-            print(f"\n  Summary: {preview}...")
 
-        # Append token usage to the report
-        if report_file.exists():
-            if usage_info:
-                existing = report_file.read_text()
-                if "## Token Usage & Cost" not in existing:
-                    report_file.write_text(existing + "\n\n---\n\n" + usage_info)
-            print(f"\n  Report saved: {report_file}")
-            _post_ci_feedback(failure_data, report_file.read_text())
-            return report_file
-        if result:  # file not found — save result text directly
-            print("\n  Warning: Report file not found — saving AI result directly...")
+        # Resolve canonical report content.
+        if report_file.exists() and report_file.stat().st_size > 200:
+            content = report_file.read_text(encoding="utf-8")
+        elif result:
+            print("\n  ⚠️  Report file not found — saving AI result directly...")
             content = result
-            if usage_info:
-                content += "\n\n---\n\n" + usage_info
-            report_file.write_text(content)
-            print(f"  Saved to: {report_file}")
-            _post_ci_feedback(failure_data, content)
-            return report_file
-        print(f"\n  Warning: No report was generated for change #{change_number}")
-        return None
+        else:
+            print(f"\n  Warning: No report was generated for change #{change_number}")
+            return None
+
+        # Append token usage once.
+        if usage_info and "## Token Usage & Cost" not in content:
+            content += "\n\n---\n\n" + usage_info
+        report_file.write_text(content, encoding="utf-8")
+        print(f"\n  Report saved: {report_file}")
+
+        # Audit loop: validate report format; ask AI to fix if needed.
+        _MAX_AUDIT_RETRIES = 2
+        for _attempt in range(_MAX_AUDIT_RETRIES + 1):
+            _passed, _errors = audit_report_file(report_file, _CI_AUDIT_RULES)
+            if _passed:
+                print("   ✅ Report format validated")
+                break
+            print(f"\n   ⚠️  Report format issues (attempt {_attempt + 1}/{_MAX_AUDIT_RETRIES + 1}):")
+            for _err in _errors:
+                print(f"      - {_err}")
+            if _attempt < _MAX_AUDIT_RETRIES:
+                _fix_prompt = (
+                    f"Read the report at {report_file}, fix every issue listed "
+                    f"below, and rewrite the entire file.\n\n"
+                    + build_audit_prompt(_errors, str(report_file))
+                )
+                await _client.query(
+                    prompt=_fix_prompt,
+                    tools=["Read", "Write"],
+                    on_progress=lambda text: print(f"  {text}"),
+                )
+            else:
+                print("   ⚠️  Report still invalid after retries — proceeding with best effort")
+
+        _post_ci_feedback(failure_data, report_file.read_text(encoding="utf-8"))
+        return report_file
 
     except Exception as e:
         print(f"\n  Error during analysis: {e}")

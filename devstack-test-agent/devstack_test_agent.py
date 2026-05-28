@@ -24,6 +24,12 @@ from agents_lib import (
     checkout_main_branch,
     git_stash_save,
     git_stash_pop,
+    git_fetch_and_checkout_ref,
+    checkout_ref,
+    get_branch_name,
+    get_changed_files,
+    format_changed_files,
+    check_api_connectivity,
     devstack_lock,
     get_unique_resource_prefix,
     load_context_section,
@@ -59,6 +65,76 @@ class _SafeDict(dict):
     """
     def __missing__(self, key: str) -> str:
         return f"{{{key}}}"
+
+
+def _restart_and_check_services(services: list) -> str:
+    """Restart each service and verify it is active. Returns a formatted status block."""
+    restart_lines = []
+    for svc in services:
+        r = subprocess.run(  # nosec B603 B607
+            ["sudo", "systemctl", "restart", svc],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+        restart_lines.append(
+            f"  restart {svc}: {'✅ OK' if r.returncode == 0 else '❌ FAIL'}"
+        )
+        if r.returncode != 0:
+            restart_lines.append(f"    stderr: {r.stderr.strip()}")
+    active_lines = []
+    for svc in services:
+        a = subprocess.run(  # nosec B603 B607
+            ["systemctl", "is-active", svc],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        active_lines.append(f"  {svc}: {a.stdout.strip()}")
+    return (
+        "\n".join(restart_lines)
+        + "\n\nService status after restart:\n"
+        + "\n".join(active_lines)
+    )
+
+
+def _check_openrc_connectivity(openrc_file: str) -> str:
+    """Run API connectivity check and return a human-readable note."""
+    api_ok = check_api_connectivity(Path(openrc_file).expanduser())
+    if api_ok:
+        return "✅ OpenStack API reachable — credentials pre-loaded via openrc."
+    return "⚠️  OpenStack API check failed — verify openrc and services."
+
+
+def _prefetch_changed_files(repo_path: Path) -> str:
+    """Return a formatted changed-files text block for the prompt."""
+    changed = get_changed_files(repo_path)
+    if changed.get("error"):
+        print(f"   ⚠️  {changed['error']}")
+    else:
+        print(f"   ✅ {len(changed['names'])} file(s) changed")
+    return format_changed_files(changed)
+
+
+async def _run_devstack_audit(client, report_file: Path) -> None:
+    """Validate the DevStack test report format; ask the AI to fix if needed."""
+    for attempt in range(3):
+        passed, errors = audit_report_file(report_file, _DEVSTACK_AUDIT_RULES)
+        if passed:
+            print("   ✅ Report format validated")
+            return
+        print(f"\n   ⚠️  Report format issues (attempt {attempt + 1}/3):")
+        for err in errors:
+            print(f"      - {err}")
+        if attempt < 2:
+            fix_prompt = (
+                f"Read the report at {report_file}, fix every issue listed "
+                f"below, and rewrite the entire file.\n\n"
+                + build_audit_prompt(errors, str(report_file))
+            )
+            await client.query(
+                prompt=fix_prompt,
+                tools=["Read", "Write"],
+                on_progress=lambda text: print(f"  {text}"),
+            )
+        else:
+            print("   ⚠️  Report still invalid after retries — proceeding with best effort")
 
 
 # Load configuration
@@ -135,22 +211,38 @@ async def test_change_in_devstack(
             last_two = str(review_info.change_number)[-2:]
             patchset_ref = f"refs/changes/{last_two}/{review_info.change_number}/{review_info.patchset}"
 
-            # Pre-flight: fetch the patchset ref in Python to confirm it is
-            # accessible before spending API tokens on the AI agent.
-            print(f"📡 Pre-fetching patchset ref {patchset_ref}...")
-            _fetch = subprocess.run(  # nosec B603 B607
-                ["git", "fetch", review_info.gerrit_url, patchset_ref],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                check=False,
+            # Save branch for restoration in the finally block.
+            _original_branch = get_branch_name(repo_path) or "master"
+
+            # Pre-flight: fetch and checkout the patchset in Python with retry.
+            # Abort if all attempts fail — do not proceed to spend API tokens.
+            print(f"📡 Fetching patchset ref {patchset_ref}...")
+            _fetch_ok, _fetch_msg, _head_sha = git_fetch_and_checkout_ref(
+                repo_path, review_info.gerrit_url, patchset_ref
             )
-            if _fetch.returncode == 0:
-                print("   ✅ Patchset ref fetched successfully")
+            if _fetch_ok:
+                print(f"   ✅ {_fetch_msg}")
             else:
-                print(f"   ⚠️  git fetch returned {_fetch.returncode}: {_fetch.stderr.strip()}")
-                print("   Proceeding — AI agent will re-attempt the fetch")
+                print(f"   ❌ {_fetch_msg}")
+                if stashed:
+                    git_stash_pop(repo_path)
+                return (False, "")
+
+            # Restart Octavia services using the configured list.
+            print("\n🔄 Restarting services...")
+            service_restart_output = _restart_and_check_services(
+                config["devstack"].get("required_services", [])
+            )
+            print(service_restart_output)
+
+            # Check OpenStack API connectivity.
+            print("\n🔑 Checking OpenStack API connectivity...")
+            api_connectivity_note = _check_openrc_connectivity(config["openrc_file"])
+            print(f"   {api_connectivity_note}")
+
+            # Pre-fetch changed files for the AI to use in test planning.
+            print("\n📊 Collecting changed file information...")
+            changed_files_text = _prefetch_changed_files(repo_path)
 
             # Results file (temp location, will be incorporated into review)
             results_file = Path(
@@ -195,6 +287,10 @@ async def test_change_in_devstack(
                 results_file=str(results_file),
                 current_timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 report_template=_template_filled,
+                head_sha=_head_sha,
+                service_restart_output=service_restart_output,
+                api_connectivity_note=api_connectivity_note,
+                changed_files_text=changed_files_text,
             )
 
             # Append specific-tests section when running a user-requested subset
@@ -243,34 +339,7 @@ async def test_change_in_devstack(
                 print(f"\n✓ Test results saved to: {results_file}")
 
                 # Audit loop: validate report format; ask AI to fix if needed.
-                _MAX_AUDIT_RETRIES = 2
-                for _audit_attempt in range(_MAX_AUDIT_RETRIES + 1):
-                    _audit_passed, _audit_errors = audit_report_file(results_file, _DEVSTACK_AUDIT_RULES)
-                    if _audit_passed:
-                        print("   ✅ Report format validated")
-                        break
-                    print(
-                        f"\n   ⚠️  Report format issues "
-                        f"(attempt {_audit_attempt + 1}/{_MAX_AUDIT_RETRIES + 1}):"
-                    )
-                    for _err in _audit_errors:
-                        print(f"      - {_err}")
-                    if _audit_attempt < _MAX_AUDIT_RETRIES:
-                        _fix_prompt = (
-                            f"Read the report at {results_file}, fix every issue listed "
-                            f"below, and rewrite the entire file.\n\n"
-                            + build_audit_prompt(_audit_errors, str(results_file))
-                        )
-                        await _client.query(
-                            prompt=_fix_prompt,
-                            tools=["Read", "Write"],
-                            on_progress=lambda text: print(f"  {text}"),
-                        )
-                    else:
-                        print(
-                            "   ⚠️  Report still invalid after retries "
-                            "— proceeding with best effort"
-                        )
+                await _run_devstack_audit(_client, results_file)
 
                 return (True, str(results_file))
 
@@ -281,6 +350,13 @@ async def test_change_in_devstack(
                 return (False, "")
 
             finally:
+                # Restore original branch then pop stash so local changes come back cleanly.
+                if _fetch_ok:
+                    _restore_ok, _restore_msg = checkout_ref(repo_path, _original_branch)
+                    if _restore_ok:
+                        print(f"   🔀 Restored branch: {_original_branch}")
+                    else:
+                        print(f"   ⚠️  Could not restore branch '{_original_branch}': {_restore_msg}")
                 if stashed:
                     pop_ok, pop_msg = git_stash_pop(repo_path)
                     if pop_ok:

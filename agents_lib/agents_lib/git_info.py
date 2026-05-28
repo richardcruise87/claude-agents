@@ -9,6 +9,7 @@ part of the result so the caller can decide how to handle them.
 
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -246,3 +247,57 @@ def git_fetch_and_checkout_patchset(
         return (False, f"git operation timed out: {exc}")
     except FileNotFoundError:
         return (False, "git not found in PATH")
+
+
+def git_fetch_and_checkout_ref(
+    repo_path: Path,
+    remote_url: str,
+    fetch_ref: str,
+    max_retries: int = 3,
+) -> Tuple[bool, str, str]:
+    """Fetch a git ref and checkout FETCH_HEAD, with retry.
+
+    Lighter variant of git_fetch_and_checkout_patchset() for cases where
+    the expected commit SHA is not known in advance (e.g. the DevStack
+    test agent reads review metadata from a file, not the Gerrit API).
+
+    Retries the full fetch+checkout sequence up to max_retries times with
+    linear backoff (5 s, 10 s, …) on transient failures.
+
+    Args:
+        repo_path:   Local path to the git repository.
+        remote_url:  Remote URL to fetch from.
+        fetch_ref:   Ref to fetch (e.g. "refs/changes/12/990312/1").
+        max_retries: Maximum number of attempts before giving up.
+
+    Returns:
+        (True, message, sha)  on success — sha is the full 40-char HEAD SHA.
+        (False, message, "")  on failure — never raises.
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            rc, _, err = _git(["fetch", remote_url, fetch_ref], repo_path, timeout=120)
+            if rc != 0:
+                msg = f"git fetch failed (exit {rc}): {err.strip()}"
+                if attempt < max_retries:
+                    time.sleep(5 * attempt)
+                    continue
+                return (False, msg, "")
+
+            rc, _, err = _git(["checkout", "FETCH_HEAD"], repo_path, timeout=30)
+            if rc != 0:
+                return (False, f"git checkout FETCH_HEAD failed: {err.strip()}", "")
+
+            rc, sha_out, _ = _git(["rev-parse", "HEAD"], repo_path, timeout=10)
+            if rc != 0:
+                return (False, "git rev-parse HEAD failed after checkout", "")
+
+            sha = sha_out.strip()
+            return (True, f"Checked out {sha[:12]}", sha)
+
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            if attempt < max_retries:
+                time.sleep(5 * attempt)
+                continue
+            return (False, str(exc), "")
+    return (False, "git fetch and checkout failed after all retries", "")

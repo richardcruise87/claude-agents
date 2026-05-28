@@ -4,6 +4,59 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-28 (PR 2)
+
+### Refactored: Move deterministic work from AI prompts into Python (PR 2)
+
+**agents_lib — new and updated utilities:**
+
+- `git_info.py`: Added `git_fetch_and_checkout_ref()` — lighter variant of
+  `git_fetch_and_checkout_patchset()` for cases where the expected SHA is not
+  known in advance (DevStack test agent). Fetches a ref, checks out FETCH_HEAD
+  with retry, returns the checked-out SHA for verification.
+- `devstack_checks.py` → `__init__.py`: `check_api_connectivity()` now exported.
+- `log_fetcher.py`: New module. `fetch_log_section(url, ...)` downloads a log
+  file with retry, automatic gzip decompression, size limiting, and tail
+  truncation. Falls back from plain to `.gz` URL automatically.
+
+**DevStack test agent:**
+
+- Python pre-flight now calls `git_fetch_and_checkout_ref()` with retry; aborts
+  if all attempts fail — AI no longer does the fetch or saves/restores the branch.
+- Service restart moved to Python: reads `config["devstack"]["required_services"]`,
+  restarts each with `sudo systemctl restart`, verifies with `is-active`; passes
+  `{service_restart_output}` to the prompt.
+- OpenStack API check moved to Python using `check_api_connectivity()`;
+  passes `{api_connectivity_note}` to the prompt.
+- Changed-files analysis moved to Python using `get_changed_files()`;
+  passes `{changed_files_text}` to the prompt.
+- `finally` block restores the original branch via `checkout_ref()`.
+- Prompt updated: Steps 1–5 (save branch, fetch/checkout, restart services,
+  source credentials, git analysis) replaced with pre-computed data sections.
+- Extracted helpers: `_restart_and_check_services()`, `_check_openrc_connectivity()`,
+  `_prefetch_changed_files()`, `_run_devstack_audit()` — keeps `run_devstack_test()`
+  under pylint's 40-local-variable limit.
+
+**CI failure agent:**
+
+- `ci-failure-agent/log_scanner.py` (new): Config-driven error pattern scanner.
+  `scan_log_for_errors(log_text, patterns)` takes patterns from
+  `config["log_scan_patterns"]` (so they can be tuned per deployment).
+  `format_scan_results()` formats matches as a compact prompt block.
+- `ci-failure-agent/config.sample.json`: Added `log_scan_patterns` list with
+  OpenStack/Zuul CI defaults (test_failure, traceback, timeout, resource,
+  infra, import_error, network).
+- `ci-failure-agent/report_template.md` (new): Extracted the report format
+  from the inline prompt. Python pre-fills `{UPPERCASE}` placeholders; AI
+  fills analysis sections. Template ends with `END OF REPORT`.
+- `analyze_ci_failure.py`: Pre-fetches `job-output.txt` for each failing job
+  via `fetch_log_section()` before the AI runs; runs `scan_log_for_errors()`
+  on each; passes `{job_log_excerpts}` and `{report_template}` to the prompt.
+  Adds audit loop (up to 2 retries) using shared `audit_report_file()`.
+- `prompts/ci_failure_prompt.txt`: Removed all curl/WebFetch instructions
+  (replaced by `{job_log_excerpts}`). Removed inline template (replaced by
+  `{report_template}`). AI now focuses on interpretation, not log fetching.
+
 ## 2026-05-28
 
 ### Refactored: Move deterministic work from AI prompts into Python (PR 1)
