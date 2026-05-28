@@ -1,6 +1,5 @@
 """Unit tests for git_fetch_and_checkout_ref() in agents_lib.git_info."""
 import subprocess
-import pytest
 from agents_lib.git_info import git_fetch_and_checkout_ref
 
 MODULE = "agents_lib.git_info"

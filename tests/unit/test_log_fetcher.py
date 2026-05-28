@@ -1,9 +1,7 @@
 """Unit tests for fetch_log_section() in agents_lib.log_fetcher."""
 import gzip
-import io
 import urllib.error
 from unittest.mock import MagicMock
-import pytest
 from agents_lib.log_fetcher import fetch_log_section, _tail
 
 MODULE = "agents_lib.log_fetcher"
@@ -87,7 +85,7 @@ class TestFetchLogSection:
         mocker.patch(f"{MODULE}.urllib.request.urlopen",
                      return_value=_make_response(many_lines.encode()))
         _, content = fetch_log_section("http://example.com/log.txt", tail_lines=10)
-        kept = [l for l in content.splitlines() if l.startswith("line")]
+        kept = [line for line in content.splitlines() if line.startswith("line")]
         assert len(kept) == 10
         assert "line999" in content
 
