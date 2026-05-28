@@ -6,6 +6,44 @@ All notable changes to the claude-agents project are documented here.
 
 ## 2026-05-28
 
+### Refactored: Move deterministic work from AI prompts into Python (PR 1)
+
+**agents_lib — three new shared modules:**
+
+- `git_info.py`: `get_commit_info()`, `get_changed_files()`, `get_branch_name()`,
+  `checkout_ref()`, `expand_remote_branches()`, `format_commit_info()`,
+  `format_changed_files()` — deterministic git data extraction; all return
+  structured dicts rather than relying on the AI to run bash
+- `run_commands.py`: `CommandResult` dataclass + `run_command_list()` —
+  runs a configurable list of commands (e.g. tox suites) in Python and
+  returns captured output ready for prompt injection; used by code-review agent
+- `report_auditor.py`: `AuditRule`, `audit_report()`, `audit_report_file()`,
+  `build_audit_prompt()` — generalised report format validation, extracted from
+  devstack-test-agent's `report_validator.py`; all agents share this
+
+**Code review agent:**
+
+- Steps 1–6 and Step 11 of the Gerrit prompt removed from AI scope — replaced
+  with pre-fetched data from Python (commit info, changed files, test results,
+  bug context, expanded backport branches)
+- `test_commands` config key (list of dicts) replaces the old `testing` block;
+  Python runs each command before calling the AI and passes captured output
+- `report_template.md` added; Python pre-fills metadata fields (`{UPPERCASE}`);
+  AI fills analysis sections (`[instruction]` markers)
+- Audit loop added (up to 2 retries) using shared `audit_report_file()` to
+  validate `## Final Verdict`, `## Backport Recommendation`, and `END OF REPORT`
+- `finally` block now calls `checkout_ref()` to restore the original branch
+  (AI prompt no longer has a "return to branch" step)
+- Bug context pre-fetched: bug numbers extracted from commit body, local triage
+  reports found and excerpted; AI receives structured context block
+- Backport branches: `expand_remote_branches()` resolves `stable/*` patterns to
+  real branch names before prompt construction
+
+**DevStack test agent:**
+
+- `report_validator.py` local import replaced with shared `audit_report_file()`
+  from `agents_lib`; local audit rules ported to `AuditRule` declarative style
+
 ### Fixed: Code review agent posting reviews for the wrong Gerrit change
 
 The code-review agent was occasionally reviewing the local repo's current state

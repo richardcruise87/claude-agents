@@ -32,11 +32,23 @@ from agents_lib import (
     create_model_client,
     create_forge_client,
     extract_devstack_forge_comment,
+    AuditRule,
+    audit_report_file,
+    build_audit_prompt,
 )
 from config import load_config
 from feedback_parser import has_devstack_feedback, process_feedback
-from report_validator import validate_report
 from review_parser import parse_review_file, should_test_review
+
+# Audit rules for the DevStack test report format
+_DEVSTACK_AUDIT_RULES = [
+    AuditRule.must_start_with("# DevStack Integration Testing"),
+    AuditRule.must_contain("## Summary"),
+    AuditRule.must_contain("## Test Results Summary"),
+    AuditRule.must_contain("**Overall Status:**"),
+    AuditRule.must_contain("END OF REPORT"),
+    AuditRule.must_match(r'^### Test \d', "At least one '### Test N: Name' section required"),
+]
 
 
 class _SafeDict(dict):
@@ -233,8 +245,8 @@ async def test_change_in_devstack(
                 # Audit loop: validate report format; ask AI to fix if needed.
                 _MAX_AUDIT_RETRIES = 2
                 for _audit_attempt in range(_MAX_AUDIT_RETRIES + 1):
-                    _audit_errors = validate_report(results_file)
-                    if not _audit_errors:
+                    _audit_passed, _audit_errors = audit_report_file(results_file, _DEVSTACK_AUDIT_RULES)
+                    if _audit_passed:
                         print("   ✅ Report format validated")
                         break
                     print(
@@ -244,18 +256,10 @@ async def test_change_in_devstack(
                     for _err in _audit_errors:
                         print(f"      - {_err}")
                     if _audit_attempt < _MAX_AUDIT_RETRIES:
-                        _error_list = "\n".join(f"- {e}" for e in _audit_errors)
                         _fix_prompt = (
-                            f"The report at {results_file} has these format problems:\n"
-                            f"{_error_list}\n\n"
-                            f"Read the report, fix every issue, and rewrite the entire "
-                            f"file to {results_file}. Required sections:\n"
-                            f"- '# DevStack Integration Testing' as the first heading\n"
-                            f"- '## Summary' section\n"
-                            f"- '## Test Results Summary' section with "
-                            f"'**Overall Status:**'\n"
-                            f"- At least one '### Test N: Name' section\n"
-                            f"- 'END OF REPORT' as the final line"
+                            f"Read the report at {results_file}, fix every issue listed "
+                            f"below, and rewrite the entire file.\n\n"
+                            + build_audit_prompt(_audit_errors, str(results_file))
                         )
                         await _client.query(
                             prompt=_fix_prompt,

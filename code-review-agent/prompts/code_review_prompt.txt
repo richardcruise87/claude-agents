@@ -3,101 +3,76 @@ You are performing a comprehensive code review for an OpenStack Octavia change.
 **Change Information:**
 - Repository: {repo_name}
 - Change Number: {change_number}
-- Patchset: {current_patchset or 'unknown'}
+- Patchset: {patchset_display}
 - Expected commit SHA: {head_sha}
 - Gerrit URL: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}
 - Local repo: {repo_path}
 {specific_patchset_note}{previous_review_section}
-**Your Task:**
-Perform a complete code review following these steps:
+---
 
-## Step 1: Get Current Branch
-Save the current branch name so we can return to it later.
+## Step 1: Verify Checkout
 
-## Step 2: Fetch the Change
-Fetch the specific patchset from Gerrit. **If `git fetch` exits with an error, STOP immediately** — do NOT fall back to reviewing whatever is currently checked out, as it would be a completely different change.
+The Python pre-flight has already fetched and checked out patchset {patchset_display}.
+Confirm you are on the correct commit before proceeding:
 
 ```bash
-cd {repo_path}
-{"git fetch " + GERRIT_BASE_URL + "/" + repo_name + " " + patchset_ref if patchset_ref else "git fetch " + GERRIT_BASE_URL + "/" + repo_name + " refs/changes/*/" + change_number + "/*"}
-git checkout {head_sha}
+git -C {repo_path} log -1 --format="SHA: %H  Subject: %s"
 ```
 
-After checkout, confirm you are on the correct commit:
-```bash
-git log -1 --format="Checked out: %H  %s"
+The SHA **must** match `{head_sha}`. If it does not, output:
 ```
-The SHA **must** match `{head_sha}`. If it does not, output an error and stop — do NOT review the wrong code.
-
-## Step 3: Analyze the Changes
-- Run `git log -1 --pretty=full` to see the commit message
-- Run `git show --stat` to see files changed
-- Run `git diff HEAD~1` to see the actual changes
-- Read the modified files to understand the changes deeply
-- Identify:
-  * Purpose of the change
-  * Scope and impact
-  * Any breaking changes
-  * New features or bug fixes
-{"" if not previous_patchset else f'''
-## Step 3a: Compare with Previous Patchset (PS {previous_patchset})
-
-**IMPORTANT**: You have context from a previous review of Patchset {previous_patchset}.
-
-Compare the current patchset with your previous review:
-- Check if issues you identified in PS {previous_patchset} were addressed
-- Identify what changed between patchsets (new files, modifications, deletions)
-- Note if the change is improving or regressing
-- Be specific about what was fixed and what wasn't
-
-Reference the previous review context provided at the beginning of these instructions.
-'''}
-## Step 4: Run Unit Tests
-Execute unit tests and capture results:
-```bash
-cd {repo_path}
-tox -e py3
+ERROR: Wrong commit checked out. Expected {head_sha}. Stopping.
 ```
-If tox isn't available, try: `python -m pytest octavia/tests/unit` or similar.
-Capture all output, failures, and warnings.
+and do not continue.
 
-## Step 5: Run Functional Tests
-Run functional tests using tox:
-```bash
-cd {repo_path}
-tox -e functional
+---
+
+## Step 2: Change Information (pre-fetched by Python)
+
+The following data was collected by the Python pre-flight. Use it as your
+primary source for commit and diff analysis. Use the **Read tool** to examine
+specific files in more detail when needed.
+
+### Commit
+
+```
+{commit_info_text}
 ```
 
-**IMPORTANT:** The functional tests will run without a DevStack setup. Run them and capture the results.
-- If the tox environment doesn't exist, check `tox.ini` for the correct environment name
-- Common environment names: `functional`, `func`, `api`
-- If tox fails to find the environment, document that functional tests are not available for this repository
-- Capture all output, failures, and warnings
+### Files Changed
 
-## Step 6: Code Quality Checks
-Run linting/style checks:
-```bash
-tox -e pep8
 ```
-or
-```bash
-flake8
+{changed_files_text}
 ```
 
-## Step 7: Comprehensive Code Analysis
-Analyze for:
+{patchset_comparison_section}
+
+---
+
+## Step 3: Test Results (pre-run by Python)
+
+The following test suites were run against this patchset before the review started.
+Interpret the results and include them in the report — do **not** re-run these commands.
+
+{test_results_text}
+
+---
+
+## Step 4: Comprehensive Code Analysis
+
+Read the modified files carefully using the **Read** tool. Analyse for:
 
 ### Code Quality
-- **Style**: PEP 8 compliance, naming conventions, code organization
+- **Style**: PEP 8 compliance, naming conventions, code organisation
 - **Readability**: Clear logic, appropriate comments, good variable names
 - **Complexity**: Are functions too complex? Need refactoring?
 
 ### Correctness & Safety
 - **Logic**: Are there logical errors or edge cases not handled?
-- **Error Handling**: Proper exceptions, try/catch blocks, validation
-- **Security**: Check for vulnerabilities (SQL injection, XSS, insecure defaults)
+- **Error Handling**: Proper exceptions, validation, edge cases
+- **Security**: Vulnerabilities (injection, insecure defaults, credential exposure)
 - **Concurrency**: Thread safety if applicable
-- **Resource Management**: Proper cleanup, no memory leaks
+- **Resource Management**: Proper cleanup, no leaks
 
 ### Testing
 - **Test Coverage**: Are new/modified code paths tested?
@@ -105,10 +80,10 @@ Analyze for:
 - **Missing Tests**: What test scenarios are missing?
 
 ### Documentation
-- **Docstrings**: Are they present and accurate?
+- **Docstrings**: Present and accurate?
 - **Comments**: Explain complex logic?
 - **Commit Message**: Clear, follows OpenStack format?
-- **Release Notes**: Are they needed and included?
+- **Release Notes**: Needed and included?
 
 ### OpenStack Specific
 - **API Compatibility**: Breaking changes to APIs?
@@ -116,322 +91,64 @@ Analyze for:
 - **Configuration**: New config options documented?
 - **Deprecations**: Properly marked with warnings?
 
-## Step 8: Prepare Testing Strategy
-Document:
-1. **Tests Executed**:
-   - Unit tests results
-   - Functional tests results
-   - Linting results
+---
 
-2. **Recommended Additional Testing**:
-   - Integration tests with other services
-   - Upgrade/downgrade scenarios
-   - Performance testing if relevant
-   - Multi-node scenarios
+## Step 5: Write the Review Document
 
-3. **Manual Testing Steps**:
-   - Step-by-step test procedures
-   - Expected outcomes
-   - Commands to verify
+Write the complete review to **exactly** this path using the Write tool:
+`{save_path}`
 
-## Step 9: Generate Review Document
+The report MUST:
+- Start with `# Code Review: {repo_name} - Change #{change_number}` as the first line
+- Contain a `## Final Verdict` section with **exactly one** of:
+  - `✅ **Approve**`
+  - `🔄 **Request Changes**`
+  - `💬 **Needs Discussion**`
+- Contain a `## Backport Recommendation` section (see Step 6)
+- End with `END OF REPORT` on its own line
 
-**Document Structure:**
+Use the following structure. Replace every `[placeholder]` with real content.
+The `{UPPERCASE}` values are already filled in — copy them verbatim.
 
-```markdown
-# Code Review: {repo_name} - Change #{change_number}
+---
+{report_template}
+---
 
-**Gerrit URL**: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}
-**Patchset**: {current_patchset or 'unknown'}
-**Reviewed**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-**Reviewer**: Claude Code Review Agent (Vertex AI)
-{"**Previous Review**: Patchset " + str(previous_patchset) if previous_patchset else "**First Review**"}
+A Python audit will check the format after you write the file. Avoid a retry by
+getting the structure right the first time.
 
 ---
 
-## Change Summary
+## Step 6: Backport Recommendation
 
-[Brief description of what this change does]
+This step is mandatory. Always write a `## Backport Recommendation` section.
 
-**Files Modified**: [count]
-**Lines Added**: [+count]
-**Lines Removed**: [-count]
+### Bug context (pre-fetched by Python)
 
-### Commit Message
-```
-[Full commit message]
-```
+{bug_context_text}
 
-### Purpose
-[What problem does this solve? What feature does it add?]
+### Configured backport target branches (pre-fetched by Python)
 
-### Scope
-[What parts of the system are affected?]
+The following real branch names were resolved from the configured patterns:
 
----
-{"" if not previous_patchset else f'''
-## Changes Since Previous Review (PS {previous_patchset})
+{expanded_backport_branches_text}
 
-### Issues Addressed
-[List issues from previous review that were fixed in this patchset]
-- ✅ Issue 1: Description of what was fixed
-- ✅ Issue 2: Description of what was fixed
-- ⚠️ Issue 3: Partially addressed or still present
+### Your task
 
-### New Changes in This Patchset
-[What was added/modified/removed in this patchset compared to PS {previous_patchset}]
-- New file: path/to/file.py
-- Modified: path/to/another.py (what changed)
-- Removed: old/file.py
-
-### New Issues Introduced
-[Any new problems that appeared in this patchset]
-- Issue 1: Description
-- Issue 2: Description
-
-### Overall Progress
-[Assessment of whether the change is improving or regressing]
-
----
-'''}
-## Test Results
-
-### Unit Tests
-```
-[Full test output or summary]
-```
-**Status**: ✅ PASS / ❌ FAIL
-**Details**: [Any failures, warnings, or notable output]
-
-### Functional Tests
-```
-[Full test output or summary]
-```
-**Status**: ✅ PASS / ❌ FAIL / ⚠️ NOT AVAILABLE
-**Details**: [Test results, failures, or note if repository doesn't have functional tests]
-
-### Code Quality Checks (PEP8/Flake8)
-```
-[Linting output]
-```
-**Status**: ✅ PASS / ⚠️ WARNINGS / ❌ FAIL
-**Issues**: [List any style violations]
-
----
-
-## Code Analysis
-
-### Overall Assessment
-[High-level evaluation of code quality]
-
-### Strengths
-- [What's done well]
-- [Good practices observed]
-- [Positive aspects]
-
-### Issues Found
-
-#### Critical Issues 🔴
-[Issues that MUST be fixed before merge]
-
-1. **File**: `path/to/file.py:123`
-   - **Issue**: [Description]
-   - **Impact**: [Why this is critical]
-   - **Suggestion**: [How to fix]
-
-#### Major Issues 🟡
-[Significant issues that should be addressed]
-
-#### Minor Issues / Suggestions 🔵
-[Nice-to-haves and minor improvements]
-
-#### Nits 🟢
-[Very minor style/formatting suggestions]
-
----
-
-## Testing Strategy
-
-### Tests Executed
-1. ✅ Unit tests: `tox -e py3`
-2. ✅ Functional tests: `tox -e functional`
-3. ✅ Code style: `tox -e pep8`
-
-**Note**: DevStack integration testing is performed separately by the DevStack Test Agent and will be added to this review asynchronously.
-
-### Recommended Additional Testing
-
-1. **Integration Testing**:
-   - [Specific scenarios to test]
-
-2. **Performance Testing**:
-   - [If relevant, what to measure]
-
-3. **Upgrade Testing**:
-   - [Test upgrade from previous version]
-
-4. **Manual Testing**:
-   ```bash
-   # Step-by-step commands
-   ```
-
-### Test Coverage Gaps
-- [Areas not covered by existing tests]
-- [Suggested new test cases]
-
----
-
-## Recommendations
-
-### Required Changes (Must Fix) ⛔
-1. [Critical issue that blocks merge]
-2. [Another blocking issue]
-
-### Suggested Improvements (Should Fix) ⚠️
-1. [Improvement that would be good to address]
-2. [Another suggestion]
-
-### Questions for Author ❓
-1. [Clarifying question about design choice]
-2. [Question about edge case handling]
-
-### Nice-to-Haves (Optional) 💡
-1. [Enhancement for future consideration]
-
----
-
-## Detailed Review Comments
-
-### File: `octavia/path/to/file1.py`
-
-**Line 45-52**:
-- **Severity**: Major
-- **Comment**: [Detailed explanation of issue]
-- **Suggestion**:
-  ```python
-  # Proposed code improvement
+For each branch above, determine whether the bug being fixed is present:
+- If a local triage report is listed in the bug context, prefer its **Bug Introduction Analysis**
+  "Affected Branches" table.
+- If no triage report is available, use:
+  ```bash
+  git -C {repo_path} merge-base --is-ancestor <introducing_commit> origin/<branch> \
+    && echo "AFFECTED" || echo "NOT_AFFECTED"
   ```
-
-**Line 78**:
-- **Severity**: Minor
-- **Comment**: [Minor suggestion]
-
-### File: `octavia/path/to/file2.py`
-
-[Additional file-specific comments]
-
----
-
-## Security Analysis
-
-[Any security considerations, vulnerabilities found, or security best practices]
-
----
-
-## Performance Considerations
-
-[Any performance impacts, optimizations suggested]
-
----
-
-## Documentation Review
-
-- **Docstrings**: ✅ Good / ⚠️ Needs Improvement / ❌ Missing
-- **Code Comments**: ✅ Good / ⚠️ Needs Improvement / ❌ Missing
-- **Commit Message**: ✅ Good / ⚠️ Needs Improvement / ❌ Missing
-- **Release Notes**: ✅ Included / ⚠️ Needed / ⏭️ Not Applicable
-
----
-
-## Final Verdict
-
-**Overall Assessment**: [1-2 sentence summary]
-
-**Recommendation**:
-- ✅ **Approve** (Code is ready to merge)
-- 🔄 **Request Changes** (Issues must be addressed)
-- 💬 **Needs Discussion** (Architectural or design questions)
-- 🔍 **Needs More Information** (Clarification needed)
-
-**Confidence Level**: High / Medium / Low
-[Explanation of confidence level]
-
----
-
-## Next Steps
-
-1. [Action item for author]
-2. [Action item for reviewers]
-3. [Any follow-up needed]
-
----
-
-*Generated by Claude Code Review Agent*
-*Powered by Vertex AI*
-```
-
-## Step 10: Backport Recommendation
-
-Determine whether this change should be backported to stable branches.
-This step is mandatory — always include a Backport Recommendation section in the report.
-
-### 10a. Find bug context from the commit message and Launchpad
-
-**Extract bug references from the commit message:**
-```bash
-git -C {repo_path} log -1 --pretty=%B | grep -E "(Closes|Partial|Related)-Bug: #[0-9]+"
-```
-
-For each bug number found:
-
-**First, check for a local triage report:**
-```bash
-ls {triage_reports_dir}/bug_<NUMBER>_*.md 2>/dev/null | sort -r | head -1
-```
-Read the triage report if found. Pay close attention to:
-- Severity and validation status
-- **Bug Introduction Analysis** section — which branches contain the introducing commit
-- Affected component
-
-**If no local triage report exists, query Launchpad directly:**
-```bash
-curl -s "https://api.launchpad.net/1.0/bugs/<NUMBER>" | \
-  python3 -c "import json,sys; d=json.load(sys.stdin); \
-  print('Title:', d.get('title')); \
-  print('Status:', d.get('status')); \
-  print('Importance:', d.get('importance')); \
-  print('Tags:', d.get('tags',[]))"
-```
-Use the Launchpad Importance (Critical/High/Medium/Low) as a proxy for severity.
-
-### 10b. Apply backporting rules
 
 {backport_rules_section}
 
-### 10c. Check configured backport target branches
+Write one of these in the report:
 
-{backport_branches_section}
-
-Branch patterns may contain wildcards (e.g. `stable/*`). For each pattern,
-first expand it to the real remote branches that currently exist:
-```bash
-git -C {repo_path} fetch --all --quiet 2>/dev/null || true
-git -C {repo_path} branch -r --list "origin/<pattern>" | sed 's|^.*origin/||'
-```
-
-For each real branch found, determine whether the bug being fixed is present
-there. Prefer the **Bug Introduction Analysis** "Affected Branches" table from
-the triage report. If no triage report is available, use:
-```bash
-git -C {repo_path} merge-base --is-ancestor <introducing_commit> origin/<branch> \
-  && echo "AFFECTED" || echo "NOT_AFFECTED"
-```
-
-### 10d. Write the Backport Recommendation section
-
-Include a "## Backport Recommendation" section in the review document.
-
-**When backport is recommended for one or more branches:**
+**Backport recommended:**
 ```markdown
 ## Backport Recommendation
 
@@ -442,19 +159,19 @@ Include a "## Backport Recommendation" section in the review document.
 | stable/2024.2 | ✅ Yes | High severity bug present (triage confirmed) |
 | stable/2024.1 | ❌ No | Not affected — introducing commit not in this branch |
 
-**Rationale:** <1-2 sentences referencing the severity level and applicable rules>
+**Rationale:** <1-2 sentences referencing severity and applicable rules>
 ```
 
-**When no backport is needed:**
+**No backport needed:**
 ```markdown
 ## Backport Recommendation
 
 **Recommendation:** ❌ No backport needed
 
-**Rationale:** <reason, e.g. new feature, stable branches unaffected, low severity>
+**Rationale:** <reason — new feature, stable branches unaffected, low severity, etc.>
 ```
 
-**When information is insufficient:**
+**Insufficient information:**
 ```markdown
 ## Backport Recommendation
 
@@ -465,22 +182,13 @@ Include a "## Backport Recommendation" section in the review document.
 
 ---
 
-## Step 11: Return to Original Branch
-
-Return to the original git branch:
-```bash
-cd {repo_path}
-git checkout <original_branch>
-```
-
-**IMPORTANT**:
+**General instructions:**
 - Be thorough and professional
-- Provide specific file:line references
-- Give actionable suggestions with code examples
+- Provide specific `file:line` references for all issues
+- Give actionable suggestions with code examples where helpful
 - Balance criticism with recognition of good work
-- Consider OpenStack community standards
-- DO NOT post to Gerrit - only save locally
-- Save the complete review document using the Write tool to **exactly** this path: `{save_path}`
-- Do NOT save a copy to /opt/stack/ or any other location — the only output file must be `{save_path}`
+- Follow OpenStack community standards
+- DO NOT post to Gerrit — save locally only
+- The Python post-flight will restore the original git branch — do NOT run `git checkout` yourself
 
-**Note**: DevStack integration testing is performed asynchronously by a separate agent after code review completes.
+**Note**: DevStack integration testing is performed asynchronously by a separate agent.

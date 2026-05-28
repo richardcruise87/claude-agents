@@ -29,6 +29,18 @@ from agents_lib import (
     git_stash_save,
     git_stash_pop,
     git_fetch_and_checkout_patchset,
+    get_branch_name,
+    checkout_ref,
+    get_commit_info,
+    get_changed_files,
+    expand_remote_branches,
+    format_commit_info,
+    format_changed_files,
+    run_command_list,
+    format_command_results,
+    AuditRule,
+    audit_report_file,
+    build_audit_prompt,
     create_model_client,
     format_usage_info,
     create_forge_client,
@@ -47,6 +59,12 @@ DEVSTACK_PATH = CONFIG["devstack_path"]
 REVIEWS_OUTPUT_DIR = CONFIG["reviews_output_dir"]
 GERRIT_BASE_URL = CONFIG["gerrit_base_url"]  # kept for backward compat with prompts
 REPO_BASE_PATH = CONFIG.get("repo_base_path", DEVSTACK_PATH)
+
+
+class _SafeDict(dict):
+    """dict subclass for format_map() that leaves unknown {KEYS} unchanged."""
+    def __missing__(self, key: str) -> str:
+        return f"{{{key}}}"
 
 
 def _find_full_review_content(summary_content: str) -> str:
@@ -148,6 +166,72 @@ def _build_backport_sections(config: dict) -> _BackportSections:
         Path(config.get("triages_output_dir", "~/octavia_bug_triages")).expanduser()
     )
     return _BackportSections(branches_section, rules_section, triage_dir)
+
+
+def _build_bug_context(bug_refs: list, triage_dir: str) -> str:
+    """Pre-fetch bug context for commit bug references.
+
+    For each bug number found in the commit message, checks for a local
+    triage report and returns a formatted summary.  Does not call the
+    Launchpad API — the AI can do that via Bash if needed.
+    """
+    if not bug_refs:
+        return "_No bug references found in the commit message._"
+
+    parts = []
+    triage_path = Path(triage_dir)
+    for bug_num in bug_refs:
+        parts.append(f"### Bug #{bug_num}")
+        # Find the latest local triage report for this bug
+        pattern = f"bug_{bug_num}_*.md"
+        reports = sorted(triage_path.glob(pattern), reverse=True) if triage_path.exists() else []
+        if reports:
+            latest = reports[0]
+            parts.append(f"**Local triage report**: `{latest.name}`")
+            # Include the first 1500 chars as a summary
+            excerpt = latest.read_text(encoding="utf-8", errors="replace")[:1500]
+            parts.append(f"```\n{excerpt}\n...(truncated)\n```")
+        else:
+            parts.append(
+                f"_No local triage report found. If needed, the AI can query "
+                f"https://api.launchpad.net/1.0/bugs/{bug_num} for basic info._"
+            )
+
+    return "\n\n".join(parts)
+
+
+def _build_expanded_branches(repo_path: Path, config: dict) -> str:
+    """Resolve configured backport branch patterns to real branch names."""
+    patterns = config.get("backport_branches", [])
+    if not patterns:
+        return "_No backport branches configured._"
+
+    lines = []
+    for pattern in patterns:
+        if "*" in pattern:
+            real = expand_remote_branches(repo_path, pattern)
+            if real:
+                for b in real:
+                    lines.append(f"- `{b}` (from pattern `{pattern}`)")
+            else:
+                lines.append(f"- _(no branches matching `{pattern}` found on remote)_")
+        else:
+            lines.append(f"- `{pattern}`")
+
+    return "\n".join(lines) if lines else "_No backport branches resolved._"
+
+
+# Audit rules for the code review report format
+_CODE_REVIEW_AUDIT_RULES = [
+    AuditRule.must_start_with("# Code Review:"),
+    AuditRule.must_contain("## Final Verdict"),
+    AuditRule.must_contain_one_of(
+        ["✅ **Approve**", "🔄 **Request Changes**", "💬 **Needs Discussion**"],
+        "Must contain exactly one verdict: ✅ Approve / 🔄 Request Changes / 💬 Needs Discussion",
+    ),
+    AuditRule.must_contain("## Backport Recommendation"),
+    AuditRule.must_contain("END OF REPORT"),
+]
 
 
 async def review_specific_change(change_url_or_number, requested_patchset=None):
@@ -291,6 +375,39 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
 
         print()
 
+    # Save the branch to restore after the review (detached HEAD after patchset checkout)
+    _original_branch = get_branch_name(repo_path) or "master"
+
+    # --- Pre-fetch deterministic git data ---
+    print("📊 Collecting git information...")
+    _commit_info = get_commit_info(repo_path)
+    _changed_files = get_changed_files(repo_path, max_diff_lines=CONFIG.get("max_diff_lines", 300))
+    commit_info_text = format_commit_info(_commit_info)
+    changed_files_text = format_changed_files(_changed_files, CONFIG.get("max_diff_lines", 300))
+    if _commit_info.get("error"):
+        print(f"   ⚠️  git commit info: {_commit_info['error']}")
+    else:
+        print(f"   ✅ Commit: {_commit_info['short_sha']} — {_commit_info['subject'][:60]}")
+    if _changed_files.get("error"):
+        print(f"   ⚠️  git changed files: {_changed_files['error']}")
+    else:
+        print(f"   ✅ {len(_changed_files['names'])} file(s) changed")
+
+    # --- Run test commands in Python ---
+    _test_commands = CONFIG.get("test_commands", [])
+    test_results_text = "_No test commands configured._"
+    if _test_commands and change.forge_type == "gerrit":
+        print(f"\n🧪 Running {len(_test_commands)} test command(s)...")
+        _test_results = run_command_list(_test_commands, cwd=repo_path)
+        test_results_text = format_command_results(_test_results)
+    else:
+        print("   ℹ️  Skipping tests (not configured or non-Gerrit change)")
+
+    # --- Pre-fetch bug context and expand backport branches ---
+    _bp = _build_backport_sections(CONFIG)
+    bug_context_text = _build_bug_context(_commit_info.get("bug_refs", []), _bp.triage_dir)
+    expanded_backport_branches_text = _build_expanded_branches(repo_path, CONFIG)
+
     # Build the prompt with previous review context if available
     previous_review_section = ""
     if previous_review_content and previous_patchset:
@@ -342,8 +459,27 @@ This change has been reviewed before.
             "which may not be the latest version of this change.\n"
         )
 
-    # Build backport-related prompt sections
-    _bp = _build_backport_sections(CONFIG)  # (branches_section, rules_section, triage_dir)
+    # Load the report template (pre-fill known metadata; AI fills [instruction] markers)
+    _template_path = Path(__file__).parent / "report_template.md"
+    if _template_path.exists():
+        from datetime import datetime as _dt
+        _previous_review_label = (
+            f"Patchset {previous_patchset}" if previous_patchset else "First Review"
+        )
+        report_template = _template_path.read_text(encoding="utf-8").format_map(
+            _SafeDict(
+                REPO_NAME=repo_name,
+                CHANGE_NUMBER=str(change.change_id),
+                PATCHSET=str(current_patchset or "unknown"),
+                GERRIT_URL=change.forge_url,
+                TIMESTAMP=_dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+                MODEL_NAME=CONFIG.get("model", "claude-sonnet-4-6"),
+                PREVIOUS_REVIEW=_previous_review_label,
+                TEST_RESULTS=test_results_text,
+            )
+        )
+    else:
+        report_template = f"[Write the full review report here for change #{change.change_id}]"
 
     # Build and format the prompt (forge-aware)
     _provider = CONFIG.get("model_provider", "anthropic")
@@ -351,7 +487,7 @@ This change has been reviewed before.
         repo_name=repo_name,
         change_number=change.change_id,
         current_patchset=current_patchset,
-        gerrit_base_url=GERRIT_BASE_URL,        # kept for Gerrit prompt compat
+        gerrit_base_url=GERRIT_BASE_URL,
         repo_path=repo_path,
         patchset_ref=patchset_ref,
         specific_patchset_note=specific_patchset_note,
@@ -366,6 +502,12 @@ This change has been reviewed before.
         backport_branches_section=_bp.branches_section,
         backport_rules_section=_bp.rules_section,
         triage_reports_dir=_bp.triage_dir,
+        commit_info_text=commit_info_text,
+        changed_files_text=changed_files_text,
+        test_results_text=test_results_text,
+        bug_context_text=bug_context_text,
+        expanded_backport_branches_text=expanded_backport_branches_text,
+        report_template=report_template,
     )
 
     # Prepend cross-run context (rules, global learnings, agent learnings)
@@ -421,6 +563,38 @@ This change has been reviewed before.
         review_file.write_text(content_to_save, encoding="utf-8")
         print(f"\n✓ Full review saved to: {review_file}")
 
+        # Audit loop: validate report format; ask AI to fix if needed
+        _MAX_AUDIT_RETRIES = 2
+        for _audit_attempt in range(_MAX_AUDIT_RETRIES + 1):
+            _audit_passed, _audit_errors = audit_report_file(review_file, _CODE_REVIEW_AUDIT_RULES)
+            if _audit_passed:
+                print("   ✅ Report format validated")
+                break
+            print(
+                f"\n   ⚠️  Report format issues "
+                f"(attempt {_audit_attempt + 1}/{_MAX_AUDIT_RETRIES + 1}):"
+            )
+            for _err in _audit_errors:
+                print(f"      - {_err}")
+            if _audit_attempt < _MAX_AUDIT_RETRIES:
+                _fix_prompt = (
+                    f"Read the review at {review_file} and fix these format problems, "
+                    f"then rewrite the entire file.\n\n"
+                    + build_audit_prompt(_audit_errors, str(review_file))
+                )
+                await _client.query(
+                    prompt=_fix_prompt,
+                    tools=["Read", "Write"],
+                    on_progress=lambda text: print(f"  {text}"),
+                )
+                # Re-read after fix attempt
+                if review_file.exists():
+                    content_to_save = review_file.read_text(encoding="utf-8")
+            else:
+                print(
+                    "   ⚠️  Report still invalid after retries — proceeding with best effort"
+                )
+
         # Record in forge-agnostic tracking
         record_review(tracking_file, change, sequence, review_file)
 
@@ -433,8 +607,15 @@ This change has been reviewed before.
         import traceback
         traceback.print_exc()
     finally:
+        # Restore repo to the branch it was on before the review checkout.
+        # Python handles this so the prompt no longer needs a "return to branch" step.
+        if change.forge_type == "gerrit" and change.head_sha:
+            _restore_ok, _restore_msg = checkout_ref(repo_path, _original_branch)
+            if _restore_ok:
+                print(f"   🔀 Restored branch: {_original_branch}")
+            else:
+                print(f"   ⚠️  Could not restore branch '{_original_branch}': {_restore_msg}")
         if _stash_saved:
-            # Reuse success/message rather than introducing new local names
             success, message = git_stash_pop(repo_path)
             if success:
                 print(f"   📦 Restored stashed changes ({repo_path.name})")
