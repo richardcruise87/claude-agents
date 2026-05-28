@@ -9,6 +9,7 @@ part of the result so the caller can decide how to handle them.
 
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -279,7 +280,6 @@ def git_fetch_and_checkout_ref(
             if rc != 0:
                 msg = f"git fetch failed (exit {rc}): {err.strip()}"
                 if attempt < max_retries:
-                    import time
                     time.sleep(5 * attempt)
                     continue
                 return (False, msg, "")
@@ -297,7 +297,7 @@ def git_fetch_and_checkout_ref(
 
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
             if attempt < max_retries:
-                import time
                 time.sleep(5 * attempt)
-            else:
-                return (False, str(exc), "")
+                continue
+            return (False, str(exc), "")
+    return (False, "git fetch and checkout failed after all retries", "")
