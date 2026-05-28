@@ -31,6 +31,8 @@ def get_bug_triage_prompt(
     provider: str = "anthropic",
     affected_branches: list = None,
     gerrit_base_url: str = _DEFAULT_GERRIT_BASE_URL,
+    fix_proposal_file: str = "",
+    model_name: str = "claude-sonnet-4-6",
 ) -> str:
     """
     Get the formatted bug triage prompt.
@@ -54,11 +56,12 @@ def get_bug_triage_prompt(
     Returns:
         Formatted prompt ready to use with the agent
     """
+    # No save_path — Python assembles the report from section markers, not the AI.
     template = load_agent_prompt(
         "bug_triage",
         provider=provider,
         prompts_dir=_PROMPTS_DIR,
-        save_path=str(triage_file),
+        save_path=None,
     )
 
     # Build sequence note
@@ -146,5 +149,7 @@ This bug was previously triaged.
     formatted_prompt = formatted_prompt.replace('{relevant_files}', relevant_files)
     formatted_prompt = formatted_prompt.replace('{affected_branches_section}', affected_branches_section)
     formatted_prompt = formatted_prompt.replace('{gerrit_base_url}', gerrit_base_url)
+    formatted_prompt = formatted_prompt.replace('{fix_proposal_file}', fix_proposal_file)
+    formatted_prompt = formatted_prompt.replace('{model_name}', model_name)
 
     return formatted_prompt

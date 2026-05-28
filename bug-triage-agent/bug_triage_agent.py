@@ -28,6 +28,9 @@ from agents_lib import (
     post_launchpad_comment,
     post_report_to_launchpad,
     find_latest_report,
+    parse_section_markers,
+    build_report,
+    ReportSection,
 )
 from bug_tracker import (
     load_triage_history,
@@ -41,6 +44,22 @@ from prompts import get_bug_triage_prompt
 
 # Load configuration
 CONFIG = load_config()
+
+_TRIAGE_TEMPLATE_PATH = Path(__file__).parent / "report_template.md"
+
+_TRIAGE_SECTION_DEFS = [
+    ReportSection("executive_summary"),
+    ReportSection("bug_analysis"),
+    ReportSection("validation"),
+    ReportSection("duplicate_check"),
+    ReportSection("fix_search"),
+    ReportSection("affected_components"),
+    ReportSection("severity_assessment"),
+    ReportSection("reproduction_strategy"),
+    ReportSection("investigation_areas"),
+    ReportSection("fix_strategy"),
+    ReportSection("bug_introduction"),
+]
 
 
 def _post_bug_feedback(bug_info: dict, triage_file: "Path", config: dict) -> None:
@@ -229,6 +248,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         bug_title,
         sequence
     )
+    fix_proposal_file = output_dir / f"bug_{bug_number}_fix_proposal.patch"
 
     print(f"📄 Triage will be saved to: {triage_file.name}\n")
 
@@ -237,6 +257,7 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
 
     # Get the prompt
     _provider = CONFIG.get("model_provider", "anthropic")
+    _model_name = CONFIG.get("model", "claude-sonnet-4-6")
     prompt = get_bug_triage_prompt(
         bug_number=bug_number,
         bug_title=bug_title,
@@ -255,6 +276,8 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         provider=_provider,
         affected_branches=CONFIG.get('affected_branches'),
         gerrit_base_url=CONFIG.get('gerrit_base_url'),
+        fix_proposal_file=str(fix_proposal_file),
+        model_name=_model_name,
     )
 
     if _context_section:
@@ -282,31 +305,39 @@ async def triage_bug(bug_info: dict, sequence: int, previous_summary: str = None
         print(f"\n{'='*80}")
         print("✅ Triage Complete!")
         print(f"{'='*80}")
-        print(f"\n📄 Triage saved to: {triage_file}")
-        print(f"\nSummary:\n{(triage_result or '')[:500]}...")
 
-        # Append usage info to triage if available
-        if triage_result and usage_info:
-            triage_result = triage_result + "\n\n---\n\n" + usage_info
-
-        # Verify triage file was created before marking as complete
-        if not triage_file.exists() and triage_result:
-            print("\n⚠️  Triage file not found - saving result now...")
-            triage_file.write_text(triage_result)
-            print(f"✓ Saved triage to: {triage_file}")
-        elif not triage_file.exists():
-            print("\n❌ ERROR: Triage file not found and no result received!")
-            print(f"   Expected: {triage_file}")
+        if not triage_result:
+            print("\n❌ ERROR: No analysis received from AI.")
             print("   Will retry on next pass")
             return None
-        else:
-            # If file exists but we have usage info, append it
-            if usage_info:
-                existing_content = triage_file.read_text()
-                # Only append if not already present
-                if "## Token Usage & Cost" not in existing_content:
-                    triage_file.write_text(existing_content + "\n\n---\n\n" + usage_info)
-            print(f"\n✓ Triage file confirmed at: {triage_file}")
+
+        # Parse section markers from AI text response and assemble the report.
+        from datetime import datetime as _dt
+        sections = parse_section_markers(triage_result)
+        print(f"   Parsed {len(sections)} section(s) from AI response")
+
+        template = _TRIAGE_TEMPLATE_PATH.read_text(encoding="utf-8")
+        # Fill metadata placeholders
+        template = template.replace("{BUG_NUMBER}", bug_number)
+        template = template.replace("{BUG_TITLE}", bug_title)
+        template = template.replace("{BUG_STATUS}", bug_info['status'])
+        template = template.replace("{BUG_IMPORTANCE}", bug_info['importance'])
+        template = template.replace("{REPORTER}", bug_info['reporter'])
+        template = template.replace("{DATE_CREATED}", bug_info['date_created'])
+        template = template.replace("{DATE_UPDATED}", bug_info['date_last_updated'])
+        template = template.replace("{LAUNCHPAD_URL}", bug_info['web_link'])
+        template = template.replace("{DATE}", _dt.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+        report_content = build_report(template, sections, _TRIAGE_SECTION_DEFS)
+
+        if usage_info:
+            report_content += "\n\n---\n\n" + usage_info
+
+        triage_file.write_text(report_content, encoding="utf-8")
+        print(f"\n✓ Triage report saved: {triage_file}")
+
+        if fix_proposal_file.exists():
+            print(f"✓ Fix proposal saved:  {fix_proposal_file.name}")
 
         # Record that we triaged this bug (only after confirming file exists)
         tracking_file = Path(CONFIG['triage_tracking_file'])

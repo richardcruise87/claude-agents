@@ -1,16 +1,43 @@
 """
 Reproduction report generation functionality.
 
-Generates comprehensive markdown reports with attempts, results, and analysis.
+Builds each report section as a string, then uses agents_lib.build_report()
+to fill the report_template.md with those sections.  Missing sections receive
+the default "Agent provided no data".
 """
 from datetime import datetime
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
+
 from triage_parser import TriageReport
-from script_executor import ExecutionResult, format_execution_report
-from agents_lib import DevStackHealth, format_health_report
+from script_executor import format_execution_report
+from agents_lib import (
+    DevStackHealth,
+    format_health_report,
+    format_usage_info,
+    build_report,
+    ReportSection,
+)
 from script_generator import extract_script_changelog
 
+_TEMPLATE_PATH = Path(__file__).parent / "report_template.md"
+
+_SECTION_DEFS = [
+    ReportSection("executive_summary"),
+    ReportSection("root_cause_from_triage", default="_No root cause summary in triage._"),
+    ReportSection("devstack_health"),
+    ReportSection("reproduction_attempts", default="_No attempts were made._"),
+    ReportSection("root_cause_analysis", default="_Not applicable._"),
+    ReportSection("how_reproduced", default="_Not applicable._"),
+    ReportSection("final_script", default="_No successful script._"),
+    ReportSection("recommendations"),
+    ReportSection("usage_info", default="_No usage data available._"),
+]
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 def generate_report(
     triage: TriageReport,
@@ -21,377 +48,221 @@ def generate_report(
     total_usage: Optional[dict] = None,
     reasonings: Optional[List[Optional[str]]] = None,
 ) -> str:
-    """
-    Generate comprehensive reproduction report.
+    """Generate comprehensive reproduction report.
 
     Args:
-        triage: Parsed triage report
-        health: DevStack health check results
-        attempts: List of (script_content, ExecutionResult, usage_dict) tuples
-        final_status: Final status (REPRODUCED, NOT_REPRODUCED, ENVIRONMENT_ERROR)
-        final_script_path: Path to final successful script (if reproduced)
-        total_usage: Combined usage information across all attempts
+        triage:            Parsed triage report.
+        health:            DevStack health check results.
+        attempts:          List of (script_content, ExecutionResult, usage_dict).
+        final_status:      "REPRODUCED", "NOT_REPRODUCED", or "ENVIRONMENT_ERROR".
+        final_script_path: Path to the successful script (if reproduced).
+        total_usage:       Combined token usage across all attempts.
+        reasonings:        AI reasoning text per attempt.
 
     Returns:
-        Complete markdown report as string
+        Complete markdown report string.
     """
-    lines = []
+    reasonings = reasonings or []
 
-    # Header
-    lines.append("# Bug Reproduction Report")
-    lines.append("")
-    lines.append(f"**Bug ID:** {triage.bug_number}")
-    lines.append(f"**Title:** {triage.bug_title}")
+    # Metadata filled by Python
+    status_map = {
+        "REPRODUCED": "✅ REPRODUCED",
+        "NOT_REPRODUCED": "❌ NOT REPRODUCED",
+        "ENVIRONMENT_ERROR": "⚠️ ENVIRONMENT ERROR",
+    }
+    status_line = status_map.get(final_status, f"❓ {final_status}")
 
-    # Status
-    if final_status == "REPRODUCED":
-        lines.append("**Status:** ✅ REPRODUCED")
-    if final_status == "NOT_REPRODUCED":
-        lines.append("**Status:** ❌ NOT REPRODUCED")
-    if final_status == "ENVIRONMENT_ERROR":
-        lines.append("**Status:** ⚠️ ENVIRONMENT ERROR")
-    else:
-        lines.append(f"**Status:** ❓ {final_status}")
+    template = _TEMPLATE_PATH.read_text(encoding="utf-8")
 
-    lines.append(f"**Attempts:** {len(attempts)}/{len(attempts)}")
-    lines.append(f"**Reproduction Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append(f"**Triage File:** {triage.triage_file.name}")
-    lines.append("")
+    # Fill {UPPERCASE} metadata placeholders
+    template = template.replace("{BUG_NUMBER}", triage.bug_number)
+    template = template.replace("{BUG_TITLE}", triage.bug_title)
+    template = template.replace("{STATUS_LINE}", status_line)
+    template = template.replace("{ATTEMPTS}", f"{len(attempts)}")
+    template = template.replace("{DATE}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    template = template.replace("{TRIAGE_FILE}", triage.triage_file.name)
+    template = template.replace("{SEVERITY}", triage.severity)
+    template = template.replace("{VALIDATION_STATUS}", triage.validation_status)
 
-    # Executive Summary
-    lines.append("## Executive Summary")
-    lines.append("")
-    lines.append(generate_executive_summary(triage, attempts, final_status))
-    lines.append("")
+    # Build each analysis section
+    sections = {}
 
-    # Triage Summary
-    lines.append("## Triage Summary")
-    lines.append("")
-    lines.append(f"**Severity:** {triage.severity}")
-    lines.append(f"**Validation:** {triage.validation_status}")
-    lines.append("")
+    sections["executive_summary"] = _build_executive_summary(triage, attempts, final_status)
+
     if triage.root_cause_summary:
-        lines.append("### Root Cause (from Triage)")
-        lines.append("")
-        # Truncate if too long
         root_cause = triage.root_cause_summary
         if len(root_cause) > 1000:
             root_cause = root_cause[:1000] + "..."
-        lines.append(root_cause)
-        lines.append("")
+        sections["root_cause_from_triage"] = root_cause
 
-    # DevStack Health Check
-    lines.append(format_health_report(health))
-    lines.append("")
+    sections["devstack_health"] = format_health_report(health)
 
-    # Reproduction Attempts
-    lines.append("## Reproduction Attempts")
-    lines.append("")
+    if attempts:
+        sections["reproduction_attempts"] = _build_attempts_section(attempts, reasonings)
 
+    if final_status == "REPRODUCED":
+        sections["root_cause_analysis"] = _build_root_cause_analysis(triage, attempts)
+        sections["how_reproduced"] = _build_how_reproduced(attempts, reasonings)
+
+    if final_status == "REPRODUCED" and final_script_path:
+        sections["final_script"] = _build_final_script_section(attempts, final_script_path)
+
+    sections["recommendations"] = _build_recommendations(triage, attempts, final_status)
+
+    if total_usage:
+        usage_text = format_usage_info(
+            usage_data=total_usage.get("usage"),
+            cost_usd=total_usage.get("cost_usd"),
+            model=total_usage.get("model"),
+            duration_ms=total_usage.get("duration_ms"),
+        )
+        sections["usage_info"] = usage_text.replace(
+            "## Token Usage & Cost", "## Total Token Usage & Cost"
+        )
+
+    return build_report(template, sections, _SECTION_DEFS)
+
+
+# ---------------------------------------------------------------------------
+# Section builders
+# ---------------------------------------------------------------------------
+
+def _build_executive_summary(
+    triage: TriageReport,
+    attempts: List[tuple],
+    final_status: str,
+) -> str:
+    if final_status == "REPRODUCED":
+        return (
+            f"Bug #{triage.bug_number} ({triage.bug_title}) was **successfully reproduced** "
+            f"in {len(attempts)} attempt(s). The reproduction script is saved alongside this "
+            f"report."
+        )
+    if final_status == "ENVIRONMENT_ERROR":
+        return (
+            f"Reproduction of bug #{triage.bug_number} was aborted due to a **DevStack "
+            f"environment error**. The agent will retry when the environment is healthy."
+        )
+    if not attempts:
+        return (
+            f"Bug #{triage.bug_number} could not be processed — no reproduction attempts "
+            f"were made."
+        )
+    return (
+        f"Bug #{triage.bug_number} ({triage.bug_title}) could **not be reproduced** "
+        f"after {len(attempts)} attempt(s). The issue may require additional context "
+        f"or a different reproduction approach."
+    )
+
+
+def _build_attempts_section(
+    attempts: List[tuple],
+    reasonings: List[Optional[str]],
+) -> str:
+    lines = []
     for i, attempt_data in enumerate(attempts, 1):
-        # Handle both old format (script, result) and new format (script, result, usage_dict)
         if len(attempt_data) == 3:
             script, result, usage_dict = attempt_data
         else:
             script, result = attempt_data
             usage_dict = None
 
-        reasoning = reasonings[i - 1] if reasonings and i <= len(reasonings) else None
+        reasoning = reasonings[i - 1] if i <= len(reasonings) else None
 
-        # Agent reasoning section
-        if i == 1 and reasoning:
-            lines.append(f"#### Agent's Approach (Attempt {i})")
-            lines.append("")
-            lines.append(reasoning)
-            lines.append("")
-        elif i > 1 and reasoning:
-            lines.append(f"#### Agent's Analysis (Attempt {i})")
-            lines.append("")
-            lines.append(reasoning)
-            lines.append("")
+        label = "Agent's Approach" if i == 1 else "Agent's Analysis"
+        if reasoning:
+            lines.append(f"#### {label} (Attempt {i})\n\n{reasoning}\n")
 
-        # Script changelog extracted from comments (attempt 2+)
         if i > 1:
             changelog = extract_script_changelog(script)
             if changelog:
-                lines.append("#### Changes vs Previous Attempt")
-                lines.append("")
-                lines.append(changelog)
-                lines.append("")
+                lines.append(f"#### Changes vs Previous Attempt\n\n{changelog}\n")
 
         lines.append(format_execution_report(result, i))
-        lines.append("")
 
-        # Add usage info for this attempt if available
-        if usage_dict and (usage_dict.get('usage') or usage_dict.get('cost_usd') is not None):
-            from agents_lib import format_usage_info
+        if usage_dict and (usage_dict.get("usage") or usage_dict.get("cost_usd") is not None):
             attempt_usage = format_usage_info(
-                usage_data=usage_dict.get('usage'),
-                cost_usd=usage_dict.get('cost_usd'),
-                model=usage_dict.get('model'),
-                duration_ms=usage_dict.get('duration_ms')
-            )
-            # Use smaller heading for attempt-specific usage
-            attempt_usage = attempt_usage.replace("## Token Usage & Cost", f"### Token Usage (Attempt {i})")
+                usage_data=usage_dict.get("usage"),
+                cost_usd=usage_dict.get("cost_usd"),
+                model=usage_dict.get("model"),
+                duration_ms=usage_dict.get("duration_ms"),
+            ).replace("## Token Usage & Cost", f"### Token Usage (Attempt {i})")
             lines.append(attempt_usage)
-            lines.append("")
 
-        lines.append("**Script Used:**")
-        lines.append("```bash")
-        lines.append(script)
-        lines.append("```")
-        lines.append("")
-        lines.append("---")
-        lines.append("")
-
-    # Root Cause Analysis (if reproduced)
-    if final_status == "REPRODUCED":
-        lines.append("## Root Cause Analysis")
-        lines.append("")
-        lines.append(generate_root_cause_analysis(triage, attempts))
-        lines.append("")
-
-    # How the bug was reproduced summary
-    if final_status == "REPRODUCED" and reasonings:
-        final_reasoning = next((r for r in reversed(reasonings) if r), None)
-        lines.append("## How the Bug Was Reproduced")
-        lines.append("")
-        suffix = "See the agent's final analysis below." if final_reasoning else ""
-        lines.append(f"The bug was confirmed after {len(attempts)} attempt(s). {suffix}".strip())
-        lines.append("")
-        if final_reasoning:
-            lines.append(final_reasoning)
-            lines.append("")
-        # Include final script changelog if present
-        final_script_text = attempts[-1][0] if attempts else ""
-        final_changelog = extract_script_changelog(final_script_text)
-        if final_changelog and len(attempts) > 1:
-            lines.append("**Key changes that made reproduction possible:**")
-            lines.append("")
-            lines.append(final_changelog)
-            lines.append("")
-
-    # Final Reproduction Script (if successful)
-    if final_status == "REPRODUCED" and final_script_path:
-        lines.append("## Final Reproduction Script")
-        lines.append("")
-        lines.append(f"**Location:** `{final_script_path}`")
-        lines.append("")
-        # Include the successful script
-        successful_script = None
-        for script, result, *_ in attempts:
-            if result.success or result.error_type == "BUG_REPRODUCED":
-                successful_script = script
-                break
-        if successful_script:
-            lines.append("```bash")
-            lines.append(successful_script)
-            lines.append("```")
-            lines.append("")
-
-    # Recommendations
-    lines.append("## Recommendations")
-    lines.append("")
-    lines.append(generate_recommendations(triage, attempts, final_status))
-    lines.append("")
-
-    # Total usage across all attempts
-    if total_usage:
-        from agents_lib import format_usage_info
-        lines.append("---")
-        lines.append("")
-        total_usage_section = format_usage_info(
-            usage_data=total_usage.get('usage'),
-            cost_usd=total_usage.get('cost_usd'),
-            model=total_usage.get('model'),
-            duration_ms=total_usage.get('duration_ms')
-        )
-        total_usage_section = total_usage_section.replace("## Token Usage & Cost", "## Total Token Usage & Cost")
-        lines.append(total_usage_section)
-        lines.append("")
-
-    # Footer
-    lines.append("---")
-    lines.append("")
-    lines.append("*Generated by Octavia Bug Reproduction Agent*")
-    lines.append("")
+        lines.append("**Script Used:**\n```bash\n" + script + "\n```\n\n---\n")
 
     return "\n".join(lines)
 
 
-def generate_executive_summary(
-    triage: TriageReport,
-    attempts: List[tuple],
-    final_status: str
-) -> str:
-    """Generate executive summary section."""
-    if final_status == "REPRODUCED":
-        script_note = (
-            "the triage reproduction steps"
-            if len(attempts) == 1
-            else "refined reproduction scripts"
-        )
-        last_time = attempts[-1][1].execution_time if attempts else 0.0
-        return (
-            f"The bug **{triage.bug_title}** (#{triage.bug_number}) was **successfully reproduced**\n"
-            f"in {len(attempts)} attempt(s). The reproduction confirms the issue identified in the triage report.\n\n"
-            f"The bug was reproduced using {script_note}.\n"
-            f"Execution took {last_time:.1f} seconds on the final attempt.\n"
-        )
-
-    if final_status == "NOT_REPRODUCED":
-        return (
-            f"The bug **{triage.bug_title}** (#{triage.bug_number}) could **not be reproduced**\n"
-            f"after {len(attempts)} attempt(s).\n\n"
-            "This could indicate:\n"
-            "- The bug is environment-specific or requires specific conditions not met in this DevStack\n"
-            "- The bug is intermittent/timing-dependent (race condition)\n"
-            "- The bug has been fixed but triage wasn't updated\n"
-            "- The reproduction steps in the triage are incomplete or incorrect\n\n"
-            "Manual investigation is recommended.\n"
-        )
-
-    if final_status == "ENVIRONMENT_ERROR":
-        return (
-            f"Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) was **aborted**\n"
-            "due to DevStack environment issues.\n\n"
-            "The reproduction environment is not healthy and needs to be fixed before attempting reproduction.\n"
-            "See the DevStack Health Check section below for details.\n"
-        )
-
-    return (
-        f"Reproduction of bug **{triage.bug_title}** (#{triage.bug_number}) completed with\n"
-        f"status: **{final_status}** after {len(attempts)} attempt(s).\n"
-    )
-
-
-def generate_root_cause_analysis(
-    triage: TriageReport,
-    attempts: List[tuple]
-) -> str:
-    """Generate root cause analysis for reproduced bugs."""
-    analysis = []
-
-    analysis.append("The bug was successfully reproduced, confirming the issue described in the triage report.")
-    analysis.append("")
-    analysis.append("### Confirmed Behavior")
-    analysis.append("")
-    analysis.append(f"- **Bug:** {triage.bug_title}")
-    analysis.append(f"- **Severity:** {triage.severity}")
-    analysis.append("")
-
+def _build_root_cause_analysis(triage: TriageReport, attempts: List[tuple]) -> str:
+    lines = [
+        "The bug was confirmed in the DevStack environment, consistent with the triage "
+        "report's root cause analysis.",
+        "",
+        f"**Bug:** #{triage.bug_number} — {triage.bug_title}",
+        f"**Severity:** {triage.severity}",
+    ]
     if triage.root_cause_summary:
-        analysis.append("### Root Cause (from Triage)")
-        analysis.append("")
-        analysis.append(triage.root_cause_summary[:500])
-        if len(triage.root_cause_summary) > 500:
-            analysis.append("...")
-        analysis.append("")
-
-    analysis.append("### Reproduction Details")
-    analysis.append("")
-    analysis.append(f"- Successfully reproduced after {len(attempts)} attempt(s)")
-    analysis.append("- The reproduction script can be used for CI testing and validation of fixes")
-    analysis.append("- Developers can use this script to verify their fix resolves the issue")
-
-    return "\n".join(analysis)
+        lines += ["", "**Triage root cause:**", triage.root_cause_summary[:500]]
+    return "\n".join(lines)
 
 
-def generate_recommendations(
+def _build_how_reproduced(
+    attempts: List[tuple],
+    reasonings: List[Optional[str]],
+) -> str:
+    final_reasoning = next((r for r in reversed(reasonings) if r), None)
+    suffix = "See the agent's final analysis below." if final_reasoning else ""
+    lines = [
+        f"The bug was confirmed after {len(attempts)} attempt(s). {suffix}".strip()
+    ]
+    if final_reasoning:
+        lines += ["", final_reasoning]
+    final_script = attempts[-1][0] if attempts else ""
+    final_changelog = extract_script_changelog(final_script)
+    if final_changelog and len(attempts) > 1:
+        lines += ["", "**Key changes that made reproduction possible:**", "", final_changelog]
+    return "\n".join(lines)
+
+
+def _build_final_script_section(
+    attempts: List[tuple],
+    final_script_path: Path,
+) -> str:
+    lines = [f"**Location:** `{final_script_path}`", ""]
+    successful_script = None
+    for script, result, *_ in attempts:
+        if result.success or result.error_type == "BUG_REPRODUCED":
+            successful_script = script
+            break
+    if successful_script:
+        lines += ["```bash", successful_script, "```"]
+    return "\n".join(lines)
+
+
+def _build_recommendations(
     triage: TriageReport,
     attempts: List[tuple],
-    final_status: str
+    final_status: str,
 ) -> str:
-    """Generate recommendations section."""
-    recommendations = []
-
     if final_status == "REPRODUCED":
-        recommendations.append("**Next Steps:**")
-        recommendations.append("")
-        recommendations.append("1. ✅ Use the reproduction script to validate any proposed fixes")
-        recommendations.append("2. ✅ Add the reproduction script to CI test suite to prevent regressions")
-        recommendations.append("3. ✅ Review the triage report for proposed fix strategies")
-        recommendations.append("4. ✅ Implement the fix and verify with this reproduction script")
-        recommendations.append("5. ✅ Update bug status on Launchpad once fixed")
-
-    if final_status == "NOT_REPRODUCED":
-        recommendations.append("**Next Steps:**")
-        recommendations.append("")
-        recommendations.append("1. 🔍 Review the triage reproduction steps for accuracy")
-        recommendations.append("2. 🔍 Check if the bug requires specific timing or load conditions")
-        recommendations.append("3. 🔍 Verify DevStack configuration matches the bug environment")
-        recommendations.append("4. 🔍 Try manual reproduction following the triage steps exactly")
-        recommendations.append("5. 🔍 Check if the bug has been fixed in recent commits")
-        recommendations.append("6. 🔍 Consider if the bug is intermittent (run multiple times)")
-
+        return "\n".join([
+            "1. **Review the reproduction script** — it demonstrates the exact steps to "
+            "trigger the bug.",
+            "2. **Attach the script to the Launchpad bug** — helps developers reproduce "
+            "locally.",
+            "3. **Fix the root cause** identified in the triage report.",
+            "4. **Add a regression test** that fails before the fix and passes after.",
+        ])
     if final_status == "ENVIRONMENT_ERROR":
-        recommendations.append("**Required Actions:**")
-        recommendations.append("")
-        recommendations.append("1. ⚠️ Fix DevStack environment issues (see Health Check section)")
-        recommendations.append("2. ⚠️ Restart required services that are down")
-        recommendations.append("3. ⚠️ Verify OpenStack API connectivity")
-        recommendations.append("4. ⚠️ Ensure sufficient disk space")
-        recommendations.append("5. ⚠️ Re-run reproduction after environment is healthy")
-
-    return "\n".join(recommendations)
-
-
-if __name__ == "__main__":
-    # Test report generation
-    from dataclasses import dataclass
-
-    print("Testing report generation...")
-
-    # Create mock triage
-    @dataclass
-    class MockTriage:
-        bug_number: str = "12345"
-        bug_title: str = "Test bug"
-        severity: str = "HIGH"
-        validation_status: str = "VALID BUG"
-        root_cause_summary: str = "This is a test root cause"
-        triage_file: Path = Path("test.md")
-
-    # Create mock health
-    health = DevStackHealth(
-        all_healthy=True,
-        service_status={"devstack@o-api.service": True},
-        api_reachable=True,
-        disk_space_gb=50.0,
-        errors=[]
-    )
-
-    # Create mock attempt
-    result = ExecutionResult(
-        success=True,
-        exit_code=0,
-        stdout="Test output",
-        stderr="",
-        execution_time=10.5,
-        timeout_exceeded=False,
-        error_type="SUCCESS"
-    )
-
-    script = "#!/bin/bash\necho 'test'\nexit 0"
-    attempts = [(script, result)]
-
-    # Generate report
-    report = generate_report(
-        MockTriage(),
-        health,
-        attempts,
-        "REPRODUCED",
-        Path("/tmp/script.sh")  # nosec B108
-    )
-
-    # Verify report contains key sections
-    assert "# Bug Reproduction Report" in report
-    assert "## Executive Summary" in report
-    assert "## DevStack Health Check" in report
-    assert "## Reproduction Attempts" in report
-    assert "## Root Cause Analysis" in report
-    assert "## Recommendations" in report
-
-    print("✓ Report structure validated")
-    print(f"✓ Report length: {len(report)} characters")
-    print("\n✅ Report generation test passed!")
+        return "\n".join([
+            "1. **Check the DevStack environment** — services may need to be restarted.",
+            "2. **Verify network connectivity** to the DevStack deployment.",
+            "3. **The agent will retry automatically** on the next healthy run.",
+        ])
+    return "\n".join([
+        "1. **Review the reproduction steps** in the original triage report.",
+        "2. **Check if additional environment setup** is required.",
+        "3. **Consider refining the triage** reproduction strategy with more detail.",
+        "4. **Manually attempt reproduction** using the final script as a starting point.",
+    ])
