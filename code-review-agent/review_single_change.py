@@ -14,6 +14,7 @@ import dataclasses
 import sys
 import re
 import argparse
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
@@ -27,6 +28,7 @@ from agents_lib import (
     checkout_main_branch,
     git_stash_save,
     git_stash_pop,
+    git_fetch_and_checkout_patchset,
     create_model_client,
     format_usage_info,
     create_forge_client,
@@ -256,6 +258,38 @@ async def review_specific_change(change_url_or_number, requested_patchset=None):
             print(f"   ✅ On {branch_check.current_branch} branch")
 
     print("\n" + "="*80 + "\n")
+
+    # Pre-flight patchset checkout with SHA verification and retry.
+    # This runs before the AI so that if git fetch fails or FETCH_HEAD is
+    # stale the review is aborted rather than silently reviewing the wrong code.
+    _MAX_CHECKOUT_RETRIES = 3
+    if change.forge_type == "gerrit" and change.head_sha and patchset_ref:
+        fetch_url = f"{GERRIT_BASE_URL}/{repo_name}"
+        _checkout_ok = False
+        for _attempt in range(1, _MAX_CHECKOUT_RETRIES + 1):
+            print(f"🔄 Fetching patchset (attempt {_attempt}/{_MAX_CHECKOUT_RETRIES})...")
+            _ok, _msg = git_fetch_and_checkout_patchset(
+                repo_path, fetch_url, patchset_ref, change.head_sha
+            )
+            if _ok:
+                print(f"   ✅ {_msg}")
+                _checkout_ok = True
+                break
+            print(f"   ❌ {_msg}")
+            if _attempt < _MAX_CHECKOUT_RETRIES:
+                _delay = 5 * _attempt
+                print(f"   ⏳ Retrying in {_delay}s...")
+                time.sleep(_delay)
+
+        if not _checkout_ok:
+            print(f"\n❌ Pre-flight checkout failed after {_MAX_CHECKOUT_RETRIES} attempts.")
+            print(f"   Change: #{change.change_id}  Expected SHA: {change.head_sha}")
+            print("   Aborting — review not recorded to avoid reviewing the wrong change.")
+            if _stash_saved:
+                git_stash_pop(repo_path)
+            return
+
+        print()
 
     # Build the prompt with previous review context if available
     previous_review_section = ""

@@ -4,6 +4,7 @@ You are performing a comprehensive code review for an OpenStack Octavia change.
 - Repository: {repo_name}
 - Change Number: {change_number}
 - Patchset: {current_patchset or 'unknown'}
+- Expected commit SHA: {head_sha}
 - Gerrit URL: {GERRIT_BASE_URL}/c/{repo_name}/+/{change_number}
 - Local repo: {repo_path}
 {specific_patchset_note}{previous_review_section}
@@ -14,12 +15,19 @@ Perform a complete code review following these steps:
 Save the current branch name so we can return to it later.
 
 ## Step 2: Fetch the Change
-Fetch the specific patchset from Gerrit:
+Fetch the specific patchset from Gerrit. **If `git fetch` exits with an error, STOP immediately** — do NOT fall back to reviewing whatever is currently checked out, as it would be a completely different change.
+
 ```bash
 cd {repo_path}
 {"git fetch " + GERRIT_BASE_URL + "/" + repo_name + " " + patchset_ref if patchset_ref else "git fetch " + GERRIT_BASE_URL + "/" + repo_name + " refs/changes/*/" + change_number + "/*"}
-git checkout FETCH_HEAD
+git checkout {head_sha}
 ```
+
+After checkout, confirm you are on the correct commit:
+```bash
+git log -1 --format="Checked out: %H  %s"
+```
+The SHA **must** match `{head_sha}`. If it does not, output an error and stop — do NOT review the wrong code.
 
 ## Step 3: Analyze the Changes
 - Run `git log -1 --pretty=full` to see the commit message

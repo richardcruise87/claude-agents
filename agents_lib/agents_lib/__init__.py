@@ -35,6 +35,7 @@ from .devstack_checks import (
     checkout_main_branch,
     git_stash_save,
     git_stash_pop,
+    git_fetch_and_checkout_patchset,
     cleanup_test_environment,
     format_health_report,
 )
@@ -107,6 +108,7 @@ __all__ = [
     "checkout_main_branch",
     "git_stash_save",
     "git_stash_pop",
+    "git_fetch_and_checkout_patchset",
     "cleanup_test_environment",
     "format_health_report",
     "DevStackLock",
