@@ -4,6 +4,42 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-05-28
+
+### Fixed: Code review agent posting reviews for the wrong Gerrit change
+
+The code-review agent was occasionally reviewing the local repo's current state
+instead of the requested Gerrit patchset.  Root cause: when `git fetch` failed
+silently, `git checkout FETCH_HEAD` would check out whatever `FETCH_HEAD`
+pointed to from a previous operation — which could be a completely different
+change.  The prompt then filled in the correct change number/URL from metadata,
+making the report header look right while the code analysis was wrong.
+
+Three fixes applied:
+
+1. **Python pre-flight checkout with retry** (`review_single_change.py`,
+   `agents_lib/devstack_checks.py`): Before the AI runs, Python now fetches
+   the patchset and checks out the exact commit SHA (`git checkout <sha>` rather
+   than `git checkout FETCH_HEAD`), then verifies `git rev-parse HEAD` matches.
+   Retries up to 3 times with backoff (5 s, 10 s).  If all retries fail the
+   review is aborted and *not* recorded in the tracking file — so the change
+   will be picked up again on the next cycle.
+
+   New shared helper: `git_fetch_and_checkout_patchset(repo_path, remote_url,
+   fetch_ref, expected_sha) → (bool, str)` in `agents_lib`.
+
+2. **Explicit SHA in prompt** (`code_review_prompt.txt`): Step 2 now instructs
+   the AI to run `git checkout {head_sha}` instead of `git checkout FETCH_HEAD`,
+   eliminating the stale-FETCH_HEAD race even if the pre-flight step is somehow
+   skipped.
+
+3. **SHA verification in prompt**: After checkout, the AI is told to run
+   `git log -1 --format="Checked out: %H %s"` and confirm the SHA matches
+   `{head_sha}`.  If it does not, the AI is instructed to stop and report an
+   error rather than proceed.
+
+---
+
 ## 2026-05-26
 
 ### Added: DevStack test agent user-feedback mechanism
