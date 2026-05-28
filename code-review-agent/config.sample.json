@@ -42,15 +42,13 @@
     "api_version": "2.16",
     "comment": "Gerrit server configuration. Usually doesn't need to change."
   },
-  "testing": {
-    "run_unit_tests": true,
-    "run_functional_tests": true,
-    "run_pep8": true,
-    "unit_test_command": "tox -e py3",
-    "functional_test_command": "tox -e functional",
-    "pep8_command": "tox -e pep8",
-    "test_timeout_seconds": 1800
-  },
+  "test_commands": [
+    {"name": "unit tests",       "cmd": ["tox", "-e", "py3"],        "timeout": 600},
+    {"name": "functional tests", "cmd": ["tox", "-e", "functional"],  "timeout": 600},
+    {"name": "pep8",             "cmd": ["tox", "-e", "pep8"],        "timeout": 120}
+  ],
+  "max_diff_lines": 300,
+  "comment_testing": "test_commands: list of commands Python runs before the AI review. Each entry: name (display label), cmd (command as list), timeout (seconds). max_diff_lines: lines of git diff to include in prompt (AI can Read files for more).",
   "monitoring": {
     "check_interval_minutes": 60,
     "max_reviews_per_cycle": 3,

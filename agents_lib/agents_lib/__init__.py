@@ -24,6 +24,28 @@ from .tracking import (
     record_processed_item,
     create_output_filename,
 )
+from .git_info import (
+    get_branch_name,
+    checkout_ref,
+    get_commit_info,
+    get_changed_files,
+    expand_remote_branches,
+    format_commit_info,
+    format_changed_files,
+    git_fetch_and_checkout_patchset,
+)
+from .run_commands import (
+    CommandResult,
+    run_command_list,
+    format_command_results,
+)
+from .report_auditor import (
+    AuditRule,
+    audit_report,
+    audit_report_file,
+    format_audit_failures,
+    build_audit_prompt,
+)
 from .devstack_checks import (
     CheckResult,
     DevStackHealth,
@@ -35,7 +57,6 @@ from .devstack_checks import (
     checkout_main_branch,
     git_stash_save,
     git_stash_pop,
-    git_fetch_and_checkout_patchset,
     cleanup_test_environment,
     format_health_report,
 )
@@ -83,6 +104,25 @@ from .forge_feedback import (
 )
 
 __all__ = [
+    # git_info
+    "get_branch_name",
+    "checkout_ref",
+    "get_commit_info",
+    "get_changed_files",
+    "expand_remote_branches",
+    "format_commit_info",
+    "format_changed_files",
+    # run_commands
+    "CommandResult",
+    "run_command_list",
+    "format_command_results",
+    # report_auditor
+    "AuditRule",
+    "audit_report",
+    "audit_report_file",
+    "format_audit_failures",
+    "build_audit_prompt",
+    # utils
     "expand_path",
     "slugify",
     "format_usage_info",
