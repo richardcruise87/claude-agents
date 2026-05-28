@@ -9,7 +9,7 @@ The devstack-test-agent uses this via a thin wrapper in report_validator.py.
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple
 
 
 @dataclass

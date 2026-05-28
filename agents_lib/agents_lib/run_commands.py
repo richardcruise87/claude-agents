@@ -8,7 +8,7 @@ the AI to execute shell commands itself.
 
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -40,7 +40,8 @@ class CommandResult:
         """Return a compact block suitable for embedding in a prompt."""
         cmd_str = " ".join(self.command)
         header = f"### {self.name} (`{cmd_str}`)"
-        status = f"**Status**: {self.status_emoji} {'PASS' if self.passed else ('TIMEOUT' if self.timed_out else 'FAIL')}  (exit {self.returncode}, {self.duration_s:.1f}s)"
+        result_word = 'PASS' if self.passed else ('TIMEOUT' if self.timed_out else 'FAIL')
+        status = f"**Status**: {self.status_emoji} {result_word}  (exit {self.returncode}, {self.duration_s:.1f}s)"
         body_parts = []
         combined = (self.stdout + self.stderr).strip()
         if combined:
