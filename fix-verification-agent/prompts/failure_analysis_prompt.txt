@@ -15,6 +15,13 @@ reproduction script. A failure means either:
 **Patch Applied:**
 {patch_description}
 
+## Reproduction Agent Context
+
+The following notes were left by the Bug Reproduction Agent across its attempts.
+They describe what approaches were tried and what evidence was found:
+
+{reproduction_context}
+
 ## Script Execution Results
 
 **Exit code:** {exit_code}
@@ -64,3 +71,32 @@ Then write 2-4 sentences explaining:
 - Script exited with an error before reaching the relevant code path
 - Missing resources from a prior test run (leftover state)
 - Unclear whether failure is in the fix or the environment
+
+---
+
+## Output Format — IMPORTANT
+
+Return your analysis using **section markers**.  Do NOT write a plain text
+response — Python will parse your sections to assemble the final report.
+
+```
+<!-- SECTION:summary -->
+One paragraph: overall verdict (FIX_FAILURE / ENVIRONMENTAL / INCONCLUSIVE)
+and the key evidence that led you there.
+<!-- /SECTION -->
+
+<!-- SECTION:failure_analysis -->
+Per-attempt breakdown.  For each attempt: classification, specific evidence
+from the script output (quote relevant lines), and why you chose that
+classification.
+<!-- /SECTION -->
+
+<!-- SECTION:recommendations -->
+Concrete next steps.  For FIX_FAILURE: what the fix author should change.
+For ENVIRONMENTAL: what infrastructure to check before retrying.
+For INCONCLUSIVE: what additional information would resolve the ambiguity.
+<!-- /SECTION -->
+```
+
+All three sections are required.  If information is missing for a section,
+explain why rather than omitting the marker.
