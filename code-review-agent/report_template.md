@@ -67,11 +67,10 @@
 
 ### File: `octavia/path/to/file.py`
 
-**Line 45-52** — Severity: Major
-[Detailed explanation of the issue]
-```python
-# Suggested fix
-```
+**Line 45-52**:
+- **Severity**: [Critical / Major / Minor / Suggestion]
+- **Comment**: [Detailed explanation of the issue, including relevant context and impact]
+- **Suggestion**: [Optional: concise fix or recommendation]
 
 ---
 

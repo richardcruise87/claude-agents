@@ -4,6 +4,29 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-06-02
+
+### Fixed: Gerrit inline comment content and summary
+
+**`agents_lib/agents_lib/forge_feedback.py`:**
+
+- `_extract_comment_text`: fixed fallback that was returning the em-dash
+  severity label (`— Severity: Major`) instead of the actual explanation.
+  Fallback now filters em-dash severity patterns, bare colons (artefact of
+  `**Line N**:` splitting), and severity/suggestion metadata lines; collects
+  all remaining lines (multi-line) rather than returning on the first match.
+
+- `extract_forge_comment`: increased character limit from 7500 → 12000.
+  The `## Detailed Review Comments` section is now stripped from the summary
+  comment (it duplicates the inline comments already posted separately).
+
+**`code-review-agent/report_template.md`:**
+
+- Changed the `## Detailed Review Comments` example from the free-form
+  em-dash format (`**Line 45-52** — Severity: Major`) to the structured
+  bullet format (`- **Severity**: …`, `- **Comment**: …`, `- **Suggestion**: …`)
+  that the extraction code's primary path already handles via `**Comment**:`.
+
 ## 2026-05-29
 
 ### Updated: fix-verification-agent modernisation
