@@ -15,9 +15,11 @@ def get_failure_analysis_prompt(
     timeout_exceeded: bool,
     stdout: str,
     stderr: str,
+    reproduction_context: str = "",
 ) -> str:
     """Return a formatted failure analysis prompt."""
     template = load_prompt_template("failure_analysis_prompt", _PROMPTS_DIR)
+    context_text = reproduction_context[:1500] if reproduction_context else "Not available."
     return template.format(
         bug_number=bug_number,
         bug_title=bug_title,
@@ -28,4 +30,5 @@ def get_failure_analysis_prompt(
         timeout_exceeded=timeout_exceeded,
         stdout=stdout[-3000:],
         stderr=stderr[-1500:],
+        reproduction_context=context_text,
     )

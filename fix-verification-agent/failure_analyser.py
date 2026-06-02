@@ -6,8 +6,9 @@ the failure as FIX_FAILURE, ENVIRONMENTAL, or INCONCLUSIVE and explain its
 reasoning. Only ENVIRONMENTAL failures trigger a retry.
 """
 from dataclasses import dataclass, field
+from typing import Dict
 
-from agents_lib import create_model_client, format_usage_info
+from agents_lib import create_model_client, format_usage_info, parse_section_markers
 from prompts import get_failure_analysis_prompt
 
 
@@ -17,7 +18,8 @@ class FailureAnalysis:
     cause: str           # "FIX_FAILURE" | "ENVIRONMENTAL" | "INCONCLUSIVE"
     explanation: str     # Plain-text reasoning from the model
     should_retry: bool   # True only for ENVIRONMENTAL failures
-    usage_info: str = field(default="")  # Formatted token usage section for the report
+    usage_info: str = field(default="")       # Formatted token usage section for the report
+    sections: Dict[str, str] = field(default_factory=dict)  # Parsed section markers
 
 
 async def analyse_failure(
@@ -32,6 +34,7 @@ async def analyse_failure(
     patch_description: str,
     config: dict,
     context_section: str = "",
+    reproduction_context: str = "",
 ) -> FailureAnalysis:
     """
     Classify a verification failure using the AI model.
@@ -77,6 +80,7 @@ async def analyse_failure(
         timeout_exceeded=timeout_exceeded,
         stdout=stdout,
         stderr=stderr,
+        reproduction_context=reproduction_context,
     )
 
     if context_section:
@@ -85,7 +89,9 @@ async def analyse_failure(
     try:
         client = create_model_client(config)
         result = await client.query(prompt=prompt)
-        analysis = _parse_analysis(result.text)
+        sections = parse_section_markers(result.text)
+        analysis = _parse_analysis(result.text, sections)
+        analysis.sections = sections
         analysis.usage_info = format_usage_info(
             usage_data=result.usage,
             cost_usd=result.cost_usd,
@@ -102,22 +108,21 @@ async def analyse_failure(
         )
 
 
-def _parse_analysis(response_text: str) -> FailureAnalysis:
-    """Parse the model's classification response."""
-    lines = response_text.strip().splitlines()
-    if not lines:
-        return FailureAnalysis(
-            cause="INCONCLUSIVE",
-            explanation="Empty response from model.",
-            should_retry=False,
-        )
+def _parse_analysis(response_text: str, sections: Dict[str, str] = None) -> FailureAnalysis:
+    """Parse the model's classification response.
 
-    first = lines[0].strip().upper()
-    explanation = "\n".join(lines[1:]).strip()
+    When section markers are present, the `summary` section is searched for
+    the classification keyword.  Falls back to first-line parsing for
+    backward compatibility (e.g. fast-path responses that don't use markers).
+    """
+    sections = sections or {}
+    # Prefer the summary section for classification; fall back to raw first line.
+    search_text = sections.get("summary", response_text).strip().upper()
+    explanation = sections.get("failure_analysis", "\n".join(response_text.strip().splitlines()[1:]).strip())
 
-    if "FIX_FAILURE" in first:
+    if "FIX_FAILURE" in search_text:
         return FailureAnalysis(cause="FIX_FAILURE", explanation=explanation, should_retry=False)
-    if "ENVIRONMENTAL" in first:
+    if "ENVIRONMENTAL" in search_text:
         return FailureAnalysis(cause="ENVIRONMENTAL", explanation=explanation, should_retry=True)
     return FailureAnalysis(cause="INCONCLUSIVE", explanation=explanation, should_retry=False)
 
