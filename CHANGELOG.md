@@ -4,6 +4,67 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-06-02
+
+### Fixed: Gerrit inline comment content and summary
+
+**`agents_lib/agents_lib/forge_feedback.py`:**
+
+- `_extract_comment_text`: fixed fallback that was returning the em-dash
+  severity label (`— Severity: Major`) instead of the actual explanation.
+  Fallback now filters em-dash severity patterns, bare colons (artefact of
+  `**Line N**:` splitting), and severity/suggestion metadata lines; collects
+  all remaining lines (multi-line) rather than returning on the first match.
+
+- `extract_forge_comment`: increased character limit from 7500 → 12000.
+  The `## Detailed Review Comments` section is now stripped from the summary
+  comment (it duplicates the inline comments already posted separately).
+
+**`code-review-agent/report_template.md`:**
+
+- Changed the `## Detailed Review Comments` example from the free-form
+  em-dash format (`**Line 45-52** — Severity: Major`) to the structured
+  bullet format (`- **Severity**: …`, `- **Comment**: …`, `- **Suggestion**: …`)
+  that the extraction code's primary path already handles via `**Comment**:`.
+
+---
+
+## 2026-05-29
+
+### Updated: fix-verification-agent modernisation
+
+**README.md** (new): overview, pipeline position, installation, configuration,
+manual/automated usage modes, systemd setup, output files.
+
+**ReportBuilder integration:**
+- `report_template.md` (new): `{UPPERCASE}` metadata + `{{SECTION:name}}`
+  placeholders for summary, failure_analysis, recommendations
+- `prompts/failure_analysis_prompt.txt`: adds `{reproduction_context}` section
+  (populated from the reproduction agent's `context.md`) and section-marker
+  output instructions so the AI returns structured sections
+- `failure_analyser.py`: `analyse_failure()` accepts `reproduction_context`;
+  calls `parse_section_markers()` on the AI response; stores parsed sections in
+  `FailureAnalysis.sections`; `_parse_analysis()` uses the `summary` section for
+  classification keyword matching (deterministic, not free-text scan)
+- `fix_verification_agent.py`: `_write_report()` rewritten to use `build_report()`
+  + template; ENVIRONMENTAL_ERROR gets an automatic-retry note in recommendations
+
+**New reproduction directory structure (PR 3 compatibility):**
+- `find_reproduction_scripts()` replaces `find_reproduction_script()`: discovers
+  scripts in the new per-bug subdirectory (`bug_XXXXX_<slug>/scripts/*.sh`) via
+  the reproduction tracking file's `bug_directory` field, a glob scan fallback,
+  and finally the legacy flat layout; reads `context.md` if present
+- `run_verification()` now accepts `repro_scripts: list` and
+  `reproduction_context: str`; executes multiple scripts sequentially per attempt
+- `reproduction_tracking_file` added to config defaults and path expansion keys
+
+**git_info.py alignment in `patch_applicator.py`:**
+- `_current_branch()` uses `get_branch_name()` from `agents_lib`
+- `_apply_branch()` uses `git_stash_save()` and `checkout_ref()` from `agents_lib`
+- `revert_patch()` uses `checkout_ref()` and `git_stash_pop()` from `agents_lib`
+
+---
+
 ## 2026-05-28 (PR 3)
 
 ### Added: ReportBuilder framework + applied to bug reproduction and bug triage agents

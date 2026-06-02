@@ -53,14 +53,24 @@ def _has_blocking_issues(review_content: str) -> bool:
 
 def _extract_comment_text(raw: str) -> str:
     """Pull the human-readable comment from a line-reference body block."""
+    # Primary: structured **Comment**: marker
     m = re.search(r'\*\*Comment\*\*:\s*(.+?)(?=\n-\s+\*\*|\Z)', raw, re.DOTALL)
     if m:
         return sanitize_for_forge(m.group(1).strip())
+    # Fallback: collect all non-metadata lines (handles free-form formats)
+    lines = []
     for line in raw.splitlines():
-        line = line.strip().lstrip('- ')
-        if line and not line.startswith('**Severity') and not line.startswith('**Suggestion'):
-            return sanitize_for_forge(line)
-    return ""
+        stripped = line.strip().lstrip('- ').lstrip(':').strip()
+        if not stripped:
+            continue
+        # Skip severity/suggestion metadata (with or without ** markers)
+        if re.match(r'(\*\*)?(?:Severity|Suggestion)(\*\*)?\s*:', stripped, re.IGNORECASE):
+            continue
+        # Skip em-dash severity patterns like "— Severity: Major"
+        if re.match(r'^[—–-]+\s*(?:Severity|Suggestion)', stripped, re.IGNORECASE):
+            continue
+        lines.append(stripped)
+    return sanitize_for_forge('\n'.join(lines).strip())
 
 
 # ── public API ────────────────────────────────────────────────────────────────
@@ -69,7 +79,9 @@ def extract_forge_comment(review_content: str, model_name: str) -> str:
     """Build a forge comment from a code review markdown report.
 
     Extracts the review summary, test results, key findings, and verdict.
-    Caps at 7500 chars. Returns a formatted comment with AI attribution.
+    Caps at 12000 chars. Returns a formatted comment with AI attribution.
+    The Detailed Review Comments section is excluded — those are posted as
+    inline comments separately.
 
     Args:
         review_content: Full text of the generated review markdown.
@@ -78,12 +90,19 @@ def extract_forge_comment(review_content: str, model_name: str) -> str:
     Returns:
         Formatted comment string including AI attribution header/footer.
     """
-    MAX_CHARS = 7500
+    MAX_CHARS = 12000
 
     clean = re.split(r'\n---\n\n## Token Usage', review_content, maxsplit=1)[0].strip()
     clean = re.split(r'\n## DevStack Integration Testing\b', clean, maxsplit=1)[0].strip()
     clean = re.split(r'\n## Test Environment\b', clean, maxsplit=1)[0].strip()
     clean = re.split(r'\n## Tests Executed\b', clean, maxsplit=1)[0].strip()
+    # Remove Detailed Review Comments — posted as inline comments instead
+    clean = re.sub(
+        r'\n## Detailed Review Comments\b.*?(?=\n## |\Z)',
+        '',
+        clean,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
 
     body = _first_n_chars(clean, MAX_CHARS)
     body = sanitize_for_forge(body)
