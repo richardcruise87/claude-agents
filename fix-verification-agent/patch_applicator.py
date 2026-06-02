@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from agents_lib import get_branch_name, checkout_ref, git_stash_save, git_stash_pop
+
 
 class PatchSourceType(Enum):
     FILE = "file"          # Local unified diff / git diff file
@@ -57,11 +59,12 @@ def _run(cmd: list, cwd: Path, timeout: int = 60) -> tuple[int, str, str]:
 
 def _current_branch(repo_path: Path) -> str:
     """Return the current git branch name, or HEAD sha if detached."""
-    rc, out, _ = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], repo_path)
-    if rc != 0 or out == "HEAD":
-        rc2, sha, _ = _run(["git", "rev-parse", "HEAD"], repo_path)
-        return sha if rc2 == 0 else "unknown"
-    return out
+    name = get_branch_name(repo_path)
+    if name and name != "HEAD":
+        return name
+    # Detached HEAD — return the commit SHA
+    rc, sha, _ = _run(["git", "rev-parse", "HEAD"], repo_path)
+    return sha if rc == 0 else "unknown"
 
 
 def _apply_file(source: PatchSource, repo_path: Path, original: str) -> ApplyResult:
@@ -78,12 +81,12 @@ def _apply_file(source: PatchSource, repo_path: Path, original: str) -> ApplyRes
 
 
 def _apply_branch(source: PatchSource, repo_path: Path, original: str) -> ApplyResult:
-    _run(["git", "stash"], repo_path)
-    rc, _, err = _run(["git", "checkout", source.value], repo_path)
-    if rc != 0:
-        _run(["git", "stash", "pop"], repo_path)
+    git_stash_save(repo_path)
+    ok, msg = checkout_ref(repo_path, source.value)
+    if not ok:
+        git_stash_pop(repo_path)
         return ApplyResult(success=False,
-                           error=f"git checkout {source.value} failed: {err}",
+                           error=f"git checkout {source.value} failed: {msg}",
                            original_branch=original)
     return ApplyResult(success=True, original_branch=original)
 
@@ -154,13 +157,10 @@ def revert_patch(source: PatchSource, repo_path: Path, apply_result: ApplyResult
                   str(Path(source.value).expanduser())], repo_path)
 
         elif source.source_type in (PatchSourceType.BRANCH, PatchSourceType.GERRIT):
-            original = apply_result.original_branch
-            if original and original != "unknown":
-                _run(["git", "checkout", original], repo_path)
-            else:
-                _run(["git", "checkout", "main"], repo_path)
+            original = apply_result.original_branch or "main"
+            checkout_ref(repo_path, original)
             # Pop any stash saved during apply
-            _run(["git", "stash", "pop"], repo_path)
+            git_stash_pop(repo_path)
 
     except Exception as exc:  # pylint: disable=broad-except
         print(f"⚠️  Warning: patch revert failed: {exc}")

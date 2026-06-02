@@ -27,8 +27,6 @@ All notable changes to the claude-agents project are documented here.
   bullet format (`- **Severity**: …`, `- **Comment**: …`, `- **Suggestion**: …`)
   that the extraction code's primary path already handles via `**Comment**:`.
 
----
-
 ## 2026-05-29
 
 ### Updated: fix-verification-agent modernisation
@@ -62,8 +60,6 @@ manual/automated usage modes, systemd setup, output files.
 - `_current_branch()` uses `get_branch_name()` from `agents_lib`
 - `_apply_branch()` uses `git_stash_save()` and `checkout_ref()` from `agents_lib`
 - `revert_patch()` uses `checkout_ref()` and `git_stash_pop()` from `agents_lib`
-
----
 
 ## 2026-05-28 (PR 3)
 
