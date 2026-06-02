@@ -203,8 +203,9 @@ def find_reproduction_scripts(
                     context_text = context_path.read_text(encoding="utf-8", errors="replace")
                 if scripts:
                     return scripts, context_text
-        except Exception:  # pylint: disable=broad-except
-            pass  # Fall through to glob scan
+        except Exception as e:  # pylint: disable=broad-except
+            print(f"⚠️  Could not read tracking file: {e}")
+            # Fall through to glob scan
 
     # --- 2. Glob scan for per-bug subdirectory ---
     for bug_dir in sorted(repro_dir.glob(f"bug_{bug_number}_*"), reverse=True):
@@ -311,8 +312,11 @@ async def run_verification(
                 result = execute_script(script_content, timeout=script_timeout)
                 combined_stdout += result.stdout
                 combined_stderr += result.stderr
-                if result.exit_code not in (0, 1) or result.timeout_exceeded:
-                    break  # Stop on unexpected failure or timeout
+                is_last = script_idx == len(repro_scripts)
+                if result.timeout_exceeded or result.exit_code not in (0, 1):
+                    break  # Stop on timeout or unexpected exit code
+                if result.exit_code == 1 and not is_last:
+                    break  # Non-final script failed; exit 1 is only valid for the final script
 
             # Merge combined output into the result object for analysis.
             result.stdout = combined_stdout
@@ -477,8 +481,6 @@ def _write_report(
     template = template.replace("{ATTEMPTS}", str(len(attempts_data)))
     template = template.replace("{DATE}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     template = template.replace("{ATTEMPTS_BLOCK}", _build_attempts_block(attempts_data, error))
-    template = template.replace("{USAGE_INFO}", "")  # appended separately after AI call
-
     # Collect AI-generated sections from the last analysis that has section markers
     ai_sections = {}
     for analysis in reversed(analyses):

@@ -31,6 +31,3 @@
 
 {{SECTION:recommendations}}
 
----
-
-{USAGE_INFO}
