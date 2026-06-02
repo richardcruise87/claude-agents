@@ -70,7 +70,7 @@ def _extract_comment_text(raw: str) -> str:
         if re.match(r'^[—–-]+\s*(?:Severity|Suggestion)', stripped, re.IGNORECASE):
             continue
         lines.append(stripped)
-    return sanitize_for_forge('\n'.join(lines).strip())
+    return sanitize_for_forge('\n'.join(lines).strip()[:2000])
 
 
 # ── public API ────────────────────────────────────────────────────────────────

@@ -142,7 +142,7 @@ class TestExtractForgeComment:
     def test_caps_at_max_chars(self):
         long_review = "x" * 20_000
         result = extract_forge_comment(long_review, "model")
-        assert len(result) < 16_000
+        assert len(result) < 13_500
 
     def test_empty_input_returns_attribution_only(self):
         result = extract_forge_comment("", "model")
