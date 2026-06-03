@@ -21,6 +21,11 @@ class ReviewInfo:
     review_timestamp: str
     already_tested: bool = False
 
+    @property
+    def git_remote_url(self) -> str:
+        """Git remote URL for fetch operations (no /c/ prefix, no change number)."""
+        return f"https://review.opendev.org/{self.repo_name}"
+
 
 def parse_review_file(review_file: Path) -> Optional[ReviewInfo]:
     """

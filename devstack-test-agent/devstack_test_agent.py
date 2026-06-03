@@ -218,7 +218,7 @@ async def test_change_in_devstack(
             # Abort if all attempts fail — do not proceed to spend API tokens.
             print(f"📡 Fetching patchset ref {patchset_ref}...")
             _fetch_ok, _fetch_msg, _head_sha = git_fetch_and_checkout_ref(
-                repo_path, review_info.gerrit_url, patchset_ref
+                repo_path, review_info.git_remote_url, patchset_ref
             )
             if _fetch_ok:
                 print(f"   ✅ {_fetch_msg}")
