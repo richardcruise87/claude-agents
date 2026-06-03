@@ -41,11 +41,12 @@ from agents_lib import (
     post_report_to_launchpad,
     find_latest_report,
     check_devstack_health,
+    build_report,
+    ReportSection,
 )
 from failure_analyser import (
     analyse_failure,
     format_analysis_section,
-    format_verification_result,
 )
 from patch_applicator import (
     PatchSource,
@@ -61,6 +62,15 @@ from verification_tracker import (
 )
 
 
+_TEMPLATE_PATH = Path(__file__).parent / "report_template.md"
+
+_VERIFICATION_SECTION_DEFS = [
+    ReportSection("summary"),
+    ReportSection("failure_analysis", default="Agent provided no data"),
+    ReportSection("recommendations", default="Agent provided no data"),
+]
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -72,6 +82,7 @@ _DEFAULTS = {
     "model_provider": "anthropic",
     "fix_proposals_dir": "~/octavia_fix_proposals",
     "reproduction_reports_dir": "~/octavia_bug_reproductions",
+    "reproduction_tracking_file": "~/.octavia_bug_reproductions.json",
     "verifications_output_dir": "~/octavia_fix_verifications",
     "verification_tracking_file": "~/.octavia_fix_verifications.json",
     "devstack_path": "/opt/stack",
@@ -99,6 +110,7 @@ _ENV_OVERRIDES = {
 _PATH_KEYS = [
     "fix_proposals_dir",
     "reproduction_reports_dir",
+    "reproduction_tracking_file",
     "verifications_output_dir",
     "verification_tracking_file",
     "devstack_path",
@@ -151,11 +163,67 @@ def extract_proposal_timestamp(proposal_file: Path) -> str:
     return datetime.now().isoformat()
 
 
-def find_reproduction_script(bug_number: str, repro_dir: Path) -> Path | None:
-    """Return the most recent reproduction script for a bug."""
-    script_dir = repro_dir / "scripts"
-    script = script_dir / f"bug_{bug_number}_reproduction.sh"
-    return script if script.exists() else None
+def find_reproduction_scripts(
+    bug_number: str,
+    repro_dir: Path,
+    repro_tracking_file: Path | None = None,
+) -> tuple[list, str]:
+    """Return (sorted_script_paths, context_text) for a bug's reproduction.
+
+    Supports both the new per-bug subdirectory layout (PR 3):
+        repro_dir/bug_XXXXX_<slug>/scripts/*.sh
+        repro_dir/bug_XXXXX_<slug>/context.md
+    and the legacy flat layout:
+        repro_dir/scripts/bug_XXXXX_reproduction.sh
+
+    Resolution order:
+      1. Reproduction tracking file (`bug_directory` field)
+      2. Glob scan of repro_dir for bug_XXXXX_*/scripts/
+      3. Legacy flat scripts/ directory
+
+    Returns an empty list if no scripts are found.
+    """
+    context_text = ""
+    scripts: list = []
+
+    # --- 1. Check reproduction tracking file ---
+    if repro_tracking_file and repro_tracking_file.exists():
+        try:
+            import json as _json  # pylint: disable=import-outside-toplevel
+            history = _json.loads(repro_tracking_file.read_text(encoding="utf-8"))
+            entry = history.get(f"bug_{bug_number}", {})
+            bug_dir_str = entry.get("bug_directory", "")
+            if bug_dir_str:
+                bug_dir = Path(bug_dir_str)
+                scripts_dir = bug_dir / "scripts"
+                if scripts_dir.exists():
+                    scripts = sorted(scripts_dir.glob("*.sh"))
+                context_path = bug_dir / "context.md"
+                if context_path.exists():
+                    context_text = context_path.read_text(encoding="utf-8", errors="replace")
+                if scripts:
+                    return scripts, context_text
+        except Exception as e:  # pylint: disable=broad-except
+            print(f"⚠️  Could not read tracking file: {e}")
+            # Fall through to glob scan
+
+    # --- 2. Glob scan for per-bug subdirectory ---
+    for bug_dir in sorted(repro_dir.glob(f"bug_{bug_number}_*"), reverse=True):
+        scripts_dir = bug_dir / "scripts"
+        if scripts_dir.exists():
+            found = sorted(scripts_dir.glob("*.sh"))
+            if found:
+                context_path = bug_dir / "context.md"
+                if context_path.exists():
+                    context_text = context_path.read_text(encoding="utf-8", errors="replace")
+                return found, context_text
+
+    # --- 3. Legacy flat layout ---
+    legacy = repro_dir / "scripts" / f"bug_{bug_number}_reproduction.sh"
+    if legacy.exists():
+        return [legacy], context_text
+
+    return [], context_text
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +235,11 @@ async def run_verification(
     bug_title: str,
     root_cause: str,
     patch_source: PatchSource,
-    repro_script: Path,
+    repro_scripts: list,
     output_dir: Path,
     sequence: int,
     config: dict,
+    reproduction_context: str = "",
 ) -> tuple[str, Path, list]:
     """
     Apply patch, run reproduction script, analyse failures, retry if environmental.
@@ -197,7 +266,7 @@ async def run_verification(
     script_timeout = int(ver_cfg.get("script_timeout", 600))
     retry_delay = int(ver_cfg.get("retry_delay_seconds", 60))
 
-    script_content = repro_script.read_text(encoding="utf-8")
+    # Read all scripts; they will be executed sequentially per attempt.
 
     report_file = create_verification_filename(output_dir, bug_number, bug_title, sequence)
 
@@ -231,7 +300,27 @@ async def run_verification(
             print(f"\n🧪 Verification attempt {attempt}/{max_attempts}")
             print(f"   Running reproduction script (timeout: {script_timeout}s)...")
 
-            result = execute_script(script_content, timeout=script_timeout)
+            # Execute scripts sequentially; aggregate stdout/stderr.
+            combined_stdout = ""
+            combined_stderr = ""
+            result = None
+            for script_idx, script_path in enumerate(repro_scripts, 1):
+                script_label = script_path.name
+                if len(repro_scripts) > 1:
+                    print(f"   Running {script_label} ({script_idx}/{len(repro_scripts)})...")
+                script_content = script_path.read_text(encoding="utf-8")
+                result = execute_script(script_content, timeout=script_timeout)
+                combined_stdout += result.stdout
+                combined_stderr += result.stderr
+                is_last = script_idx == len(repro_scripts)
+                if result.timeout_exceeded or result.exit_code not in (0, 1):
+                    break  # Stop on timeout or unexpected exit code
+                if result.exit_code == 1 and not is_last:
+                    break  # Non-final script failed; exit 1 is only valid for the final script
+
+            # Merge combined output into the result object for analysis.
+            result.stdout = combined_stdout
+            result.stderr = combined_stderr
 
             print(f"   Exit code: {result.exit_code} | Time: {result.execution_time:.1f}s")
 
@@ -262,6 +351,7 @@ async def run_verification(
                 patch_description=patch_source.description,
                 config=config,
                 context_section=_ctx,
+                reproduction_context=reproduction_context,
             )
 
             print(f"   🔍 Cause: {analysis.cause}")
@@ -324,6 +414,35 @@ async def run_verification(
     return final_status, report_file, analyses
 
 
+def _build_attempts_block(attempts_data: list, error: str = "") -> str:
+    """Build the Python-generated per-attempt detail block."""
+    lines = []
+    if error:
+        lines += ["### Patch Error", "", f"Could not apply patch: {error}", ""]
+    for i, (result, analysis) in enumerate(attempts_data, 1):
+        lines += [f"### Attempt {i}", ""]
+        if result:
+            lines += [
+                f"**Exit code:** {result.exit_code}",
+                f"**Execution time:** {result.execution_time:.1f}s",
+                f"**Timeout:** {result.timeout_exceeded}",
+                "",
+            ]
+            if result.stdout.strip():
+                lines += ["**Output:**", "```", result.stdout[-3000:], "```", ""]
+            if result.stderr.strip():
+                lines += ["**Stderr:**", "```", result.stderr[-1000:], "```", ""]
+        if analysis:
+            next_decision = (
+                "STOP (fix failure)" if analysis.cause == "FIX_FAILURE"
+                else "RETRY (environmental)" if analysis.should_retry
+                else "STOP (inconclusive)"
+            )
+            lines.append(format_analysis_section(i, analysis, next_decision))
+        lines += ["---", ""]
+    return "\n".join(lines) if lines else "_No attempts recorded._"
+
+
 def _write_report(
     report_file: Path,
     bug_number: str,
@@ -334,62 +453,53 @@ def _write_report(
     analyses: list,
     error: str = "",
 ) -> None:
-    """Write the verification report markdown file."""
-    lines = [
-        "# Fix Verification Report",
-        "",
-        f"**Bug ID:** {bug_number}",
-        f"**Title:** {bug_title}",
-    ]
-
+    """Write the verification report markdown file using the ReportBuilder framework."""
     status_icons = {
         "RESOLVED": "✅ RESOLVED",
         "NOT_RESOLVED": "❌ NOT_RESOLVED",
         "ENVIRONMENTAL_ERROR": "⚠️ ENVIRONMENTAL_ERROR",
         "PATCH_ERROR": "🔴 PATCH_ERROR",
     }
-    lines.append(f"**Status:** {status_icons.get(status, status)}")
-    lines.append(f"**Patch:** {patch_source.description}")
-    lines.append(f"**Attempts:** {len(attempts_data)}")
-    lines.append(f"**Verification Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append("")
 
-    if error:
-        lines += ["## Error", "", f"Could not apply patch: {error}", ""]
+    if _TEMPLATE_PATH.exists():
+        template = _TEMPLATE_PATH.read_text(encoding="utf-8")
+    else:
+        template = (
+            "# Fix Verification Report\n\n"
+            "**Bug ID:** {BUG_NUMBER}\n**Status:** {STATUS_LINE}\n\n"
+            + "\n\n".join(
+                f"## {s.name.replace('_', ' ').title()}\n\n{{{{SECTION:{s.name}}}}}"
+                for s in _VERIFICATION_SECTION_DEFS
+            )
+        )
 
-    lines += [
-        format_verification_result(status, len(attempts_data),
-                                   patch_source.description, analyses),
-    ]
+    # Fill {UPPERCASE} metadata placeholders
+    template = template.replace("{BUG_NUMBER}", bug_number)
+    template = template.replace("{BUG_TITLE}", bug_title)
+    template = template.replace("{STATUS_LINE}", status_icons.get(status, status))
+    template = template.replace("{PATCH_SOURCE}", patch_source.description)
+    template = template.replace("{ATTEMPTS}", str(len(attempts_data)))
+    template = template.replace("{DATE}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    template = template.replace("{ATTEMPTS_BLOCK}", _build_attempts_block(attempts_data, error))
+    # Collect AI-generated sections from the last analysis that has section markers
+    ai_sections = {}
+    for analysis in reversed(analyses):
+        if analysis and analysis.sections:
+            ai_sections = analysis.sections
+            break
 
-    if attempts_data:
-        lines += ["## Attempt Details", ""]
-        for i, (result, analysis) in enumerate(attempts_data, 1):
-            lines += [f"### Attempt {i}", ""]
-            if result:
-                lines += [
-                    f"**Exit code:** {result.exit_code}",
-                    f"**Execution time:** {result.execution_time:.1f}s",
-                    f"**Timeout:** {result.timeout_exceeded}",
-                    "",
-                ]
-                if result.stdout.strip():
-                    lines += ["**Output:**", "```", result.stdout[-3000:], "```", ""]
-                if result.stderr.strip():
-                    lines += ["**Stderr:**", "```", result.stderr[-1000:], "```", ""]
-            if analysis:
-                next_decision = (
-                    "STOP (fix failure)" if analysis.cause == "FIX_FAILURE"
-                    else "RETRY (environmental)" if analysis.should_retry
-                    else "STOP (inconclusive)"
-                )
-                lines.append(
-                    format_analysis_section(i, analysis, next_decision)
-                )
-            lines += ["---", ""]
+    # Add retry note to recommendations for ENVIRONMENTAL_ERROR
+    if status == "ENVIRONMENTAL_ERROR" and "recommendations" not in ai_sections:
+        ai_sections["recommendations"] = (
+            "Verification will be retried automatically on the next scheduled run. "
+            "Check DevStack service health before then: "
+            "`systemctl --user status octavia-fix-verification.service`"
+        )
 
-    lines += ["", "*Generated by Octavia Fix Verification Agent*", ""]
-    report_file.write_text("\n".join(lines), encoding="utf-8")
+    report_file.write_text(
+        build_report(template, ai_sections, _VERIFICATION_SECTION_DEFS),
+        encoding="utf-8",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -516,9 +626,12 @@ async def run_automated(config: dict) -> None:
         if not should:
             continue
 
-        repro_script = find_reproduction_script(bug_number, repro_dir)
-        if not repro_script:
-            print(f"⏭️  Bug #{bug_number}: no reproduction script found, skipping")
+        repro_tracking = Path(
+            config.get("reproduction_tracking_file", "~/.octavia_bug_reproductions.json")
+        ).expanduser()
+        repro_scripts, repro_context = find_reproduction_scripts(bug_number, repro_dir, repro_tracking)
+        if not repro_scripts:
+            print(f"⏭️  Bug #{bug_number}: no reproduction scripts found, skipping")
             continue
 
         # Extract patch from proposal
@@ -548,16 +661,18 @@ async def run_automated(config: dict) -> None:
         print(f"\n{'='*80}")
         print(f"Verifying fix for Bug #{bug_number}: {bug_title[:60]}")
         print(f"{'='*80}")
+        print(f"   Scripts: {[s.name for s in repro_scripts]}")
 
         status, report_file, analyses = await run_verification(
             bug_number=bug_number,
             bug_title=bug_title,
             root_cause=root_cause,
             patch_source=patch_source,
-            repro_script=repro_script,
+            repro_scripts=repro_scripts,
             output_dir=output_dir,
             sequence=sequence,
             config=config,
+            reproduction_context=repro_context,
         )
 
         # Clean up temp patch file
@@ -650,11 +765,15 @@ async def run_manual(args: argparse.Namespace, config: dict) -> None:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    repro_script = find_reproduction_script(bug_number, repro_dir)
-    if not repro_script:
-        print(f"❌ No reproduction script found for bug #{bug_number}")
-        print(f"   Expected: {repro_dir}/scripts/bug_{bug_number}_reproduction.sh")
+    repro_tracking = Path(
+        config.get("reproduction_tracking_file", "~/.octavia_bug_reproductions.json")
+    ).expanduser()
+    repro_scripts, repro_context = find_reproduction_scripts(bug_number, repro_dir, repro_tracking)
+    if not repro_scripts:
+        print(f"❌ No reproduction scripts found for bug #{bug_number}")
+        print(f"   Looked in: {repro_dir}/bug_{bug_number}_*/scripts/ and {repro_dir}/scripts/")
         sys.exit(1)
+    print(f"   Scripts: {[s.name for s in repro_scripts]}")
 
     # Build patch source
     if args.already_applied:
@@ -700,10 +819,11 @@ async def run_manual(args: argparse.Namespace, config: dict) -> None:
         bug_title=bug_title,
         root_cause="",
         patch_source=patch_source,
-        repro_script=repro_script,
+        repro_scripts=repro_scripts,
         output_dir=output_dir,
         sequence=sequence,
         config=config,
+        reproduction_context=repro_context,
     )
 
     record_verification(
