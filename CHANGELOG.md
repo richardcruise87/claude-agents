@@ -4,6 +4,18 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-06-03
+
+### Fixed: False-positive duplicate Change-Id in code review prompts
+
+**`agents_lib/agents_lib/git_info.py`:**
+
+- `format_commit_info`: stripped the `Change-Id:` trailer from the body text
+  before appending it, since it is already shown as a separate structured field
+  below. Previously the Change-Id appeared twice in the formatted commit block
+  sent to the AI, causing the agent to (correctly but falsely) flag every review
+  with a "duplicate Change-Id" finding.
+
 ## 2026-06-02
 
 ### Fixed: Gerrit inline comment content and summary
