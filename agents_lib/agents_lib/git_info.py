@@ -152,7 +152,8 @@ def format_commit_info(info: Dict) -> str:
     ]
     if info["body"]:
         # Strip Change-Id trailer — it's shown separately below so don't duplicate it
-        body_display = re.sub(r"\nChange-Id:\s*I[0-9a-f]+", "", info["body"]).strip()
+        body_display = re.sub(r"^Change-Id:\s*I[0-9a-f]+\n?", "", info["body"],
+                                  flags=re.MULTILINE).strip()
         if body_display:
             lines.append("")
             lines.append(body_display)
