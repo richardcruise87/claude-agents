@@ -747,6 +747,12 @@ Examples:
         help='Skip the review; find the latest saved review file and post it to the forge.'
     )
 
+    parser.add_argument(
+        '--no-post',
+        action='store_true',
+        help='Run the review but skip posting feedback to the forge.'
+    )
+
     args = parser.parse_args()
 
     # Determine which patchset to use (positional arg takes precedence)
@@ -755,6 +761,10 @@ Examples:
     if args.post_only:
         ok = _post_only(args.change, patchset)
         sys.exit(0 if ok else 1)
+
+    if args.no_post:
+        CONFIG["feedback_enabled"] = False
+        print("📵 Forge posting disabled (--no-post)\n")
 
     if patchset:
         print(f"📌 Reviewing patchset {patchset}\n")
