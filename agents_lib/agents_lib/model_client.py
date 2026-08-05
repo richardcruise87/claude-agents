@@ -51,12 +51,14 @@ except ImportError:
     except ImportError:
         _LANGFUSE_AVAILABLE = False
 
+
 def _noop_observe(*args, **kwargs):
     def decorator(fn):
         return fn
     if len(args) == 1 and callable(args[0]) and not kwargs:
         return args[0]
     return decorator
+
 
 observe = _langfuse_observe if _LANGFUSE_AVAILABLE else _noop_observe
 
