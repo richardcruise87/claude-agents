@@ -25,6 +25,10 @@ from agents_lib import (
     checkout_main_branch,
     notify_report,
     load_notifications_config,
+    HelpOnErrorParser,
+    add_bug_args,
+    resolve_bug_target,
+    confirm_reprocess,
 )
 from triage_parser import parse_triage_file, get_triage_timestamp
 from script_generator import (
@@ -465,7 +469,56 @@ async def main():
 
 def cli_main():
     """CLI entry point for package installation."""
-    asyncio.run(main())
+    import argparse  # noqa: PLC0415 — used only for formatter_class reference
+
+    config = load_config()
+
+    parser = HelpOnErrorParser(
+        description='Octavia Bug Reproduction Agent',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Process the next unprocessed triage report (monitoring mode)
+  %(prog)s
+
+  # Reproduce a specific bug by number
+  %(prog)s --bug 2150752
+
+  # Reproduce a specific bug by Launchpad URL
+  %(prog)s --url https://bugs.launchpad.net/octavia/+bug/2150752
+
+  # Re-reproduce without the tracking-file confirmation prompt
+  %(prog)s --bug 2150752 --skip-tracking
+
+  # Save reproduction report to a custom directory
+  %(prog)s --bug 2150752 --output-dir /tmp/reproductions
+        """,
+    )
+    add_bug_args(parser, config)
+    args = parser.parse_args()
+
+    bug_id, _output_dir, skip_tracking = resolve_bug_target(args, config)
+
+    if bug_id:
+        repro_dir = Path(config["triage_reports_dir"])
+        tracking_file = Path(config["reproduction_tracking_file"])
+        history = load_reproduction_history(tracking_file)
+        _should, _ = should_reproduce_bug(bug_id, None, history)
+        if not _should and not skip_tracking:
+            if not confirm_reprocess("bug", bug_id):
+                return
+        triage_files = sorted(
+            repro_dir.glob(f"bug_{bug_id}_*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not triage_files:
+            print(f"❌ No triage report found for bug #{bug_id} in {repro_dir}")
+            print("   Run octavia-triage-bugs first to generate a triage report.")
+            return
+        asyncio.run(process_triage(triage_files[0]))
+    else:
+        asyncio.run(main())
 
 
 if __name__ == "__main__":

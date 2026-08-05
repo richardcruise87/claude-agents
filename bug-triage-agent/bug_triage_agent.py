@@ -32,6 +32,11 @@ from agents_lib import (
     parse_section_markers,
     build_report,
     ReportSection,
+    HelpOnErrorParser,
+    add_bug_args,
+    add_post_args,
+    resolve_bug_target,
+    confirm_reprocess,
 )
 from bug_tracker import (
     load_triage_history,
@@ -532,6 +537,44 @@ async def monitor_and_triage(project: str, max_bugs: int = 5):
         print(f"⏭️  Skipped {skipped_count} bugs created before cutoff date")
 
 
+async def triage_bug_by_id(bug_id: str, output_dir: Path):
+    """Fetch a single bug from Launchpad by number and triage it immediately."""
+    output_dir.mkdir(exist_ok=True, parents=True)
+    print(f"🔍 Fetching bug #{bug_id} from Launchpad...")
+    api_url = f"{CONFIG['launchpad_api_url']}/bugs/{bug_id}"
+    try:
+        import httpx  # noqa: PLC0415
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(api_url)
+            resp.raise_for_status()
+            bug_data = resp.json()
+            task_resp = await client.get(f"{api_url}/bug_tasks")
+            task_resp.raise_for_status()
+            tasks = task_resp.json().get("entries", [])
+            task = tasks[0] if tasks else {}
+            bug_info = {
+                "number": bug_id,
+                "title": bug_data.get("title", f"Bug #{bug_id}"),
+                "description": bug_data.get("description", ""),
+                "status": task.get("status", "Unknown"),
+                "importance": task.get("importance", "Undecided"),
+                "date_created": bug_data.get("date_created", ""),
+                "date_last_updated": bug_data.get("date_last_updated", ""),
+                "tags": bug_data.get("tags", []),
+                "web_link": f"https://bugs.launchpad.net/bugs/{bug_id}",
+            }
+    except Exception as exc:
+        print(f"❌ Could not fetch bug #{bug_id} from Launchpad: {exc}")
+        return
+
+    tracking_file = Path(CONFIG['triage_tracking_file'])
+    history = load_triage_history(tracking_file)
+    _, sequence = should_triage_bug(bug_id, bug_info.get("date_last_updated"), history)
+
+    CONFIG["triages_output_dir"] = str(output_dir)
+    await triage_bug(bug_info, sequence, None, None)
+
+
 async def main_single_bug(bug_data_file: str):
     """
     Main entry point for single-bug triage mode (called from subprocess).
@@ -589,37 +632,78 @@ async def main():
 
 def cli_main():
     """Main entry point for command-line usage."""
-    import argparse
+    import argparse  # noqa: PLC0415
+    parser = HelpOnErrorParser(
+        description='Octavia Bug Triage Agent',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Triage the next untriaged bug (monitoring mode)
+  %(prog)s
 
-    parser = argparse.ArgumentParser(description='Octavia Bug Triage Agent')
-    parser.add_argument('--single-bug', metavar='BUG_DATA_FILE',
-                        help='Triage a single bug (used internally for subprocess mode)')
-    parser.add_argument('--bug', metavar='N', type=int,
-                        help='Bug number for --post-only mode')
-    parser.add_argument('--post-only', action='store_true',
-                        help='Skip triage; find the latest saved report for --bug N and post it to Launchpad.')
+  # Triage a specific bug by number
+  %(prog)s --bug 2150752
+
+  # Triage a specific bug by URL
+  %(prog)s --url https://bugs.launchpad.net/octavia/+bug/2150752
+
+  # Re-triage without the tracking-file prompt
+  %(prog)s --bug 2150752 --skip-tracking
+
+  # Save report to a custom directory
+  %(prog)s --bug 2150752 --output-dir /tmp/triages
+
+  # Post the latest saved report to Launchpad (no re-triage)
+  %(prog)s --bug 2150752 --post-only
+
+  # Triage without posting to Launchpad
+  %(prog)s --bug 2150752 --no-post
+
+  # Internal use: triage from a pre-fetched JSON data file (subprocess mode)
+  %(prog)s --single-bug /tmp/bug_data.json
+        """,
+    )
+    add_bug_args(parser, CONFIG)
+    add_post_args(parser)
+    parser.add_argument(
+        '--single-bug', metavar='BUG_DATA_FILE',
+        help='Triage a single bug from a JSON data file (internal subprocess mode).',
+    )
     args = parser.parse_args()
 
+    if args.single_bug:
+        success = asyncio.run(main_single_bug(args.single_bug))
+        sys.exit(0 if success else 1)
+
+    bug_id, output_dir, skip_tracking = resolve_bug_target(args, CONFIG)
+
+    if args.no_post:
+        CONFIG["feedback_enabled"] = False
+        print("📵 External posting disabled (--no-post)\n")
+
     if args.post_only:
-        if not args.bug:
-            print("❌ --post-only requires --bug N", file=sys.stderr)
+        if not bug_id:
+            print("❌ --post-only requires --bug or --url", file=sys.stderr)
             sys.exit(1)
-        bug_id = str(args.bug)
-        output_dir = Path(CONFIG["triages_output_dir"])
-        report = find_latest_report(output_dir, f"bug_{bug_id}_*.md")
+        report_dir = output_dir if args.output_dir else Path(CONFIG["triages_output_dir"])
+        report = find_latest_report(report_dir, f"bug_{bug_id}_*.md")
         if not report:
-            print(f"❌ No triage report found for bug {bug_id} in {output_dir}")
+            print(f"❌ No triage report found for bug {bug_id} in {report_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
         subject = "AI Triage Report (automated, may contain errors)"
         ok = post_report_to_launchpad(bug_id, subject, report, CONFIG, max_chars=5000)
         sys.exit(0 if ok else 1)
-    elif args.single_bug:
-        # Single-bug mode (called from subprocess)
-        success = asyncio.run(main_single_bug(args.single_bug))
-        sys.exit(0 if success else 1)
+
+    if bug_id:
+        tracking_file = Path(CONFIG['triage_tracking_file'])
+        history = load_triage_history(tracking_file)
+        _, sequence = should_triage_bug(bug_id, None, history)
+        if sequence > 1 and not skip_tracking:
+            if not confirm_reprocess("bug", bug_id):
+                sys.exit(0)
+        asyncio.run(triage_bug_by_id(bug_id, output_dir))
     else:
-        # Normal mode
         asyncio.run(main())
 
 

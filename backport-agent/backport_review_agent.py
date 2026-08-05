@@ -44,6 +44,9 @@ from agents_lib import (
     load_previous_review_context,
     notify_report,
     load_notifications_config,
+    HelpOnErrorParser,
+    add_change_args,
+    resolve_change_target,
 )
 
 from prompts import get_backport_review_prompt
@@ -353,10 +356,30 @@ async def main(change_url: Optional[str] = None) -> None:
 
 
 def cli_main() -> None:
-    parser = argparse.ArgumentParser(description="Octavia Backport Review Agent")
-    parser.add_argument("change", nargs="?", help="Change number or URL to review directly")
+    config = load_config()
+    parser = HelpOnErrorParser(
+        description="Octavia Backport Review Agent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Scan all configured repos for open backport changes (monitoring mode)
+  %(prog)s
+
+  # Review a specific backport change by number
+  %(prog)s --change 923456
+
+  # Review a specific backport change by Gerrit URL
+  %(prog)s --url https://review.opendev.org/c/openstack/octavia/+/923456
+
+  # Save review to a custom directory
+  %(prog)s --change 923456 --output-dir /tmp/backport-reviews
+        """,
+    )
+    add_change_args(parser, config)
     args = parser.parse_args()
-    asyncio.run(main(change_url=args.change))
+
+    change_ref, _patchset, _output_dir, _skip = resolve_change_target(args, config)
+    asyncio.run(main(change_url=change_ref))
 
 
 if __name__ == "__main__":

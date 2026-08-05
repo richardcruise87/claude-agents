@@ -53,6 +53,10 @@ from agents_lib import (
     find_latest_report,
     ChangeInfo,
     ModelClient,
+    HelpOnErrorParser,
+    add_change_args,
+    add_post_args,
+    resolve_change_target,
 )
 
 # Load configuration
@@ -696,85 +700,60 @@ def _post_only(change_ref: str, patchset: "int | None") -> bool:
     return _post_forge_feedback(change, review_content, CONFIG, forge)
 
 
-def main():
-    parser = argparse.ArgumentParser(
+def cli_main():
+    """Main entry point for command-line usage."""
+    parser = HelpOnErrorParser(
         description='Review an OpenStack Octavia change from OpenDev',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Review latest patchset
-  %(prog)s 919846
+  # Review latest patchset of a change
+  %(prog)s --change 919846
 
-  # Review specific patchset
-  %(prog)s 919846 2
-  %(prog)s 919846 --patchset 3
+  # Review a specific patchset
+  %(prog)s --change 919846 --patchset 3
 
-  # Review using URL
-  %(prog)s https://review.opendev.org/c/openstack/octavia/+/919846
+  # Review by forge URL (Gerrit/GitHub)
+  %(prog)s --url https://review.opendev.org/c/openstack/octavia/+/919846
 
-  # Review specific patchset using URL
-  %(prog)s https://review.opendev.org/c/openstack/octavia/+/919846 2
+  # Save review to a custom directory
+  %(prog)s --change 919846 --output-dir /tmp/reviews
 
   # Re-post an already-completed review to the forge (no re-review)
-  %(prog)s 919846 --post-only
-  %(prog)s 919846 5 --post-only
-        """
-    )
+  %(prog)s --change 919846 --post-only
+  %(prog)s --change 919846 --patchset 5 --post-only
 
-    parser.add_argument(
-        'change',
-        help='Change number or Gerrit URL (e.g., 919846 or https://review.opendev.org/c/openstack/octavia/+/919846)'
+  # Run the review but do not post results to the forge
+  %(prog)s --change 919846 --no-post
+        """,
     )
-
-    parser.add_argument(
-        'patchset',
-        nargs='?',
-        type=int,
-        default=None,
-        help='Specific patchset number to review (e.g., 2). If omitted, reviews the latest patchset.'
-    )
-
-    parser.add_argument(
-        '--patchset', '-p',
-        dest='patchset_flag',
-        type=int,
-        help='Alternative way to specify patchset number'
-    )
-
-    parser.add_argument(
-        '--post-only',
-        action='store_true',
-        help='Skip the review; find the latest saved review file and post it to the forge.'
-    )
-
-    parser.add_argument(
-        '--no-post',
-        action='store_true',
-        help='Run the review but skip posting feedback to the forge.'
-    )
-
+    add_change_args(parser, CONFIG)
+    add_post_args(parser)
     args = parser.parse_args()
 
-    # Determine which patchset to use (positional arg takes precedence)
-    patchset = args.patchset if args.patchset else args.patchset_flag
+    change_ref, patchset, output_dir, _skip = resolve_change_target(args, CONFIG)
 
-    if args.post_only:
-        ok = _post_only(args.change, patchset)
-        sys.exit(0 if ok else 1)
+    if not change_ref and not args.post_only:
+        parser.error("--change or --url is required")
 
     if args.no_post:
         CONFIG["feedback_enabled"] = False
         print("📵 Forge posting disabled (--no-post)\n")
 
+    if args.post_only:
+        if not change_ref:
+            parser.error("--post-only requires --change or --url")
+        ok = _post_only(change_ref, patchset)
+        sys.exit(0 if ok else 1)
+
+    if args.output_dir:
+        global REVIEWS_OUTPUT_DIR  # pylint: disable=global-statement
+        REVIEWS_OUTPUT_DIR = str(output_dir)
+
     if patchset:
         print(f"📌 Reviewing patchset {patchset}\n")
 
-    asyncio.run(review_specific_change(args.change, patchset))
-
-
-def cli_main():
-    """Main entry point for command-line usage."""
-    main()
+    asyncio.run(review_specific_change(change_ref, patchset))
 
 
 if __name__ == "__main__":

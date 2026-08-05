@@ -29,7 +29,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from config import load_config
-from agents_lib import notify_report, load_notifications_config
+from agents_lib import (
+    notify_report,
+    load_notifications_config,
+    HelpOnErrorParser,
+    add_change_args,
+    resolve_change_target,
+)
 from zuul_client import (
     fetch_recent_failures,
     group_failures_by_change,
@@ -485,7 +491,8 @@ def main_loop(projects=None, pipelines=None, hours_back=None, list_only=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(
+    config = load_config()
+    parser = HelpOnErrorParser(
         description="OpenStack CI Failure Analysis Agent — monitors Zuul for failures and explains them",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
@@ -496,8 +503,14 @@ Manual analysis (analyse a specific failure right now):
   # Analyse a specific pipeline for a change
   %(prog)s --change 982567 --pipeline check
 
+  # Analyse a change by Gerrit URL
+  %(prog)s --url https://review.opendev.org/c/openstack/octavia/+/982567
+
   # Analyse a single Zuul build by UUID
   %(prog)s --build abc123def456789...
+
+  # Save reports to a custom directory
+  %(prog)s --change 982567 --output-dir /tmp/ci-reports
 
 Monitoring mode (scan all configured repos for recent failures):
   %(prog)s
@@ -510,15 +523,7 @@ Monitoring mode (scan all configured repos for recent failures):
 
     # ── Manual analysis arguments ──────────────────────────────────────────────
     manual = parser.add_argument_group("manual analysis")
-    manual.add_argument(
-        "--change",
-        metavar="CHANGE_NUMBER",
-        help=(
-            "Analyse a specific Gerrit change. Fetches all failed builds for "
-            "the latest patchset and generates a report. Combine with "
-            "--pipeline to restrict to one pipeline."
-        ),
-    )
+    add_change_args(manual, config)
     manual.add_argument(
         "--build",
         metavar="UUID",
@@ -554,12 +559,13 @@ Monitoring mode (scan all configured repos for recent failures):
 
     args = parser.parse_args()
 
-    # Manual modes take priority over monitoring loop
-    if args.change and args.build:
-        parser.error("--change and --build are mutually exclusive")
+    change_ref, _patchset, _output_dir, _skip = resolve_change_target(args, config)
 
-    if args.change:
-        analyze_by_change(args.change, pipeline=args.pipeline)
+    if change_ref and args.build:
+        parser.error("--change/--url and --build are mutually exclusive")
+
+    if change_ref:
+        analyze_by_change(change_ref, pipeline=getattr(args, "pipeline", None))
         return
 
     if args.build:

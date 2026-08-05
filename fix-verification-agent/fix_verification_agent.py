@@ -43,6 +43,10 @@ from agents_lib import (
     check_devstack_health,
     build_report,
     ReportSection,
+    HelpOnErrorParser,
+    add_bug_args,
+    add_post_args,
+    resolve_bug_target,
 )
 from failure_analyser import (
     analyse_failure,
@@ -852,30 +856,43 @@ async def run_manual(args: argparse.Namespace, config: dict) -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
-async def main() -> None:
-    parser = argparse.ArgumentParser(
+def cli_main() -> None:
+    config = load_config()
+    parser = HelpOnErrorParser(
         description="Octavia Fix Verification Agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Automated mode (processes new fix proposals)
-  octavia-verify-fix
+  %(prog)s
 
   # Manual mode — verify a local patch file
-  octavia-verify-fix --bug 2150752 --patch ~/my-fix.patch
+  %(prog)s --bug 2150752 --patch ~/my-fix.patch
+
+  # Manual mode — verify a local patch referenced by Launchpad URL
+  %(prog)s --url https://bugs.launchpad.net/octavia/+bug/2150752 --patch ~/my-fix.patch
 
   # Manual mode — verify a local git branch
-  octavia-verify-fix --bug 2150752 --branch fix/my-fix
+  %(prog)s --bug 2150752 --branch fix/my-fix
 
   # Manual mode — verify a Gerrit change
-  octavia-verify-fix --bug 2150752 --gerrit 987701
+  %(prog)s --bug 2150752 --gerrit 987701
 
   # Manual mode — fix already applied, just re-run reproduction test
-  octavia-verify-fix --bug 2150752 --already-applied
-""",
+  %(prog)s --bug 2150752 --already-applied
+
+  # Post the latest saved verification report to Launchpad (no re-run)
+  %(prog)s --bug 2150752 --post-only
+
+  # Verify without posting to Launchpad
+  %(prog)s --bug 2150752 --patch ~/my-fix.patch --no-post
+
+  # Save report to a custom directory
+  %(prog)s --bug 2150752 --patch ~/my-fix.patch --output-dir /tmp/verifications
+        """,
     )
-    parser.add_argument("--bug", type=int, metavar="N",
-                        help="Bug number (manual mode)")
+    add_bug_args(parser, config)
+    add_post_args(parser)
     parser.add_argument("--patch", metavar="FILE",
                         help="Local patch file to apply")
     parser.add_argument("--branch", metavar="NAME",
@@ -886,21 +903,22 @@ Examples:
                         help="Fix already applied; just re-run reproduction test")
     parser.add_argument("--title", metavar="TITLE",
                         help="Bug title for the report (manual mode, optional)")
-    parser.add_argument("--post-only", action="store_true",
-                        help="Skip verification; find the latest saved report for --bug N and post it to Launchpad.")
 
     args = parser.parse_args()
-    config = load_config()
+    bug_id, output_dir, _skip = resolve_bug_target(args, config)
+
+    if args.no_post:
+        config.setdefault("feedback", {})["post_to_launchpad"] = False
+        print("📵 External posting disabled (--no-post)\n")
 
     if args.post_only:
-        if not args.bug:
-            print("❌ --post-only requires --bug N", file=sys.stderr)
+        if not bug_id:
+            print("❌ --post-only requires --bug or --url", file=sys.stderr)
             sys.exit(1)
-        bug_id = str(args.bug)
-        output_dir = Path(config["verifications_output_dir"])
-        report = find_latest_report(output_dir, f"verification_{bug_id}_*.md")
+        ver_dir = output_dir if args.output_dir else Path(config["verifications_output_dir"])
+        report = find_latest_report(ver_dir, f"verification_{bug_id}_*.md")
         if not report:
-            print(f"❌ No verification report found for bug {bug_id} in {output_dir}")
+            print(f"❌ No verification report found for bug {bug_id} in {ver_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
         content = report.read_text(encoding="utf-8")
@@ -924,14 +942,13 @@ Examples:
     print(f"  Retry delay:    {config.get('verification', {}).get('retry_delay_seconds', 60)}s")
     print()
 
-    if args.bug:
-        await run_manual(args, config)
+    if bug_id:
+        if args.output_dir:
+            config["verifications_output_dir"] = str(output_dir)
+        args.bug = int(bug_id)
+        asyncio.run(run_manual(args, config))
     else:
-        await run_automated(config)
-
-
-def cli_main() -> None:
-    asyncio.run(main())
+        asyncio.run(run_automated(config))
 
 
 if __name__ == "__main__":

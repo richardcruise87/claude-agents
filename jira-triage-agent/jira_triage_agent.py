@@ -28,10 +28,16 @@ from prompts import get_jira_bug_triage_prompt
 from prompts import get_jira_planning_prompt
 from agents_lib import build_feedback_comment
 from agents_lib import create_model_client
+from agents_lib import find_latest_report
 from agents_lib import format_usage_info
 from agents_lib import load_context_section
 from agents_lib import load_notifications_config
 from agents_lib import notify_report
+from agents_lib import HelpOnErrorParser
+from agents_lib import add_jira_args
+from agents_lib import add_post_args
+from agents_lib import resolve_jira_target
+from agents_lib import confirm_reprocess
 
 CONFIG = load_config()
 
@@ -373,16 +379,95 @@ async def main() -> None:
 
 
 def cli_main() -> None:
-    import argparse
-    parser = argparse.ArgumentParser(description="JIRA Triage Agent")
+    import argparse  # noqa: PLC0415 — used for formatter_class reference
+
+    parser = HelpOnErrorParser(
+        description="JIRA Triage Agent",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Process issues matching the configured JQL query (monitoring mode)
+  %(prog)s
+
+  # Triage or plan a specific issue by key
+  %(prog)s --issue PROJ-123
+
+  # Triage an issue by JIRA URL
+  %(prog)s --url https://myco.atlassian.net/browse/PROJ-123
+
+  # Re-process without the tracking-file confirmation prompt
+  %(prog)s --issue PROJ-123 --skip-tracking
+
+  # Save report to a custom directory
+  %(prog)s --issue PROJ-123 --output-dir /tmp/jira-triages
+
+  # Process without posting a comment to JIRA
+  %(prog)s --issue PROJ-123 --no-post
+
+  # Post the latest saved report as a JIRA comment (no re-triage)
+  %(prog)s --issue PROJ-123 --post-only
+
+  # Internal use: process a single issue from a JSON data file
+  %(prog)s --single-issue /tmp/issue.json --action bug
+        """,
+    )
+    add_jira_args(parser, CONFIG)
+    add_post_args(parser)
     parser.add_argument("--single-issue", metavar="FILE",
-                        help="Process a single issue from a JSON data file (internal)")
+                        help="Process a single issue from a JSON data file (internal subprocess mode).")
     parser.add_argument("--action", choices=["bug", "plan"], default="bug",
-                        help="Action to perform when using --single-issue")
+                        help="Action to perform when using --single-issue.")
     args = parser.parse_args()
 
     if args.single_issue:
         asyncio.run(_process_single(args.single_issue, args.action))
+        return
+
+    issue_key, _output_dir, skip_tracking = resolve_jira_target(args, CONFIG)
+
+    if args.no_post:
+        CONFIG["feedback_enabled"] = False
+        print("📵 External posting disabled (--no-post)\n")
+
+    if args.post_only:
+        if not issue_key:
+            print("❌ --post-only requires --issue or --url", file=sys.stderr)
+            sys.exit(1)
+        triages_dir = Path(CONFIG["triages_dir"])
+        plans_dir = Path(CONFIG["plans_dir"])
+        report = find_latest_report(triages_dir, f"jira_{issue_key}_*.md") or \
+            find_latest_report(plans_dir, f"jira_{issue_key}_*.md")
+        if not report:
+            print(f"❌ No report found for issue {issue_key} in {triages_dir} or {plans_dir}")
+            sys.exit(1)
+        print(f"📄 Using report: {report.name}")
+        jira = create_jira_client(CONFIG)
+        content = report.read_text(encoding="utf-8")
+        comment = build_feedback_comment(content, CONFIG.get("model", ""), max_chars=6000)
+        ok = jira.add_comment(issue_key, comment, private=CONFIG.get("feedback_private", True))
+        sys.exit(0 if ok else 1)
+
+    if issue_key:
+        history = load_issue_history(Path(CONFIG["issue_tracking_file"]))
+        should, seq = should_process_issue(issue_key, None, history)
+        if not should and not skip_tracking:
+            if not confirm_reprocess("issue", issue_key):
+                return
+        jira = create_jira_client(CONFIG)
+        try:
+            issue = jira.get_issue(issue_key)
+        except Exception as exc:
+            print(f"❌ Could not fetch JIRA issue {issue_key}: {exc}")
+            sys.exit(1)
+        triages_dir = Path(CONFIG["triages_dir"])
+        plans_dir = Path(CONFIG["plans_dir"])
+        triages_dir.mkdir(parents=True, exist_ok=True)
+        plans_dir.mkdir(parents=True, exist_ok=True)
+        action = "plan" if not _is_bug(issue, CONFIG) else "bug"
+        output_dir = triages_dir if action == "bug" else plans_dir
+        summary_slug = JiraClient.summary(issue)[:50]
+        save_path = str(create_output_file_path(output_dir, issue_key, summary_slug, seq))
+        _run_subprocess(issue, seq, save_path, action)
     else:
         asyncio.run(main())
 

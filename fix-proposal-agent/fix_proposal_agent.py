@@ -34,6 +34,11 @@ from agents_lib import (
     load_notifications_config,
     post_report_to_launchpad,
     find_latest_report,
+    HelpOnErrorParser,
+    add_bug_args,
+    add_post_args,
+    resolve_bug_target,
+    confirm_reprocess,
 )
 from launchpad_feedback import (
     get_gerrit_comments_since,
@@ -588,23 +593,49 @@ async def main() -> None:
 
 
 def cli_main() -> None:
-    parser = argparse.ArgumentParser(description='Octavia Fix Proposal Agent')
-    parser.add_argument('--bug', metavar='N', type=int,
-                        help='Bug number for --post-only mode')
-    parser.add_argument(
-        '--post-only', action='store_true',
-        help='Skip proposal generation; find the latest saved proposal '
-             'for --bug N and post it to Launchpad.',
+    config = load_config()
+    parser = HelpOnErrorParser(
+        description='Octavia Fix Proposal Agent',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Generate proposals for all REPRODUCED bugs (monitoring mode)
+  %(prog)s
+
+  # Generate a proposal for a specific bug
+  %(prog)s --bug 2150752
+
+  # Generate a proposal for a bug by URL
+  %(prog)s --url https://bugs.launchpad.net/octavia/+bug/2150752
+
+  # Re-generate without the tracking-file confirmation prompt
+  %(prog)s --bug 2150752 --skip-tracking
+
+  # Save proposal to a custom directory
+  %(prog)s --bug 2150752 --output-dir /tmp/proposals
+
+  # Post the latest saved proposal to Launchpad (no re-generation)
+  %(prog)s --bug 2150752 --post-only
+
+  # Generate a proposal without posting to Launchpad
+  %(prog)s --bug 2150752 --no-post
+        """,
     )
+    add_bug_args(parser, config)
+    add_post_args(parser)
     args = parser.parse_args()
 
+    bug_id, output_dir, skip_tracking = resolve_bug_target(args, config)
+
+    if args.no_post:
+        config["post_to_launchpad"] = False
+        print("📵 External posting disabled (--no-post)\n")
+
     if args.post_only:
-        if not args.bug:
-            print("❌ --post-only requires --bug N", file=sys.stderr)
+        if not bug_id:
+            print("❌ --post-only requires --bug or --url", file=sys.stderr)
             sys.exit(1)
-        bug_id = str(args.bug)
-        config = load_config()
-        proposals_dir = Path(config["proposals_output_dir"])
+        proposals_dir = output_dir if args.output_dir else Path(config["proposals_output_dir"])
         report = find_latest_report(
             proposals_dir,
             f"fix_proposal_{bug_id}_*.md",
@@ -618,7 +649,41 @@ def cli_main() -> None:
         ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=5000)
         sys.exit(0 if ok else 1)
 
-    asyncio.run(main())
+    if bug_id:
+        tracking_file = Path(config["proposal_tracking_file"])
+        history = load_proposal_history(tracking_file)
+        _, sequence = should_propose_fix(bug_id, None, history)
+        if sequence > 1 and not skip_tracking:
+            if not confirm_reprocess("bug", bug_id):
+                sys.exit(0)
+        triage_dir = Path(config["triage_reports_dir"])
+        repro_dir = Path(config["reproduction_reports_dir"])
+        triage_files = sorted(
+            triage_dir.glob(f"bug_{bug_id}_*.md"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if not triage_files:
+            print(f"❌ No triage report found for bug #{bug_id} in {triage_dir}")
+            sys.exit(1)
+        repro_file = find_reproduction_report(bug_id, repro_dir) if repro_dir.exists() else None
+        if not repro_file:
+            print(f"❌ No reproduction report found for bug #{bug_id} — bug must be REPRODUCED first.")
+            sys.exit(1)
+        proposals_dir = output_dir if args.output_dir else Path(config["proposals_output_dir"])
+        proposals_dir.mkdir(parents=True, exist_ok=True)
+        config["proposals_output_dir"] = str(proposals_dir)
+        asyncio.run(propose_fix(
+            bug_number=bug_id,
+            bug_title=f"Bug #{bug_id}",
+            triage_file=triage_files[0],
+            repro_file=repro_file,
+            sequence=sequence,
+            feedback=None,
+            config=config,
+        ))
+    else:
+        asyncio.run(main())
 
 
 if __name__ == "__main__":

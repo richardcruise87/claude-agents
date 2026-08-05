@@ -25,6 +25,7 @@ from agents_lib import (
     load_agent_config,
     expand_config_paths,
     expand_context_config,
+    HelpOnErrorParser,
 )
 from backport_tracker import (
     record_backport,
@@ -228,7 +229,8 @@ def attempt_cherry_pick(
 # Main
 # ---------------------------------------------------------------------------
 
-def main(dry_run: bool = False, repos: list = None, lookback_days: int = None) -> None:
+def main(dry_run: bool = False, repos: list = None, lookback_days: int = None,
+         single_change: str = None) -> None:
     config = load_config()
     forge = create_forge_client(config)
 
@@ -267,6 +269,31 @@ def main(dry_run: bool = False, repos: list = None, lookback_days: int = None) -
 
     total_backported = 0
     total_conflicts = 0
+
+    if single_change:
+        print(f"\n🎯 Single-change mode: targeting change #{single_change}")
+        for repo in monitored_repos:
+            try:
+                change = forge.get_change(single_change, repo)
+            except Exception as exc:
+                print(f"   ❌ Could not fetch change #{single_change} from {repo}: {exc}")
+                continue
+            for branch in target_branches:
+                if is_already_processed(tracking_file, change.change_id, branch):
+                    print(f"   ⏭️  Already backported #{change.change_id} to {branch}")
+                    continue
+                result = attempt_cherry_pick(change, branch, config, dry_run=dry_run)
+                status = result["status"]
+                if status == "BACKPORTED":
+                    total_backported += 1
+                    print(f"   ✅ {branch}: backported → {result.get('backport_change_url', '')}")
+                elif status == "CONFLICT":
+                    total_conflicts += 1
+                    print(f"   ⚠️  {branch}: CONFLICT — {result.get('message', '')[:120]}")
+        print(f"\n{'='*80}")
+        print(f"✅ Done — backported: {total_backported}, conflicts: {total_conflicts}")
+        print(f"{'='*80}")
+        return
 
     for repo in monitored_repos:
         print(f"\n📋 Checking {repo} for merged {label}=+1 changes...")
@@ -319,15 +346,47 @@ def main(dry_run: bool = False, repos: list = None, lookback_days: int = None) -
 
 
 def cli_main() -> None:
-    parser = argparse.ArgumentParser(description="Octavia Backport Monitor")
+    parser = HelpOnErrorParser(
+        description="Octavia Backport Monitor",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Scan for recent merged changes with Backport-Candidate=+1
+  %(prog)s
+
+  # Dry run — show what would be cherry-picked without making changes
+  %(prog)s --dry-run
+
+  # Restrict to a specific repo
+  %(prog)s --repo openstack/octavia
+
+  # Override look-back window
+  %(prog)s --lookback 14
+
+  # Attempt to backport a single specific merged change
+  %(prog)s --change 982567
+        """,
+    )
     parser.add_argument("--dry-run", action="store_true",
                         help="Log what would happen without making git changes")
     parser.add_argument("--repo", action="append", dest="repos",
                         help="Repo to process (can repeat; default: from config)")
     parser.add_argument("--lookback", type=int, dest="lookback_days",
                         help="Days to look back for merged changes (default: from config)")
+    parser.add_argument(
+        "--change",
+        metavar="N",
+        help="Attempt to backport a single specific merged change number.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        metavar="DIR",
+        default=None,
+        help="Override the configured output directory.",
+    )
     args = parser.parse_args()
-    main(dry_run=args.dry_run, repos=args.repos, lookback_days=args.lookback_days)
+    main(dry_run=args.dry_run, repos=args.repos, lookback_days=args.lookback_days,
+         single_change=args.change)
 
 
 if __name__ == "__main__":

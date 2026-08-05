@@ -5,6 +5,7 @@ Octavia Code Review Agent
 Monitors OpenDev for new Octavia changes, downloads them to local devstack,
 runs tests, analyzes code, and prepares review documents.
 """
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ from agents_lib import (
     should_review_change,
     record_review,
     load_review_history,
+    HelpOnErrorParser,
+    add_post_args,
 )
 
 # Load configuration from config.json or environment variables
@@ -304,6 +307,33 @@ async def main():
 
 def cli_main():
     """Main entry point for command-line usage."""
+    parser = HelpOnErrorParser(
+        description='Octavia Code Review Agent — monitors forge for new changes and reviews them',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run the monitoring loop (reviews all configured repos)
+  %(prog)s
+
+  # Run without posting results back to the forge
+  %(prog)s --no-post
+
+  # To review a specific change, use octavia-review-change instead:
+  #   octavia-review-change --change 982567
+        """,
+    )
+    add_post_args(parser)
+    args = parser.parse_args()
+
+    if args.no_post:
+        CONFIG["feedback_enabled"] = False
+        print("📵 Forge posting disabled (--no-post)\n")
+
+    if args.post_only:
+        print("❌ --post-only is not supported for the monitoring agent. "
+              "Use octavia-review-change --post-only instead.", file=sys.stderr)
+        sys.exit(1)
+
     asyncio.run(main())
 
 
