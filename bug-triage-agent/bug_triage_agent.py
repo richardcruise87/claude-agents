@@ -35,8 +35,12 @@ from agents_lib import (
     HelpOnErrorParser,
     add_bug_args,
     add_post_args,
+    add_summary_args,
     resolve_bug_target,
     confirm_reprocess,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 from bug_tracker import (
     load_triage_history,
@@ -659,12 +663,19 @@ Examples:
   # Triage without posting to Launchpad
   %(prog)s --bug 2150752 --no-post
 
+  # Print a short summary of the triage report after running
+  %(prog)s --bug 2150752 --print-summary
+
+  # Post only the summary to Launchpad (not the full report)
+  %(prog)s --bug 2150752 --post-summary
+
   # Internal use: triage from a pre-fetched JSON data file (subprocess mode)
   %(prog)s --single-bug /tmp/bug_data.json
         """,
     )
     add_bug_args(parser, CONFIG)
     add_post_args(parser)
+    add_summary_args(parser)
     parser.add_argument(
         '--single-bug', metavar='BUG_DATA_FILE',
         help='Triage a single bug from a JSON data file (internal subprocess mode).',
@@ -676,6 +687,7 @@ Examples:
         sys.exit(0 if success else 1)
 
     bug_id, output_dir, skip_tracking = resolve_bug_target(args, CONFIG)
+    _summary_prompt = Path(__file__).parent / "prompts" / "bug_triage_summary_prompt.txt"
 
     if args.no_post:
         CONFIG["feedback_enabled"] = False
@@ -691,9 +703,17 @@ Examples:
             print(f"❌ No triage report found for bug {bug_id} in {report_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
-        subject = "AI Triage Report (automated, may contain errors)"
-        ok = post_report_to_launchpad(bug_id, subject, report, CONFIG, max_chars=5000)
-        sys.exit(0 if ok else 1)
+        if needs_summary(args, CONFIG):
+            summary = generate_summary(report, _summary_prompt, CONFIG)
+            if summary:
+                print_summary(summary, report)
+            else:
+                print("ℹ️  No output file produced — summary not available.")
+        if not args.post_summary:
+            subject = "AI Triage Report (automated, may contain errors)"
+            ok = post_report_to_launchpad(bug_id, subject, report, CONFIG, max_chars=5000)
+            sys.exit(0 if ok else 1)
+        return
 
     if bug_id:
         tracking_file = Path(CONFIG['triage_tracking_file'])
@@ -705,6 +725,20 @@ Examples:
         asyncio.run(triage_bug_by_id(bug_id, output_dir))
     else:
         asyncio.run(main())
+
+    if needs_summary(args, CONFIG):
+        report_dir = output_dir if args.output_dir else Path(CONFIG["triages_output_dir"])
+        pattern = f"bug_{bug_id}_*.md" if bug_id else "bug_*.md"
+        report = find_latest_report(report_dir, pattern)
+        summary = generate_summary(report, _summary_prompt, CONFIG) if report else None
+        if summary:
+            print_summary(summary, report)
+            if args.post_summary and bug_id:
+                subject = "AI Triage Summary (automated, may contain errors)"
+                post_report_to_launchpad(bug_id, subject,
+                                         report, CONFIG, max_chars=2000)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 if __name__ == "__main__":

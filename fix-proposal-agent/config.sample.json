@@ -27,7 +27,8 @@
     "comment_feedback": "Online feedback sources are disabled by default",
     "consumer_key_env": "LAUNCHPAD_CONSUMER_KEY",
     "access_token_env": "LAUNCHPAD_ACCESS_TOKEN",
-    "access_token_secret_env": "LAUNCHPAD_ACCESS_TOKEN_SECRET"
+    "access_token_secret_env": "LAUNCHPAD_ACCESS_TOKEN_SECRET",
+    "post_summary": false
   },
   "notifications": {
     "enabled": true,

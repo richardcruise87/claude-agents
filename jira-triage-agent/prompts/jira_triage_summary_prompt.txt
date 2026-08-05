@@ -1,0 +1,22 @@
+You are summarising a JIRA issue triage or planning report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+ISSUE: [Issue key and one-line title]
+
+TYPE: [Bug Triage / Implementation Plan]
+
+PRIORITY: [Critical / High / Medium / Low / Unknown]
+
+OUTCOME: [One sentence describing the key triage finding (for bugs) or the implementation approach (for stories/tasks).]
+
+RISK: [Low / Medium / High / Unknown] — [one-line explanation]
+
+NEXT STEP: [One sentence on the recommended immediate action.]

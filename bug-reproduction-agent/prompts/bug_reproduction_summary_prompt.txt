@@ -1,0 +1,20 @@
+You are summarising a bug reproduction report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+OUTCOME: [REPRODUCED / NOT_REPRODUCED / PARTIAL]
+
+BUG: [Bug number and one-line title]
+
+KEY STEP: [The single most important reproduction step or finding.]
+
+SCRIPT: [Path to the reproduction script, or "None" if not produced.]
+
+NOTES: [Any important caveats, environment requirements, or next steps. Write "None." if not applicable.]

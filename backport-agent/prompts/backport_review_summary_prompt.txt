@@ -1,0 +1,21 @@
+You are summarising a backport change review report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+VERDICT: [Approve / Request Changes / Needs Discussion]
+
+TARGET BRANCHES:
+- [branch name]: [SAFE / CONFLICTS / NEEDS REVIEW]
+- [Repeat for each branch. Write "None listed." if no branches are specified.]
+
+REQUIRED CHANGES:
+- [List each required change as a short bullet. Write "None." if there are no required changes.]
+
+REASONING: [One sentence explaining the overall verdict.]

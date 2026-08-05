@@ -1,0 +1,18 @@
+You are summarising a CI failure analysis report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+RECOMMENDATION: [Fix Code / Recheck / Investigate Further]
+
+FAILING JOBS:
+- [job name]: [CODE_ISSUE / ENVIRONMENTAL / INFRA_FAILURE / UNRELATED] — [one-line reason]
+- [Repeat for each failing job. Write "None identified." if no jobs are listed.]
+
+ROOT CAUSE: [One sentence describing the most likely root cause across all failures.]

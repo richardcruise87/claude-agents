@@ -20,8 +20,13 @@ from agents_lib import (
     should_review_change,
     record_review,
     load_review_history,
+    find_latest_report,
     HelpOnErrorParser,
     add_post_args,
+    add_summary_args,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 
 # Load configuration from config.json or environment variables
@@ -320,9 +325,13 @@ Examples:
 
   # To review a specific change, use octavia-review-change instead:
   #   octavia-review-change --change 982567
+
+  # Print a short summary of the most recent review after the run
+  %(prog)s --print-summary
         """,
     )
     add_post_args(parser)
+    add_summary_args(parser)
     args = parser.parse_args()
 
     if args.no_post:
@@ -334,7 +343,22 @@ Examples:
               "Use octavia-review-change --post-only instead.", file=sys.stderr)
         sys.exit(1)
 
+    if args.post_summary:
+        print("❌ --post-summary is not supported for the monitoring agent. "
+              "Use octavia-review-change --post-summary instead.", file=sys.stderr)
+        sys.exit(1)
+
     asyncio.run(main())
+
+    if needs_summary(args, CONFIG):
+        _summary_prompt = Path(__file__).parent / "prompts" / "code_review_summary_prompt.txt"
+        output_dir = Path(CONFIG["reviews_output_dir"])
+        report = find_latest_report(output_dir, "review_*.md")
+        summary = generate_summary(report, _summary_prompt, CONFIG) if report else None
+        if summary:
+            print_summary(summary, report)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 if __name__ == "__main__":

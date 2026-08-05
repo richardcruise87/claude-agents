@@ -1,0 +1,22 @@
+You are summarising a bug triage report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+VALIDITY: [Valid Bug / Not a Bug / Needs More Info]
+
+SEVERITY: [Critical / High / Medium / Low / Undecided]
+
+COMPONENT: [The affected component or subsystem]
+
+FIX STATUS: [Already Fixed / Not Fixed / Possibly Fixed / Unknown]
+
+REPRODUCTION: [One sentence describing the key reproduction step or environment needed.]
+
+RECOMMENDED ACTION: [One sentence recommending the next step, e.g. assign to team X, mark as duplicate of #N, close as invalid, etc.]

@@ -32,9 +32,14 @@ from config import load_config
 from agents_lib import (
     notify_report,
     load_notifications_config,
+    find_latest_report,
     HelpOnErrorParser,
     add_change_args,
+    add_summary_args,
     resolve_change_target,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 from zuul_client import (
     fetch_recent_failures,
@@ -512,6 +517,9 @@ Manual analysis (analyse a specific failure right now):
   # Save reports to a custom directory
   %(prog)s --change 982567 --output-dir /tmp/ci-reports
 
+  # Print a short summary of the analysis
+  %(prog)s --change 982567 --print-summary
+
 Monitoring mode (scan all configured repos for recent failures):
   %(prog)s
   %(prog)s --project openstack/octavia
@@ -557,19 +565,37 @@ Monitoring mode (scan all configured repos for recent failures):
         help="List recent failures without running AI analysis.",
     )
 
+    add_summary_args(parser)
     args = parser.parse_args()
 
     change_ref, _patchset, _output_dir, _skip = resolve_change_target(args, config)
+    _summary_prompt = Path(__file__).parent / "prompts" / "ci_failure_summary_prompt.txt"
 
     if change_ref and args.build:
         parser.error("--change/--url and --build are mutually exclusive")
 
     if change_ref:
         analyze_by_change(change_ref, pipeline=getattr(args, "pipeline", None))
+        if needs_summary(args, config):
+            output_dir = Path(config["reports_output_dir"])
+            report = find_latest_report(output_dir, f"ci_failure_*_{change_ref}_*.md")
+            summary = generate_summary(report, _summary_prompt, config) if report else None
+            if summary:
+                print_summary(summary, report)
+            else:
+                print("ℹ️  No output file produced — summary not available.")
         return
 
     if args.build:
         analyze_by_build(args.build)
+        if needs_summary(args, config):
+            output_dir = Path(config["reports_output_dir"])
+            report = find_latest_report(output_dir, "ci_failure_*.md")
+            summary = generate_summary(report, _summary_prompt, config) if report else None
+            if summary:
+                print_summary(summary, report)
+            else:
+                print("ℹ️  No output file produced — summary not available.")
         return
 
     # Monitoring loop
@@ -579,6 +605,14 @@ Monitoring mode (scan all configured repos for recent failures):
         hours_back=args.hours_back,
         list_only=args.list_failures,
     )
+    if needs_summary(args, config):
+        output_dir = Path(config["reports_output_dir"])
+        report = find_latest_report(output_dir, "ci_failure_*.md")
+        summary = generate_summary(report, _summary_prompt, config) if report else None
+        if summary:
+            print_summary(summary, report)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 def cli_main():

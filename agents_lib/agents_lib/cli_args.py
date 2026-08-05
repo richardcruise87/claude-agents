@@ -381,6 +381,40 @@ def add_post_args(  # pylint: disable=protected-access
     return group
 
 
+def add_summary_args(  # pylint: disable=protected-access
+    parser: argparse.ArgumentParser,
+) -> argparse._MutuallyExclusiveGroup:
+    """Add summary output flags to *parser*.
+
+    Adds (mutually exclusive):
+      --print-summary  After the run, generate and print a short AI summary
+                       of the output report to stdout.
+      --post-summary   After the run, post only the AI-generated summary
+                       (not the full report) to the relevant external system.
+                       Implies --print-summary.
+
+    Returns the mutually-exclusive group.
+    """
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--print-summary",
+        action="store_true",
+        default=False,
+        help="Generate and print a short AI summary of the output report to stdout.",
+    )
+    group.add_argument(
+        "--post-summary",
+        action="store_true",
+        default=False,
+        help=(
+            "Post only the AI-generated summary (not the full report) to the "
+            "relevant external system (forge / Launchpad / JIRA). "
+            "Also prints the summary to stdout."
+        ),
+    )
+    return group
+
+
 # ---------------------------------------------------------------------------
 # Post-parse resolution helpers
 # ---------------------------------------------------------------------------

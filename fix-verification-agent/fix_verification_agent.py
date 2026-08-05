@@ -46,7 +46,11 @@ from agents_lib import (
     HelpOnErrorParser,
     add_bug_args,
     add_post_args,
+    add_summary_args,
     resolve_bug_target,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 from failure_analyser import (
     analyse_failure,
@@ -889,10 +893,17 @@ Examples:
 
   # Save report to a custom directory
   %(prog)s --bug 2150752 --patch ~/my-fix.patch --output-dir /tmp/verifications
+
+  # Print a short summary of the verification result
+  %(prog)s --bug 2150752 --patch ~/my-fix.patch --print-summary
+
+  # Post only the summary to Launchpad (not the full report)
+  %(prog)s --bug 2150752 --patch ~/my-fix.patch --post-summary
         """,
     )
     add_bug_args(parser, config)
     add_post_args(parser)
+    add_summary_args(parser)
     parser.add_argument("--patch", metavar="FILE",
                         help="Local patch file to apply")
     parser.add_argument("--branch", metavar="NAME",
@@ -906,6 +917,7 @@ Examples:
 
     args = parser.parse_args()
     bug_id, output_dir, _skip = resolve_bug_target(args, config)
+    _summary_prompt = Path(__file__).parent / "prompts" / "fix_verification_summary_prompt.txt"
 
     if args.no_post:
         config.setdefault("feedback", {})["post_to_launchpad"] = False
@@ -921,15 +933,23 @@ Examples:
             print(f"❌ No verification report found for bug {bug_id} in {ver_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
-        content = report.read_text(encoding="utf-8")
-        if "RESOLVED" in content and "NOT_RESOLVED" not in content:
-            subject = "AI Fix Verified ✅ (automated, may contain errors)"
-        elif "NOT_RESOLVED" in content:
-            subject = "AI Fix Verification Failed ❌ (automated, may contain errors)"
-        else:
-            subject = "AI Fix Verification Inconclusive ⚠️ (automated, may contain errors)"
-        ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=4000)
-        sys.exit(0 if ok else 1)
+        if needs_summary(args, config):
+            summary = generate_summary(report, _summary_prompt, config)
+            if summary:
+                print_summary(summary, report)
+            else:
+                print("ℹ️  No output file produced — summary not available.")
+        if not args.post_summary:
+            content = report.read_text(encoding="utf-8")
+            if "RESOLVED" in content and "NOT_RESOLVED" not in content:
+                subject = "AI Fix Verified ✅ (automated, may contain errors)"
+            elif "NOT_RESOLVED" in content:
+                subject = "AI Fix Verification Failed ❌ (automated, may contain errors)"
+            else:
+                subject = "AI Fix Verification Inconclusive ⚠️ (automated, may contain errors)"
+            ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=4000)
+            sys.exit(0 if ok else 1)
+        return
 
     print("\n" + "="*80)
     print("Fix Verification Agent")
@@ -949,6 +969,25 @@ Examples:
         asyncio.run(run_manual(args, config))
     else:
         asyncio.run(run_automated(config))
+
+    if needs_summary(args, config):
+        ver_dir = output_dir if args.output_dir else Path(config["verifications_output_dir"])
+        pattern = f"verification_{bug_id}_*.md" if bug_id else "verification_*.md"
+        report = find_latest_report(ver_dir, pattern)
+        summary = generate_summary(report, _summary_prompt, config) if report else None
+        if summary:
+            print_summary(summary, report)
+            if args.post_summary and bug_id:
+                content = report.read_text(encoding="utf-8") if report else ""
+                if "RESOLVED" in content and "NOT_RESOLVED" not in content:
+                    subject = "AI Fix Verified ✅ — Summary (automated, may contain errors)"
+                elif "NOT_RESOLVED" in content:
+                    subject = "AI Fix Verification Failed ❌ — Summary (automated, may contain errors)"
+                else:
+                    subject = "AI Fix Verification Summary ⚠️ (automated, may contain errors)"
+                post_report_to_launchpad(bug_id, subject, report, config, max_chars=2000)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 if __name__ == "__main__":

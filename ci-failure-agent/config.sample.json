@@ -44,21 +44,43 @@
     "base_url": "https://review.opendev.org",
     "token_env": null,
     "username_env": null,
-    "comment": "type: gerrit | github | gitlab. token_env: env var holding the API token / HTTP password. username_env: (Gerrit only) env var holding your Gerrit username — when set, Basic auth is used instead of Bearer. Required for OpenDev Gerrit."
+    "comment": "type: gerrit | github | gitlab. token_env: env var holding the API token / HTTP password. username_env: (Gerrit only) env var holding your Gerrit username \u2014 when set, Basic auth is used instead of Bearer. Required for OpenDev Gerrit."
   },
   "feedback": {
     "post_to_forge": false,
     "enable_voting": false,
-    "comment": "post_to_forge: post CI analysis summary as a comment on the Gerrit change / GitHub PR / GitLab MR. enable_voting: not recommended for CI analysis (informational only). Requires forge.token_env to be set."
+    "comment": "post_to_forge: post CI analysis summary as a comment on the Gerrit change / GitHub PR / GitLab MR. enable_voting: not recommended for CI analysis (informational only). Requires forge.token_env to be set.",
+    "post_summary": false
   },
   "log_scan_patterns": [
-    {"pattern": "^\\s+(FAIL|ERROR)\\s+",                                "category": "test_failure"},
-    {"pattern": "Traceback \\(most recent call last\\)",                 "category": "traceback"},
-    {"pattern": "(timed? out|deadline exceeded|Connection timed? out)",  "category": "timeout"},
-    {"pattern": "(No space left on device|Out of memory|Killed)",        "category": "resource"},
-    {"pattern": "(node was lost|lost connection|post-failure)",          "category": "infra"},
-    {"pattern": "(ImportError|ModuleNotFoundError|cannot import)",       "category": "import_error"},
-    {"pattern": "(Could not fetch|pip install.*failed|mirror.*error)",   "category": "network"}
+    {
+      "pattern": "^\\s+(FAIL|ERROR)\\s+",
+      "category": "test_failure"
+    },
+    {
+      "pattern": "Traceback \\(most recent call last\\)",
+      "category": "traceback"
+    },
+    {
+      "pattern": "(timed? out|deadline exceeded|Connection timed? out)",
+      "category": "timeout"
+    },
+    {
+      "pattern": "(No space left on device|Out of memory|Killed)",
+      "category": "resource"
+    },
+    {
+      "pattern": "(node was lost|lost connection|post-failure)",
+      "category": "infra"
+    },
+    {
+      "pattern": "(ImportError|ModuleNotFoundError|cannot import)",
+      "category": "import_error"
+    },
+    {
+      "pattern": "(Could not fetch|pip install.*failed|mirror.*error)",
+      "category": "network"
+    }
   ],
   "comment_log_scan": "log_scan_patterns: regex patterns used to pre-classify log errors before the AI analyses them. Each entry needs 'pattern' (regex, case-insensitive) and 'category' (label string). Remove or add entries to tune for your CI environment.",
   "context": {
