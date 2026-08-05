@@ -571,8 +571,7 @@ async def triage_bug_by_id(bug_id: str, output_dir: Path):
     history = load_triage_history(tracking_file)
     _, sequence = should_triage_bug(bug_id, bug_info.get("date_last_updated"), history)
 
-    override = dict(CONFIG)
-    override["triages_output_dir"] = str(output_dir)
+    CONFIG["triages_output_dir"] = str(output_dir)
     await triage_bug(bug_info, sequence, None, None)
 
 
@@ -633,9 +632,10 @@ async def main():
 
 def cli_main():
     """Main entry point for command-line usage."""
+    import argparse  # noqa: PLC0415
     parser = HelpOnErrorParser(
         description='Octavia Bug Triage Agent',
-        formatter_class=__import__('argparse').RawDescriptionHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Triage the next untriaged bug (monitoring mode)

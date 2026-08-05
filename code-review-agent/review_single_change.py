@@ -746,9 +746,7 @@ Examples:
         ok = _post_only(change_ref, patchset)
         sys.exit(0 if ok else 1)
 
-    if output_dir and args.output_dir:
-        import os  # noqa: PLC0415
-        os.environ.setdefault("REVIEWS_OUTPUT_DIR", str(output_dir))
+    if args.output_dir:
         global REVIEWS_OUTPUT_DIR  # pylint: disable=global-statement
         REVIEWS_OUTPUT_DIR = str(output_dir)
 

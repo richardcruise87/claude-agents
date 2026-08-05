@@ -976,7 +976,7 @@ Examples:
         if not skip_tracking:
             tracking_file = Path(config["tracking"]["tested_reviews_file"])
             existing = load_tracking_file(tracking_file)
-            if str(change_ref) in str(existing):
+            if change_ref in existing:
                 if not confirm_reprocess("change", change_ref):
                     return
         asyncio.run(run_single_change(str(change_ref), patchset, config))
