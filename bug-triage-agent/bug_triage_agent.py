@@ -703,16 +703,21 @@ Examples:
             print(f"❌ No triage report found for bug {bug_id} in {report_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
+        cached_summary = None
         if needs_summary(args, CONFIG):
-            summary = generate_summary(report, _summary_prompt, CONFIG)
-            if summary:
-                print_summary(summary, report)
+            cached_summary = generate_summary(report, _summary_prompt, CONFIG)
+            if cached_summary:
+                print_summary(cached_summary, report)
             else:
                 print("ℹ️  No output file produced — summary not available.")
         if not args.post_summary:
             subject = "AI Triage Report (automated, may contain errors)"
             ok = post_report_to_launchpad(bug_id, subject, report, CONFIG, max_chars=5000)
             sys.exit(0 if ok else 1)
+        else:
+            if cached_summary:
+                subject = "AI Triage Summary (automated, may contain errors)"
+                post_report_to_launchpad(bug_id, subject, report, CONFIG, max_chars=2000)
         return
 
     if bug_id:

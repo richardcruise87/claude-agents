@@ -933,10 +933,11 @@ Examples:
             print(f"❌ No verification report found for bug {bug_id} in {ver_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
+        cached_summary = None
         if needs_summary(args, config):
-            summary = generate_summary(report, _summary_prompt, config)
-            if summary:
-                print_summary(summary, report)
+            cached_summary = generate_summary(report, _summary_prompt, config)
+            if cached_summary:
+                print_summary(cached_summary, report)
             else:
                 print("ℹ️  No output file produced — summary not available.")
         if not args.post_summary:
@@ -949,6 +950,10 @@ Examples:
                 subject = "AI Fix Verification Inconclusive ⚠️ (automated, may contain errors)"
             ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=4000)
             sys.exit(0 if ok else 1)
+        else:
+            if cached_summary:
+                subject = "AI Fix Verification Summary ⚠️ (automated, may contain errors)"
+                post_report_to_launchpad(bug_id, subject, report, config, max_chars=2000)
         return
 
     print("\n" + "="*80)

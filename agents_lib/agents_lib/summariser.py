@@ -80,13 +80,10 @@ def generate_summary(
         return result.text.strip()
 
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures  # noqa: PLC0415
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, _run())
-                return future.result(timeout=120)
-        return loop.run_until_complete(_run())
+        asyncio.get_running_loop()
+        import concurrent.futures  # noqa: PLC0415
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, _run()).result(timeout=120)
     except RuntimeError:
         return asyncio.run(_run())
 
