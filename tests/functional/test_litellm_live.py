@@ -25,7 +25,7 @@ def _available_models():
     try:
         import urllib.request
         req = urllib.request.Request(
-            f"{LITELLM_BASE_URL.rstrip('/v1').rstrip('/')}/v1/models",
+            f"{LITELLM_BASE_URL.removesuffix('/v1').rstrip('/')}/v1/models",
             headers={"Authorization": f"Bearer {LITELLM_API_KEY}"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:

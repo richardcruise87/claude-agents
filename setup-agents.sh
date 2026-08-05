@@ -268,15 +268,19 @@ if ! $UPDATE_MODE && [ -n "$PROVIDER" ]; then
             cp "$SCRIPT_DIR/$agent_dir/config.sample.json" "$config_file"
         fi
         if [ -f "$config_file" ]; then
-            "$VENV_PATH/bin/python3" - <<PYEOF
-import json
-with open('$config_file') as f:
+            CONFIG_FILE="$config_file" AGENT_DIR="$agent_dir" \
+            MODEL="$_MODEL" MODEL_PROVIDER="$_MODEL_PROVIDER" \
+            "$VENV_PATH/bin/python3" - <<'PYEOF'
+import json, os
+config_file = os.environ["CONFIG_FILE"]
+agent_dir = os.environ["AGENT_DIR"]
+with open(config_file) as f:
     cfg = json.load(f)
-cfg['model'] = '$_MODEL'
-cfg['model_provider'] = '$_MODEL_PROVIDER'
-with open('$config_file', 'w') as f:
+cfg['model'] = os.environ["MODEL"]
+cfg['model_provider'] = os.environ["MODEL_PROVIDER"]
+with open(config_file, 'w') as f:
     json.dump(cfg, f, indent=2)
-print('    Updated model provider in $agent_dir/config.json')
+print(f'    Updated model provider in {agent_dir}/config.json')
 PYEOF
         fi
     done
@@ -314,15 +318,18 @@ if ! $UPDATE_MODE; then
             agent_dir=$(get_agent_dir "$agent")
             config_file="$SCRIPT_DIR/$agent_dir/config.json"
             if [ -f "$config_file" ]; then
-                python3 - <<PYEOF
-import json
-with open('$config_file') as f:
+                CONFIG_FILE="$config_file" AGENT_DIR="$agent_dir" \
+                "$VENV_PATH/bin/python3" - <<'PYEOF'
+import json, os
+config_file = os.environ["CONFIG_FILE"]
+agent_dir = os.environ["AGENT_DIR"]
+with open(config_file) as f:
     cfg = json.load(f)
 if not cfg.get('notifications', {}).get('enabled'):
     cfg.setdefault('notifications', {})['enabled'] = True
-    with open('$config_file', 'w') as f:
+    with open(config_file, 'w') as f:
         json.dump(cfg, f, indent=2)
-    print('    Enabled notifications in $agent_dir/config.json')
+    print(f'    Enabled notifications in {agent_dir}/config.json')
 PYEOF
             fi
         done

@@ -364,6 +364,7 @@ _OPENAI_TOOL_SCHEMAS = {
 # OpenAI backend
 # ---------------------------------------------------------------------------
 
+@observe()
 async def _query_openai(
     model: str,
     prompt: str,
@@ -563,6 +564,7 @@ def _build_gemini_tools(tool_names: list[str]) -> list:
     return [schemas[t] for t in tool_names if t in schemas]
 
 
+@observe()
 async def _query_google(
     model: str,
     prompt: str,
