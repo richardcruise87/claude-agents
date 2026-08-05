@@ -164,6 +164,203 @@ class TestGoogleImportError:
 
 
 # ---------------------------------------------------------------------------
+# LiteLLM backend
+# ---------------------------------------------------------------------------
+
+class TestLiteLLMProvider:
+    def test_litellm_prefix_inferred(self):
+        provider, model = _parse_model_config({"model": "litellm/gpt-4o"})
+        assert provider == "litellm"
+        # Prefix must be stripped before the model name reaches the proxy
+        assert model == "gpt-4o"
+
+    def test_litellm_prefix_stripped_for_non_gpt(self):
+        provider, model = _parse_model_config({"model": "litellm/claude-3-opus"})
+        assert provider == "litellm"
+        assert model == "claude-3-opus"
+
+    def test_explicit_provider_wins_over_litellm_prefix(self):
+        # model_provider always takes precedence over name-based inference
+        provider, model = _parse_model_config(
+            {"model": "litellm/gpt-4o", "model_provider": "openai"}
+        )
+        assert provider == "openai"
+        # prefix should NOT be stripped when provider was set explicitly
+        assert model == "litellm/gpt-4o"
+
+    def test_explicit_litellm_provider_bare_model(self):
+        # model_provider=litellm with a plain model name (no prefix)
+        provider, model = _parse_model_config(
+            {"model": "gpt-4o", "model_provider": "litellm"}
+        )
+        assert provider == "litellm"
+        assert model == "gpt-4o"
+
+    @pytest.mark.asyncio
+    async def test_import_error_with_hint(self):
+        with patch.dict("sys.modules", {"openai": None}):
+            client = ModelClient(provider="litellm", model="gpt-4o")
+            with pytest.raises(ImportError, match="pip install openai"):
+                await client.query("test")
+
+    @pytest.mark.asyncio
+    async def test_default_base_url(self, mocker):
+        """When LITELLM_BASE_URL and LITELLM_API_KEY are absent, defaults are used."""
+        mock_client = MagicMock()
+
+        mock_response = MagicMock()
+        mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.content = "done"
+        mock_response.choices[0].message.tool_calls = None
+        mock_response.model = "gpt-4o"
+        mock_response.usage.prompt_tokens = 10
+        mock_response.usage.completion_tokens = 5
+
+        async def fake_create(**kwargs):
+            return mock_response
+
+        mock_client.chat.completions.create = fake_create
+
+        captured = {}
+
+        def capturing_constructor(**kwargs):
+            captured.update(kwargs)
+            return mock_client
+
+        mocker.patch("openai.AsyncOpenAI", capturing_constructor)
+
+        # Ensure the env vars are absent
+        env = {k: v for k, v in __import__("os").environ.items()
+               if k not in ("LITELLM_BASE_URL", "LITELLM_API_KEY", "LITELLM_TIMEOUT")}
+        mocker.patch.dict("os.environ", env, clear=True)
+
+        from agents_lib.model_client import _query_litellm  # noqa: PLC0415
+        await _query_litellm("gpt-4o", "hello", None, None)
+
+        assert captured.get("base_url") == "http://localhost:4000/v1"
+        assert captured.get("api_key") == "no-key"
+
+    @pytest.mark.asyncio
+    async def test_custom_base_url_and_key(self, mocker):
+        mock_client = MagicMock()
+
+        mock_response = MagicMock()
+        mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.content = "result"
+        mock_response.choices[0].message.tool_calls = None
+        mock_response.model = "my-model"
+        mock_response.usage.prompt_tokens = 8
+        mock_response.usage.completion_tokens = 4
+
+        async def fake_create(**kwargs):
+            return mock_response
+
+        mock_client.chat.completions.create = fake_create
+
+        captured = {}
+
+        def capturing_constructor(**kwargs):
+            captured.update(kwargs)
+            return mock_client
+
+        mocker.patch("openai.AsyncOpenAI", capturing_constructor)
+
+        from agents_lib.model_client import _query_litellm  # noqa: PLC0415
+
+        mocker.patch.dict("os.environ", {
+            "LITELLM_BASE_URL": "http://myproxy:8080/v1",
+            "LITELLM_API_KEY": "secret-token",
+        })
+
+        result = await _query_litellm("my-model", "hello", None, None)
+
+        assert captured["base_url"] == "http://myproxy:8080/v1"
+        assert captured["api_key"] == "secret-token"
+        assert result.text == "result"
+        assert result.usage == {"input_tokens": 8, "output_tokens": 4}
+
+    @pytest.mark.asyncio
+    async def test_happy_path_via_model_client(self, mocker):
+        """End-to-end: ModelClient with provider=litellm returns correct ModelResult."""
+        mock_client = MagicMock()
+
+        mock_response = MagicMock()
+        mock_response.choices[0].finish_reason = "stop"
+        mock_response.choices[0].message.content = "LiteLLM answer"
+        mock_response.choices[0].message.tool_calls = None
+        mock_response.model = "gpt-4o"
+        mock_response.usage.prompt_tokens = 20
+        mock_response.usage.completion_tokens = 10
+
+        async def fake_create(**kwargs):
+            return mock_response
+
+        mock_client.chat.completions.create = fake_create
+        mocker.patch("openai.AsyncOpenAI", return_value=mock_client)
+        mocker.patch.dict("os.environ", {
+            "LITELLM_BASE_URL": "http://localhost:4000/v1",
+            "LITELLM_API_KEY": "no-key",
+        })
+
+        client = ModelClient(provider="litellm", model="gpt-4o")
+        result = await client.query("test prompt")
+
+        assert result.text == "LiteLLM answer"
+        assert result.usage == {"input_tokens": 20, "output_tokens": 10}
+        assert result.model == "gpt-4o"
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_forwarded(self, mocker):
+        """LiteLLM backend executes tool calls and loops until done."""
+        mock_client = MagicMock()
+
+        # First response: tool call
+        tool_call = MagicMock()
+        tool_call.id = "call_1"
+        tool_call.function.name = "bash"
+        tool_call.function.arguments = '{"command": "echo hi"}'
+
+        first_response = MagicMock()
+        first_response.choices[0].finish_reason = "tool_calls"
+        first_response.choices[0].message.tool_calls = [tool_call]
+        first_response.model = "gpt-4o"
+        first_response.usage.prompt_tokens = 15
+        first_response.usage.completion_tokens = 5
+
+        # Second response: final answer
+        second_response = MagicMock()
+        second_response.choices[0].finish_reason = "stop"
+        second_response.choices[0].message.content = "Tool result received"
+        second_response.choices[0].message.tool_calls = None
+        second_response.model = "gpt-4o"
+        second_response.usage.prompt_tokens = 25
+        second_response.usage.completion_tokens = 8
+
+        call_count = 0
+
+        async def fake_create(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return first_response if call_count == 1 else second_response
+
+        mock_client.chat.completions.create = fake_create
+        mocker.patch("openai.AsyncOpenAI", return_value=mock_client)
+        mocker.patch("subprocess.run",
+                     return_value=MagicMock(stdout="hi\n", stderr="", returncode=0))
+        mocker.patch.dict("os.environ", {
+            "LITELLM_BASE_URL": "http://localhost:4000/v1",
+            "LITELLM_API_KEY": "no-key",
+        })
+
+        client = ModelClient(provider="litellm", model="gpt-4o")
+        result = await client.query("run something", tools=["Bash"])
+
+        assert call_count == 2
+        assert result.text == "Tool result received"
+        assert result.usage == {"input_tokens": 40, "output_tokens": 13}
+
+
+# ---------------------------------------------------------------------------
 # Unknown provider
 # ---------------------------------------------------------------------------
 

@@ -1,8 +1,9 @@
 """
 Provider-agnostic model client for Claude Agents.
 
-Wraps claude-agent-sdk (Anthropic), OpenAI, and Google Gemini behind a single
-interface so agents can switch providers via config without code changes.
+Wraps claude-agent-sdk (Anthropic), OpenAI, Google Gemini, and LiteLLM proxy
+behind a single interface so agents can switch providers via config without code
+changes.
 
 Usage:
     client = create_model_client(CONFIG)
@@ -14,22 +15,52 @@ Usage:
     print(result.text)
 
 Config keys:
-    model         — model name string, e.g. "claude-sonnet-4-6" / "gpt-4o" / "gemini-1.5-pro"
-    model_provider — "anthropic" | "openai" | "google"  (inferred from model name if absent)
+    model         — model name string, e.g. "claude-sonnet-4-6" / "gpt-4o" /
+                    "gemini-1.5-pro" / "litellm/gpt-4o"
+    model_provider — "anthropic" | "openai" | "google" | "litellm"
+                    (inferred from model name if absent; "litellm/" prefix also
+                    triggers auto-detection and the prefix is stripped before
+                    the model name is sent to the proxy)
+
+LiteLLM environment variables (no config.json keys needed):
+    LITELLM_BASE_URL — proxy endpoint (default: http://localhost:4000/v1)
+    LITELLM_API_KEY  — API key sent to the proxy (default: "no-key" for
+                       unauthenticated local proxies)
 
 Optional dependencies (imported lazily, not in install_requires):
-    openai              — pip install openai   (for model_provider=openai)
+    openai              — pip install openai   (for model_provider=openai or litellm)
     google-generativeai — pip install google-generativeai  (for model_provider=google)
 """
 
 import asyncio
 import json
+import os
 import subprocess
 import time
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+try:
+    from langfuse.decorators import observe as _langfuse_observe  # v2
+    _LANGFUSE_AVAILABLE = True
+except ImportError:
+    try:
+        from langfuse import observe as _langfuse_observe  # v3+
+        _LANGFUSE_AVAILABLE = True
+    except ImportError:
+        _LANGFUSE_AVAILABLE = False
+
+
+def _noop_observe(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    if len(args) == 1 and callable(args[0]) and not kwargs:
+        return args[0]
+    return decorator
+
+
+observe = _langfuse_observe if _LANGFUSE_AVAILABLE else _noop_observe
 
 
 # ---------------------------------------------------------------------------
@@ -76,9 +107,11 @@ class ModelClient:
             return await _query_openai(self.model, prompt, tools, on_progress)
         if self.provider == "google":
             return await _query_google(self.model, prompt, tools, on_progress)
+        if self.provider == "litellm":
+            return await _query_litellm(self.model, prompt, tools, on_progress)
         raise ValueError(
             f"Unknown model provider: {self.provider!r}. "
-            "Expected 'anthropic', 'openai', or 'google'."
+            "Expected 'anthropic', 'openai', 'google', or 'litellm'."
         )
 
 
@@ -113,8 +146,14 @@ def _parse_model_config(config: dict) -> tuple[str, str]:
             provider = "openai"
         elif model.startswith("gemini"):
             provider = "google"
+        elif model.startswith("litellm/"):
+            provider = "litellm"
         else:
             provider = "anthropic"
+
+    # Strip the "litellm/" routing prefix — the proxy receives the bare model name.
+    if provider == "litellm" and model.startswith("litellm/"):
+        model = model[len("litellm/"):]
 
     return provider, model
 
@@ -325,6 +364,7 @@ _OPENAI_TOOL_SCHEMAS = {
 # OpenAI backend
 # ---------------------------------------------------------------------------
 
+@observe()
 async def _query_openai(
     model: str,
     prompt: str,
@@ -340,6 +380,78 @@ async def _query_openai(
         ) from exc
 
     client = AsyncOpenAI()  # reads OPENAI_API_KEY from environment
+    messages = [{"role": "user", "content": prompt}]
+    tool_defs = [_OPENAI_TOOL_SCHEMAS[t] for t in (tools or []) if t in _OPENAI_TOOL_SCHEMAS]
+
+    start = time.time()
+    total_input = 0
+    total_output = 0
+    actual_model = model
+
+    while True:
+        kwargs: dict = {"model": model, "messages": messages}
+        if tool_defs:
+            kwargs["tools"] = tool_defs
+
+        response = await client.chat.completions.create(**kwargs)
+        choice = response.choices[0]
+        actual_model = response.model
+        total_input += response.usage.prompt_tokens
+        total_output += response.usage.completion_tokens
+
+        if choice.finish_reason == "tool_calls" and choice.message.tool_calls:
+            messages.append(choice.message)
+            for tc in choice.message.tool_calls:
+                args = json.loads(tc.function.arguments)
+                tool_result = _execute_tool(tc.function.name, args)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": tool_result,
+                })
+        else:
+            text = choice.message.content or ""
+            usage = {"input_tokens": total_input, "output_tokens": total_output}
+            duration_ms = int((time.time() - start) * 1000)
+            return ModelResult(text=text, usage=usage, model=actual_model, duration_ms=duration_ms)
+
+
+# ---------------------------------------------------------------------------
+# LiteLLM backend (OpenAI-compatible proxy)
+# ---------------------------------------------------------------------------
+
+@observe()
+async def _query_litellm(
+    model: str,
+    prompt: str,
+    tools: list[str] | None,
+    on_progress: Callable | None,
+) -> ModelResult:
+    """Query a LiteLLM proxy using the OpenAI-compatible /chat/completions API.
+
+    Configuration via environment variables:
+        LITELLM_BASE_URL — proxy base URL (default: http://localhost:4000/v1)
+        LITELLM_API_KEY  — API key (default: "no-key" for unauthenticated proxies)
+    """
+    if _LANGFUSE_AVAILABLE:
+        try:
+            from langfuse.openai import AsyncOpenAI  # noqa: PLC0415
+        except ImportError:
+            from openai import AsyncOpenAI  # noqa: PLC0415
+    else:
+        try:
+            from openai import AsyncOpenAI  # noqa: PLC0415
+        except ImportError as exc:
+            raise ImportError(
+                "openai package is required for model_provider=litellm.\n"
+                "Install it with: pip install openai"
+            ) from exc
+
+    base_url = os.environ.get("LITELLM_BASE_URL", "http://localhost:4000/v1")
+    api_key = os.environ.get("LITELLM_API_KEY", "no-key")
+    timeout = float(os.environ.get("LITELLM_TIMEOUT", "600"))
+
+    client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
     messages = [{"role": "user", "content": prompt}]
     tool_defs = [_OPENAI_TOOL_SCHEMAS[t] for t in (tools or []) if t in _OPENAI_TOOL_SCHEMAS]
 
@@ -452,6 +564,7 @@ def _build_gemini_tools(tool_names: list[str]) -> list:
     return [schemas[t] for t in tool_names if t in schemas]
 
 
+@observe()
 async def _query_google(
     model: str,
     prompt: str,
