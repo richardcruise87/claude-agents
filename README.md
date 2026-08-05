@@ -202,7 +202,12 @@ octavia-verify-fix --bug 2150752 --already-applied
 ### Prerequisites
 
 - Python 3.8+
-- A supported AI backend (see [Model Providers](#model-providers) below)
+- Vertex AI access configured:
+  ```bash
+  export CLAUDE_CODE_USE_VERTEX=1
+  gcloud auth application-default login
+  # Or: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+  ```
 
 ### Quick Setup (Recommended)
 
@@ -213,7 +218,6 @@ cd ~/git/claude-agents
 
 The setup script walks you through each step interactively:
 - Creates `~/.venv/claude-agents/` and installs all agent packages
-- Prompts you to choose a model provider (Vertex AI default, or LiteLLM/OpenAI/Google)
 - Optionally deploys systemd unit files for automated scheduling
 - Optionally configures notifications (email, Slack, ntfy.sh, desktop)
 
@@ -222,7 +226,6 @@ Install specific agents or add flags to skip prompts:
 ./setup-agents.sh bug-triage code-review   # specific agents only
 ./setup-agents.sh --systemd --notifications # skip prompts, enable both
 ./setup-agents.sh --update                  # update all agents
-./setup-agents.sh --provider litellm        # set provider without prompting
 ```
 
 ### Manual Package Installation
@@ -257,83 +260,6 @@ pip install -e fix-verification-agent/
 | `octavia-verify-fix` | Fix verification agent |
 | `octavia-verify-fix --bug N --patch FILE` | Verify a local patch against bug N's reproduction test |
 
-### Model Providers
-
-All agents share a single `model`/`model_provider` setting. The default is
-Claude via Google Vertex AI. Three other providers are supported.
-
-#### Google Vertex AI (default)
-
-```bash
-export CLAUDE_CODE_USE_VERTEX=1
-gcloud auth application-default login
-# Or: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
-```
-
-In `config.json` (default, no change needed):
-```json
-{ "model": "claude-sonnet-4-6", "model_provider": "anthropic" }
-```
-
-#### LiteLLM proxy (localhost)
-
-Run a [LiteLLM proxy](https://docs.litellm.ai/docs/proxy/quick_start) on port 4000
-and point agents at it with no changes to `config.json`:
-
-```bash
-pip install litellm
-litellm --model gpt-4o   # or any model LiteLLM supports
-```
-
-Set the model via the `litellm/` prefix, which auto-detects the provider and
-strips the prefix before the model name reaches the proxy:
-
-```json
-{ "model": "litellm/gpt-4o" }
-```
-
-Configure the proxy endpoint and API key via environment variables
-(both have sensible defaults for a local unauthenticated proxy):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LITELLM_BASE_URL` | `http://localhost:4000/v1` | Proxy base URL |
-| `LITELLM_API_KEY` | `no-key` | API key (leave unset for local proxies) |
-
-Requires `pip install openai` (the proxy speaks the OpenAI-compatible API):
-
-```bash
-source ~/.venv/claude-agents/bin/activate
-pip install openai
-```
-
-The `setup-agents.sh` script installs `openai` automatically when you select
-the LiteLLM provider.
-
-#### OpenAI direct
-
-```json
-{ "model": "gpt-4o", "model_provider": "openai" }
-```
-
-```bash
-export OPENAI_API_KEY=sk-...
-pip install openai
-```
-
-#### Google Gemini direct
-
-```json
-{ "model": "gemini-1.5-pro", "model_provider": "google" }
-```
-
-```bash
-export GOOGLE_API_KEY=...
-pip install google-generativeai
-```
-
----
-
 ### Configuration
 
 Each agent requires a `config.json` (created from the sample template):
@@ -346,8 +272,7 @@ done
 ```
 
 Key settings common to all agents:
-- `model` — model to use (default: `claude-sonnet-4-6`; use `litellm/<model>` for LiteLLM)
-- `model_provider` — `anthropic` (default), `openai`, `google`, or `litellm`
+- `model` — Claude model to use (default: `claude-sonnet-4-6`)
 - `output.*_directory` — where to save reports
 - `monitoring.max_*_per_cycle` — items to process per run
 - `filters.cutoff_date` — ignore items older than this date (default: 30 days ago)
@@ -393,7 +318,7 @@ tox -e unit -- tests/unit/test_utils.py -v
 tox -e unit -- -k "test_slugify"
 ```
 
-All tests use `pytest`. The test suite covers `agents_lib` utilities, all agent tracking/parsing modules, the notification system, and the model client provider detection — 584 unit tests in total.
+All tests use `pytest`. The test suite covers `agents_lib` utilities, all agent tracking/parsing modules, the notification system, and the model client provider detection — 240 tests in total.
 
 ---
 

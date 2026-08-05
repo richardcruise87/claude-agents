@@ -204,20 +204,12 @@ def load_previous_review_context(
     latest = prior[-1]
 
     review_path = Path(latest.review_file)
-    try:
-        path_exists = review_path.exists()
-    except OSError:
-        path_exists = False
-
-    if not path_exists:
-        # File moved, deleted, or on an unavailable mount — try finding by glob
+    if not review_path.exists():
+        # File moved or deleted — try finding by glob
         candidates = find_previous_reviews(output_dir, change)
         if not candidates:
             return None, latest
         review_path = candidates[-1]
 
-    try:
-        content = review_path.read_text(encoding="utf-8")
-    except OSError:
-        return None, latest
+    content = review_path.read_text(encoding="utf-8")
     return content[:3000], latest  # Truncate for prompt context

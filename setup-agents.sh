@@ -16,7 +16,6 @@ SETUP_NOTIFICATIONS=""
 SETUP_CREDENTIALS=""
 SELECTED_AGENTS=()
 CREDS_FILE="$HOME/.config/claude-agents/credentials.env"
-PROVIDER=""   # vertex (default) | litellm | openai | google
 
 ALL_AGENTS=("bug-triage" "code-review" "bug-reproduction" "ci-failure" "devstack-test" "jira-triage" "fix-proposal" "fix-verification")
 
@@ -46,11 +45,6 @@ usage() {
     echo "  --no-notifications  Skip notification setup without prompting"
     echo "  --credentials       Proceed to credential prompts without asking for confirmation"
     echo "  --no-credentials    Skip credentials setup without prompting"
-    echo "  --provider PROVIDER Choose model provider without prompting:"
-    echo "                        vertex   — Claude via Google Vertex AI (default)"
-    echo "                        litellm  — LiteLLM proxy at localhost:4000"
-    echo "                        openai   — OpenAI API direct"
-    echo "                        google   — Google Gemini direct"
     echo "  --venv PATH         Virtual environment path (default: ~/.venv/claude-agents)"
     echo "  -h, --help          Show this help message"
     echo ""
@@ -82,15 +76,6 @@ while [[ $# -gt 0 ]]; do
         --no-notifications)  SETUP_NOTIFICATIONS=no; shift ;;
         --credentials)       SETUP_CREDENTIALS=yes; shift ;;
         --no-credentials)    SETUP_CREDENTIALS=no; shift ;;
-        --provider)
-            case "$2" in
-                vertex|litellm|openai|google) PROVIDER="$2" ;;
-                *)
-                    echo -e "${RED}ERROR${NC}: Unknown provider: $2 (expected vertex, litellm, openai, or google)"
-                    exit 1
-                    ;;
-            esac
-            shift 2 ;;
         --venv)              VENV_PATH="$2"; shift 2 ;;
         -h|--help)        usage; exit 0 ;;
         bug-triage|code-review|bug-reproduction|ci-failure|devstack-test|jira-triage|fix-proposal|fix-verification)
@@ -154,75 +139,6 @@ echo -e "${GREEN}✓${NC} agents_lib installed"
 STEP=$((STEP + 1))
 echo ""
 
-# Step: Model provider (install mode only)
-if ! $UPDATE_MODE; then
-    echo -e "${BLUE}Step ${STEP}: Model provider${NC}"
-
-    if [ -z "$PROVIDER" ]; then
-        echo "Choose the AI backend for all agents:"
-        echo "  1) Vertex AI  — Claude via Google Vertex AI (default, recommended)"
-        echo "  2) LiteLLM    — OpenAI-compatible proxy at localhost:4000"
-        echo "  3) OpenAI     — OpenAI API direct (requires OPENAI_API_KEY)"
-        echo "  4) Gemini     — Google Gemini direct (requires GOOGLE_API_KEY)"
-        echo ""
-        echo -n "Provider [1]: "
-        read -r _response
-        case "$_response" in
-            2|litellm|LiteLLM) PROVIDER=litellm ;;
-            3|openai|OpenAI)   PROVIDER=openai ;;
-            4|google|gemini)   PROVIDER=google ;;
-            *)                 PROVIDER=vertex ;;
-        esac
-    fi
-
-    # Determine config values for each provider
-    case "$PROVIDER" in
-        vertex)
-            _MODEL="claude-sonnet-4-6"
-            _MODEL_PROVIDER="anthropic"
-            echo -e "${GREEN}✓${NC} Using Google Vertex AI (Claude claude-sonnet-4-6)"
-            echo "  Make sure Vertex AI credentials are configured:"
-            echo "    export CLAUDE_CODE_USE_VERTEX=1"
-            echo "    gcloud auth application-default login"
-            echo "    # or: export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json"
-            ;;
-        litellm)
-            _MODEL="litellm/gpt-4o"
-            _MODEL_PROVIDER="litellm"
-            echo -e "${GREEN}✓${NC} Using LiteLLM proxy"
-            echo "  Installing openai package (required for LiteLLM)..."
-            "$VENV_PATH/bin/pip" install -q openai
-            echo -e "  ${GREEN}✓${NC} openai installed"
-            echo "  Configure the proxy endpoint via environment variables:"
-            echo "    LITELLM_BASE_URL  (default: http://localhost:4000/v1)"
-            echo "    LITELLM_API_KEY   (default: no-key)"
-            echo "  Override the model name in config.json if needed, e.g.:"
-            echo "    { \"model\": \"litellm/claude-3-opus\" }"
-            ;;
-        openai)
-            _MODEL="gpt-4o"
-            _MODEL_PROVIDER="openai"
-            echo -e "${GREEN}✓${NC} Using OpenAI direct"
-            echo "  Installing openai package..."
-            "$VENV_PATH/bin/pip" install -q openai
-            echo -e "  ${GREEN}✓${NC} openai installed"
-            echo "  Set OPENAI_API_KEY in your environment or credentials file."
-            ;;
-        google)
-            _MODEL="gemini-1.5-pro"
-            _MODEL_PROVIDER="google"
-            echo -e "${GREEN}✓${NC} Using Google Gemini direct"
-            echo "  Installing google-generativeai package..."
-            "$VENV_PATH/bin/pip" install -q google-generativeai
-            echo -e "  ${GREEN}✓${NC} google-generativeai installed"
-            echo "  Set GOOGLE_API_KEY in your environment or credentials file."
-            ;;
-    esac
-
-    STEP=$((STEP + 1))
-    echo ""
-fi
-
 # Step: Systemd decision (install mode only, ask once before the main loop)
 if ! $UPDATE_MODE && [ -z "$INSTALL_SYSTEMD" ]; then
     echo -e "${BLUE}Step ${STEP}: Systemd services (optional)${NC}"
@@ -257,37 +173,6 @@ done
 STEP=$((STEP + 1))
 echo ""
 
-# Apply model provider settings to each agent's config.json (install mode only)
-if ! $UPDATE_MODE && [ -n "$PROVIDER" ]; then
-    echo -e "${BLUE}Step ${STEP}: Applying model provider settings${NC}"
-    for agent in "${SELECTED_AGENTS[@]}"; do
-        agent_dir=$(get_agent_dir "$agent")
-        config_file="$SCRIPT_DIR/$agent_dir/config.json"
-        # Create config.json from sample if it doesn't exist yet
-        if [ ! -f "$config_file" ] && [ -f "$SCRIPT_DIR/$agent_dir/config.sample.json" ]; then
-            cp "$SCRIPT_DIR/$agent_dir/config.sample.json" "$config_file"
-        fi
-        if [ -f "$config_file" ]; then
-            CONFIG_FILE="$config_file" AGENT_DIR="$agent_dir" \
-            MODEL="$_MODEL" MODEL_PROVIDER="$_MODEL_PROVIDER" \
-            "$VENV_PATH/bin/python3" - <<'PYEOF'
-import json, os
-config_file = os.environ["CONFIG_FILE"]
-agent_dir = os.environ["AGENT_DIR"]
-with open(config_file) as f:
-    cfg = json.load(f)
-cfg['model'] = os.environ["MODEL"]
-cfg['model_provider'] = os.environ["MODEL_PROVIDER"]
-with open(config_file, 'w') as f:
-    json.dump(cfg, f, indent=2)
-print(f'    Updated model provider in {agent_dir}/config.json')
-PYEOF
-        fi
-    done
-    STEP=$((STEP + 1))
-    echo ""
-fi
-
 # Step: Notifications (install mode only)
 if ! $UPDATE_MODE; then
     NOTIF_JSON="$SCRIPT_DIR/notifications.json"
@@ -318,18 +203,15 @@ if ! $UPDATE_MODE; then
             agent_dir=$(get_agent_dir "$agent")
             config_file="$SCRIPT_DIR/$agent_dir/config.json"
             if [ -f "$config_file" ]; then
-                CONFIG_FILE="$config_file" AGENT_DIR="$agent_dir" \
-                "$VENV_PATH/bin/python3" - <<'PYEOF'
-import json, os
-config_file = os.environ["CONFIG_FILE"]
-agent_dir = os.environ["AGENT_DIR"]
-with open(config_file) as f:
+                python3 - <<PYEOF
+import json
+with open('$config_file') as f:
     cfg = json.load(f)
 if not cfg.get('notifications', {}).get('enabled'):
     cfg.setdefault('notifications', {})['enabled'] = True
-    with open(config_file, 'w') as f:
+    with open('$config_file', 'w') as f:
         json.dump(cfg, f, indent=2)
-    print(f'    Enabled notifications in {agent_dir}/config.json')
+    print('    Enabled notifications in $agent_dir/config.json')
 PYEOF
             fi
         done
@@ -385,20 +267,6 @@ if ! $UPDATE_MODE; then
 #LAUNCHPAD_CONSUMER_KEY=
 #LAUNCHPAD_ACCESS_TOKEN=
 #LAUNCHPAD_ACCESS_TOKEN_SECRET=
-
-# ── LiteLLM proxy ───────────────────────────────────────────────────────────
-# Used when model_provider=litellm (model prefix "litellm/")
-# Defaults work for an unauthenticated local proxy on port 4000
-#LITELLM_BASE_URL=http://localhost:4000/v1
-#LITELLM_API_KEY=no-key
-
-# ── OpenAI direct ───────────────────────────────────────────────────────────
-# Used when model_provider=openai
-#OPENAI_API_KEY=
-
-# ── Google Gemini direct ─────────────────────────────────────────────────────
-# Used when model_provider=google (not Vertex AI)
-#GOOGLE_API_KEY=
 CREDSEOF
         fi
         chmod 600 "$CREDS_FILE"
@@ -441,27 +309,6 @@ CREDSEOF
         _set_cred LAUNCHPAD_ACCESS_TOKEN          "Access token"
         _set_cred LAUNCHPAD_ACCESS_TOKEN_SECRET   "Access token secret"
         echo ""
-
-        # Provider-specific credentials
-        case "$PROVIDER" in
-            litellm)
-                echo "  LiteLLM proxy:"
-                _set_cred LITELLM_BASE_URL  "Proxy base URL (default: http://localhost:4000/v1)"
-                _set_cred LITELLM_API_KEY   "Proxy API key (default: no-key)"
-                echo ""
-                ;;
-            openai)
-                echo "  OpenAI:"
-                _set_cred OPENAI_API_KEY  "OpenAI API key"
-                echo ""
-                ;;
-            google)
-                echo "  Google Gemini:"
-                _set_cred GOOGLE_API_KEY  "Google API key"
-                echo ""
-                ;;
-        esac
-
         echo -e "${GREEN}✓${NC} Credentials saved to $CREDS_FILE (chmod 600)"
     fi
 

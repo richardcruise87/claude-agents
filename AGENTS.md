@@ -6,62 +6,31 @@ version: 1.0
 
 # Claude Agents
 
-Nine AI-powered agents for OpenStack Octavia maintenance. All agents share a
-common virtual environment (`~/.venv/claude-agents`), the `agents_lib` shared
-library, and optional multi-channel notifications.
+Eight specialised AI agents for OpenStack Octavia maintenance — bug triage,
+code review, CI failure analysis, bug reproduction, DevStack integration
+testing, JIRA issue triage, fix proposal generation, and fix verification.  All agents share a common virtual environment,
+a unified install script, and optional multi-channel notifications.
 
-> **AI assistant note**: When a user asks you to triage a bug, review a
-> change, analyse a CI failure, reproduce a bug, run integration tests, triage
-> a JIRA issue, propose a fix, verify a fix, or backport a change — delegate
-> to the appropriate agent command below rather than doing the work inline.
+> **AI assistant note**: When a user in this repo asks you to triage a bug,
+> review a change, analyse a CI failure, reproduce a bug, run integration
+> tests, delegate to the appropriate agent command listed below rather than
+> doing the work inline.
 
 ---
 
 ## Quick start
 
 ```bash
-# Install eight agents into ~/.venv/claude-agents/ (backport agent is separate)
+# Install all agents into ~/.venv/claude-agents/
 ./setup-agents.sh
 
 # Optional: configure notification channels
 cp notifications.sample.json notifications.json
+# Edit notifications.json with your SMTP / Slack / ntfy settings
 
 # Optional: enable systemd scheduling
 ./setup-agents.sh --systemd
-
-# Install the backport agent separately
-bash backport-agent/install.sh --venv ~/.venv/claude-agents --systemd
 ```
-
----
-
-## Developer commands
-
-```bash
-pip install tox
-
-tox -e unit        # unit tests only (fast, no network, no API keys needed)
-tox -e functional  # end-to-end flow tests
-tox -e pep8        # flake8 (max-line-length=120) + pylint
-tox -e bandit      # security scan (not in default envlist)
-tox                # runs py312 (all tests) + pep8 — NOT the named unit/functional envs
-
-# Run a focused subset
-tox -e unit -- tests/unit/test_model_client.py -v
-tox -e unit -- -k "test_slugify"
-```
-
-**Tox quirks:**
-- `tox` (no `-e`) runs `py312` + `pep8`, not the `unit`/`functional` named envs.
-- `skipsdist = true` — there is no top-level package; `PYTHONPATH` is set manually to include all nine agent dirs and `agents_lib`.
-- `pylint` targets individually listed files in `tox.ini`. **Adding a new `.py` file requires also adding it to the `pylint` command in `tox.ini`**; flake8 uses directories and picks up new files automatically.
-- Tests require `pytest`, `pytest-asyncio`, `pytest-mock` only. No network, no DevStack, no AI credentials needed.
-- `bandit` job is independent in CI — a bandit failure does not block the test job.
-- CI order: `pep8` must pass before `test` runs (`needs: lint` in `.github/workflows/ci.yml`). Run `tox -e pep8` before `tox -e unit` locally to match.
-
-**Commit conventions (from CLAUDE.md):**
-- Before every commit, update `CHANGELOG.md` (new features/behaviour changes) and `README.md` (agent/command/install changes). If neither needs updating, note it in the commit body.
-- Commit message format: `<Action> <component>: <description>` with a `Co-Authored-By:` footer for AI-assisted commits.
 
 ---
 
@@ -77,13 +46,12 @@ detailed markdown report.
 
 **Commands**:
 ```bash
+# Monitor all configured bugs (runs the full triage loop)
 octavia-triage-bugs
+
+# Triage one specific bug by passing a JSON data file
 octavia-triage-bugs --single-bug /tmp/bug_data.json
 ```
-
-> **Note**: The agent spawns each AI call in a fresh subprocess via
-> `--single-bug` mode to work around a `RuntimeError` in `claude-agent-sdk`
-> when `query()` is called multiple times in the same process.
 
 **Configuration** (`bug-triage-agent/config.json`):
 
@@ -110,9 +78,16 @@ comprehensive markdown review with a verdict (Approve / Request Changes).
 
 **Commands**:
 ```bash
+# Monitor all configured repositories
 octavia-review-agent
+
+# Review a specific change (latest patchset)
 octavia-review-change 982567
+
+# Review a specific patchset
 octavia-review-change 982567 3
+
+# Review by full Gerrit URL
 octavia-review-change https://review.opendev.org/c/openstack/octavia/+/982567
 ```
 
@@ -120,15 +95,14 @@ octavia-review-change https://review.opendev.org/c/openstack/octavia/+/982567
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `forge.type` | `gerrit` | `gerrit`, `github`, or `gitlab` |
 | `repositories` | openstack/octavia, … | Repos to monitor |
 | `monitoring.max_reviews_per_cycle` | `3` | Reviews per run |
+| `filters.cutoff_date` | 30 days ago | Ignore older changes |
 | `filters.skip_wip` | `true` | Skip Work-In-Progress changes |
-| `feedback.post_to_forge` | `false` | Post review as Gerrit/GitHub comment |
 
 **Output**: `~/octavia_reviews/review_<repo>_<change>_ps<n>_<timestamp>.md`
 
-**Tracking file**: `~/.octavia_reviewed_changes.json` (tracking key: `<change_id>~ps<n>`)
+**Tracking file**: `~/.octavia_reviewed_changes.json`
 
 ---
 
@@ -142,11 +116,22 @@ and produces a report classifying each failure (`CODE_ISSUE`, `ENVIRONMENTAL`,
 
 **Commands**:
 ```bash
+# Monitor all configured repositories
 octavia-ci-agent
+
+# Analyse failures for a specific Gerrit change
 octavia-ci-agent --change 982567
+
+# Analyse failures in a specific pipeline
 octavia-ci-agent --change 982567 --pipeline check
+
+# Analyse a single Zuul build by UUID
 octavia-ci-agent --build <zuul-build-uuid>
+
+# List recent failures without running AI analysis
 octavia-ci-agent --list-failures
+
+# Print the formatted prompt only (for use with any AI tool)
 octavia-analyze-ci --failure-data /tmp/data.json --print-prompt
 ```
 
@@ -159,7 +144,6 @@ octavia-analyze-ci --failure-data /tmp/data.json --print-prompt
 | `zuul.pipelines` | check, gate | Pipelines to monitor |
 | `zuul.hours_back` | `24` | Look-back window in hours |
 | `monitoring.max_changes_per_cycle` | `5` | Changes analysed per run |
-| `log_scan_patterns` | (regex list) | Pre-classify log lines before AI analysis |
 
 **Output**: `~/octavia_ci_failures/ci_failure_<project>_<change>_<timestamp>.md`
 
@@ -171,7 +155,7 @@ octavia-analyze-ci --failure-data /tmp/data.json --print-prompt
 
 Reads bug triage reports from `~/octavia_bug_triages/`, generates a DevStack
 bash reproduction script using AI, executes it with a timeout, and iteratively
-refines the script on failure (up to 3 attempts). Saves a reproduction report
+refines the script on failure (up to 3 attempts).  Saves a reproduction report
 and the successful script.
 
 **When to use**: a triaged bug needs to be reproduced in a live DevStack environment.
@@ -183,7 +167,7 @@ octavia-reproduce-bugs
 ```
 
 > **Note**: In automated setups a systemd path watcher triggers this automatically
-> when a new triage report appears. See `bug-reproduction-agent/systemd/`.
+> when a new triage report appears.  See `bug-reproduction-agent/systemd/`.
 
 **Configuration** (`bug-reproduction-agent/config.json`):
 
@@ -205,9 +189,10 @@ octavia-reproduce-bugs
 
 ### DevStack Test Agent
 
-Picks up new code review files from `~/octavia_reviews/`, deploys the reviewed
-change to DevStack, runs integration tests in an isolated environment (unique
-resource prefix, exclusive DevStack lock), and writes a separate testing report.
+Watches `~/octavia_reviews/` for new review files, deploys the reviewed change
+to DevStack, runs integration tests in an isolated environment (unique resource
+prefix, exclusive DevStack lock), and appends a "DevStack Integration Tests"
+section to the original review file.
 
 **When to use**: a code review is ready and needs live integration testing.
 
@@ -217,11 +202,8 @@ resource prefix, exclusive DevStack lock), and writes a separate testing report.
 octavia-devstack-test
 ```
 
-> **Note**: The agent writes a separate `testing_report_*` file — it does NOT
-> modify the original review file.
-
-> In automated setups a systemd path watcher triggers this automatically when a
-> new review appears. See `devstack-test-agent/systemd/`.
+> **Note**: In automated setups a systemd path watcher triggers this automatically
+> when a new review appears.  See `devstack-test-agent/systemd/`.
 
 **Configuration** (`devstack-test-agent/config.json`):
 
@@ -233,6 +215,7 @@ octavia-devstack-test
 | `filters.only_test_repositories` | `[openstack/octavia]` | Repos to test |
 
 **Output**: `~/octavia_reviews/testing_report_<repo>_<change>_ps<n>_<timestamp>.md`
+(original review file is left untouched)
 
 **Tracking file**: `~/.octavia_devstack_tests.json`
 
@@ -262,7 +245,6 @@ octavia-jira-triage
 | `processing.max_issues_per_run` | `5` | Issues processed per execution |
 | `issue_types.bugs` | `["Bug", "Defect"]` | Types treated as bugs |
 | `issue_types.planning` | `["Story", "Task", "Epic"]` | Types that get implementation plans |
-| `feedback.post_to_jira` | `false` | Post triage/plan as JIRA comment |
 
 **Output**:
 - Bug triages: `~/jira_triages/jira_{KEY}_{title-slug}_{timestamp}_{seq}.md`
@@ -319,10 +301,19 @@ to validate their own fix against the reproduction test before submitting.
 
 **Commands**:
 ```bash
+# Automated mode (processes new fix proposals)
 octavia-verify-fix
+
+# Manual mode — verify a local patch file
 octavia-verify-fix --bug 2150752 --patch ~/my-fix.patch
+
+# Manual mode — verify a local git branch
 octavia-verify-fix --bug 2150752 --branch fix/my-branch
+
+# Manual mode — verify a Gerrit change
 octavia-verify-fix --bug 2150752 --gerrit 987701
+
+# Manual mode — fix already applied, just re-run the reproduction test
 octavia-verify-fix --bug 2150752 --already-applied
 ```
 
@@ -350,127 +341,34 @@ to `max_attempts`; fix failures stop immediately.
 
 ---
 
-### Backport Agent
-
-**Not included in `setup-agents.sh`** — install separately:
-```bash
-bash backport-agent/install.sh --venv ~/.venv/claude-agents --systemd
-```
-
-Two binaries with distinct functions:
-
-**`octavia-backport-monitor`** — finds recently merged changes with
-`Backport-Candidate=+1`, cherry-picks them to configured stable branches, and
-pushes to Gerrit as `refs/for/<branch>%topic=backport-<change_id>`. On
-conflict: aborts, cleans up, records `CONFLICT`.
-
-```bash
-octavia-backport-monitor
-octavia-backport-monitor --dry-run
-octavia-backport-monitor --repo openstack/octavia --lookback 14
-```
-
-**`octavia-backport-review`** — reviews open backport changes in Gerrit using
-the same AI infrastructure as the code-review agent. Filters for changes whose
-target branch starts with `stable/` or `unmaintained/`.
-
-```bash
-octavia-backport-review
-octavia-backport-review 923456
-```
-
-> **Cross-agent coupling**: `backport_review_agent.py` does
-> `sys.path.insert(0, code-review-agent/)` at module level to import
-> `config.py` from the code-review agent. Both agents must be present in the
-> same monorepo checkout for this to work.
-
-**Configuration** (`backport-agent/config.json`):
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `monitored_repos` | (required) | List of `owner/repo` strings |
-| `source_branch` | `master` | Branch to cherry-pick from |
-| `backport_branches` | (required) | Target stable branches (wildcards OK) |
-| `repo_path` | (required) | Local git checkout path |
-| `gerrit_remote` | `origin` | Remote name for Gerrit pushes |
-| `lookback_days` | `7` | How far back to look for merged changes |
-
-**Tracking file**: `~/.octavia_backports.json` (key: `<change_id>:<branch>`)
-
-**Systemd**: timer at 08:00 daily for monitor; every 4 hours for review.
-
----
-
 ## Shared configuration
 
 All agents share these top-level `config.json` keys:
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `model` | `claude-sonnet-4-6` | AI model name |
-| `model_provider` | inferred from model name | `anthropic`, `openai`, or `google` |
-| `notifications.enabled` | `false` | Enable notification dispatch |
-| `context.rules_file` | `~/.claude-agents/rules.md` | Read-only rules prepended to every prompt |
-| `context.save_learnings` | `true` | Write post-run learnings to context file |
+| Key | Description |
+|-----|-------------|
+| `model` | AI model name (default: `claude-sonnet-4-6`) |
+| `model_provider` | `anthropic` (default), `openai`, or `google` |
+| `notifications.enabled` | `true`/`false` — send reports via configured channels |
 
-**Config fallback**: if `config.json` is absent, `load_agent_config()` silently
-falls back to `config.sample.json`. Agents will run with sample defaults
-(including `model_provider: "anthropic"`) without warning.
-
-**Provider auto-detection**: if `model_provider` is absent, the client infers
-from the model name: `claude*` → anthropic, `gpt-*`/`o1`/`o3`/`o4*` → openai,
-`gemini*` → google, `litellm/*` → litellm. An explicit `model_provider` field
-always wins.
-
-**Switching to LiteLLM proxy** (OpenAI-compatible, runs locally on port 4000):
-```json
-{ "model": "litellm/gpt-4o" }
-```
-The `litellm/` prefix is stripped before the model name reaches the proxy.
-No extra config keys — configure via env vars:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `LITELLM_BASE_URL` | `http://localhost:4000/v1` | Proxy endpoint |
-| `LITELLM_API_KEY` | `no-key` | API key (omit for unauthenticated local proxies) |
-
-Or with an explicit provider and any model name the proxy supports:
-```json
-{ "model": "gpt-4o", "model_provider": "litellm" }
-```
-Requires `pip install openai` (LiteLLM speaks the OpenAI-compatible API).
-
-**Switching AI provider** (non-LiteLLM):
+To switch to a different AI provider:
 ```json
 { "model": "gpt-4o", "model_provider": "openai" }
 ```
 Then `pip install openai` and set `OPENAI_API_KEY`.
 
-**Environment variable overrides** (all agents):
-
-| Variable | Config key |
-|----------|-----------|
-| `CUTOFF_DATE` | `cutoff_date` |
-| `DEVSTACK_PATH` | `devstack.path` |
-| `GERRIT_URL` | `gerrit.base_url` |
-| `LAUNCHPAD_PROJECT` | `launchpad_project` |
-| `MAX_BUGS` | `max_bugs_per_run` |
-| `MAX_REVIEWS` | `monitoring.max_reviews_per_cycle` |
-
-Credentials are stored at `~/.config/claude-agents/credentials.env` (chmod 600)
-and referenced by systemd unit files via `EnvironmentFile=`.
-
 ---
 
-## Required environment variables
+## Running the test suite
 
-| Variable | Used by | Notes |
-|----------|---------|-------|
-| `ANTHROPIC_API_KEY` or Vertex config | All agents (default provider) | For Vertex: set `CLAUDE_CODE_USE_VERTEX=1` + `GOOGLE_APPLICATION_CREDENTIALS` |
-| `OPENAI_API_KEY` | OpenAI provider | Only when `model_provider=openai` |
-| `GERRIT_USERNAME` / `GERRIT_HTTP_PASSWORD` | code-review, ci-failure, devstack-test, backport | Basic auth; omit for anonymous read-only access |
-| `LAUNCHPAD_CONSUMER_KEY` / `LAUNCHPAD_ACCESS_TOKEN` / `LAUNCHPAD_ACCESS_TOKEN_SECRET` | bug-triage, fix-proposal, fix-verification | OAuth 1.0a; required only when `feedback.post_to_launchpad=true` |
-| `JIRA_API_TOKEN` | jira-triage | Key name configurable via `jira.token_env` |
+```bash
+pip install tox
+
+tox -e unit        # 400 unit tests — fast, no network required
+tox -e functional  # end-to-end flow tests
+tox -e pep8        # flake8 + pylint (10.00/10 score)
+tox                # run everything
+```
 
 ---
 
@@ -480,12 +378,6 @@ and referenced by systemd unit files via `EnvironmentFile=`.
 ```bash
 octavia-triage-bugs           # produces triage reports
 octavia-reproduce-bugs        # picks up the newest triage and tries to reproduce
-```
-
-**Reproduction → fix → verify**:
-```bash
-octavia-propose-fix           # reads REPRODUCED reports, generates patch
-octavia-verify-fix            # applies patch, re-runs reproduction script
 ```
 
 **Code review → integration test** (can be fully automated):
@@ -504,6 +396,8 @@ octavia-ci-agent --change 982567
 
 ## Automated scheduling
 
+Each agent ships with systemd unit files for unattended operation:
+
 ```bash
 ./setup-agents.sh --systemd   # install unit files
 
@@ -511,39 +405,13 @@ octavia-ci-agent --change 982567
 systemctl --user enable --now octavia-bug-triage.timer      # daily at 09:00
 systemctl --user enable --now octavia-code-review.timer     # every 4 hours
 systemctl --user enable --now octavia-ci-failure.timer      # every 4 hours
-systemctl --user enable --now octavia-fix-proposal.timer    # daily at 15:00
-systemctl --user enable --now octavia-fix-verification.timer # daily at 17:00
-systemctl --user enable --now octavia-backport-monitor.timer # daily at 08:00
-systemctl --user enable --now octavia-backport-review.timer  # every 4 hours
 
 # Event-driven agents (inotify path watchers)
 systemctl --user enable --now octavia-bug-reproduction.path
 systemctl --user enable --now octavia-devstack-test.path
+systemctl --user enable --now octavia-fix-proposal.timer        # daily at 15:00
+systemctl --user enable --now octavia-fix-verification.timer    # daily at 17:00
 
 # Persist services across logout
 loginctl enable-linger $USER
 ```
-
----
-
-## Key architecture notes
-
-- **Shared library**: `agents_lib/` is a pip-installable package (`agents-lib`)
-  with no mandatory external dependencies. It provides: `ModelClient`
-  (multi-provider AI), `ForgeClient` (Gerrit/GitHub/GitLab), config loading,
-  deduplication tracking, notifications (SMTP/Slack/ntfy/desktop — all stdlib),
-  DevStack lock/checks, and prompt loading.
-- **All packaging uses `setup.py`**, not `pyproject.toml`. The `pyproject.toml`
-  at root contains only `[tool.bandit]` config.
-- **DevStack mutex**: `DevStackLock` in `devstack_lock.py` is a file-based mutex
-  shared between the devstack-test and bug-reproduction agents so they do not run
-  simultaneously. Each run gets a unique resource prefix (`test-review-{pid}-{ts}-`).
-- **Notifications config**: `notifications.json` lives at the repo root and is
-  shared by all agents. Credential values use `*_env` suffix — the actual value
-  is read from the named environment variable at runtime.
-- **Context learning**: after notable outcomes, agents call `generate_learning()`
-  (a second AI call) to summarise lessons, appended to
-  `~/.claude-agents/<agent>_context.md`. This file is prepended to the main
-  prompt on the next run, capped at 2000 chars by default.
-- **Test count**: ~575 unit test functions across 32 files; ~17 functional test
-  functions across 3 files (all in `tests/`).
