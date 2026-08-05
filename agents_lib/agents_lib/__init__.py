@@ -110,6 +110,20 @@ from .forge_feedback import (
     extract_devstack_forge_comment,
     determine_backport_vote,
 )
+from .cli_args import (
+    HelpOnErrorParser,
+    validate_launchpad_url,
+    validate_forge_url,
+    validate_jira_url,
+    add_bug_args,
+    add_change_args,
+    add_jira_args,
+    add_post_args,
+    resolve_bug_target,
+    resolve_change_target,
+    resolve_jira_target,
+    confirm_reprocess,
+)
 
 __all__ = [
     # git_info
@@ -207,4 +221,17 @@ __all__ = [
     "post_report_to_launchpad",
     "find_latest_report",
     "read_feedback_file",
+    # cli_args
+    "HelpOnErrorParser",
+    "validate_launchpad_url",
+    "validate_forge_url",
+    "validate_jira_url",
+    "add_bug_args",
+    "add_change_args",
+    "add_jira_args",
+    "add_post_args",
+    "resolve_bug_target",
+    "resolve_change_target",
+    "resolve_jira_target",
+    "confirm_reprocess",
 ]

@@ -41,6 +41,11 @@ from agents_lib import (
     AuditRule,
     audit_report_file,
     build_audit_prompt,
+    HelpOnErrorParser,
+    add_change_args,
+    add_post_args,
+    resolve_change_target,
+    confirm_reprocess,
 )
 from config import load_config
 from feedback_parser import has_devstack_feedback, process_feedback
@@ -906,20 +911,75 @@ async def run_single_change(change_number: str, patchset: "int | None", config: 
 
 def cli_main():
     """Main entry point for command-line usage."""
-    parser = argparse.ArgumentParser(description='DevStack Test Agent')
-    parser.add_argument(
-        '--change', metavar='N',
-        help='Run tests immediately on this Gerrit change number, bypassing the review queue.',
+    config = load_config_module()
+    parser = HelpOnErrorParser(
+        description='DevStack Test Agent',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Process the next untested review (monitoring mode)
+  %(prog)s
+
+  # Test a specific Gerrit change (latest patchset)
+  %(prog)s --change 982567
+
+  # Test a specific patchset
+  %(prog)s --change 982567 --patchset 3
+
+  # Test a change by Gerrit URL
+  %(prog)s --url https://review.opendev.org/c/openstack/octavia/+/982567
+
+  # Re-test without the tracking-file confirmation prompt
+  %(prog)s --change 982567 --skip-tracking
+
+  # Save testing report to a custom directory
+  %(prog)s --change 982567 --output-dir /tmp/test-reports
+
+  # Test without posting results to the forge
+  %(prog)s --change 982567 --no-post
+
+  # Post the latest saved test report to the forge (no re-test)
+  %(prog)s --change 982567 --post-only
+        """,
     )
-    parser.add_argument(
-        '--patchset', '-p', metavar='N', type=int,
-        help='Patchset to test (default: latest available review file for the change).',
-    )
+    add_change_args(parser, config)
+    add_post_args(parser)
     args = parser.parse_args()
 
-    if args.change:
-        config = load_config_module()
-        asyncio.run(run_single_change(str(args.change), args.patchset, config))
+    change_ref, patchset, _output_dir, skip_tracking = resolve_change_target(args, config)
+
+    if args.no_post:
+        config.setdefault("feedback", {})["post_to_forge"] = False
+        print("📵 External posting disabled (--no-post)\n")
+
+    if args.post_only:
+        if not change_ref:
+            print("❌ --post-only requires --change or --url", file=sys.stderr)
+            sys.exit(1)
+        reviews_dir = Path(config["reviews_directory"])
+        change_id = change_ref.split("/")[-1].split("+")[-1].strip() \
+            if change_ref.startswith("http") else change_ref
+        ps_glob = f"ps{patchset}_" if patchset else "ps*_"
+        report = find_latest_report(reviews_dir, f"testing_report_*_{change_id}_{ps_glob}*.md")
+        if not report:
+            print(f"❌ No testing report found for change {change_id} in {reviews_dir}")
+            sys.exit(1)
+        review_info = parse_review_file(report)
+        if review_info:
+            _post_devstack_feedback(review_info, report, config)
+        else:
+            print("❌ Could not parse review info from report")
+            sys.exit(1)
+        return
+
+    if change_ref:
+        if not skip_tracking:
+            tracking_file = Path(config["tracking"]["tested_reviews_file"])
+            existing = load_tracking_file(tracking_file)
+            if str(change_ref) in str(existing):
+                if not confirm_reprocess("change", change_ref):
+                    return
+        asyncio.run(run_single_change(str(change_ref), patchset, config))
     else:
         asyncio.run(main())
 
