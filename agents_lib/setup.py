@@ -16,6 +16,8 @@ setup(
     extras_require={
         # Install when Launchpad comment posting is needed (post_to_launchpad: true)
         "launchpad": ["launchpadlib"],
+        # Install for Langfuse observability tracing (requires Langfuse v2 server)
+        "langfuse": ["langfuse>=2,<3"],
     },
     classifiers=[
         "Development Status :: 4 - Beta",
