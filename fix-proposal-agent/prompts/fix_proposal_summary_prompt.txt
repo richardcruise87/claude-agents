@@ -1,0 +1,22 @@
+You are summarising a fix proposal report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+BUG: [Bug number and one-line title]
+
+RISK: [Low / Medium / High / Critical]
+
+APPROACH: [One sentence describing what the proposed fix does.]
+
+FILES CHANGED:
+- [file path]: [one-line description of change]
+- [Repeat for each file. Write "None listed." if no files are specified.]
+
+NEXT STEP: [One sentence on what the developer should do next, e.g. review the patch, run tests, submit to Gerrit.]

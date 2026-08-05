@@ -48,7 +48,8 @@
   },
   "feedback": {
     "post_to_forge": false,
-    "comment_feedback": "Post DevStack integration test results as a comment to the forge change (Gerrit, GitHub, or GitLab)."
+    "comment_feedback": "Post DevStack integration test results as a comment to the forge change (Gerrit, GitHub, or GitLab).",
+    "post_summary": false
   },
   "forge": {
     "type": "gerrit",

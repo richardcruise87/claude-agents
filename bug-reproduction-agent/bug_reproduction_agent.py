@@ -27,8 +27,12 @@ from agents_lib import (
     load_notifications_config,
     HelpOnErrorParser,
     add_bug_args,
+    add_summary_args,
     resolve_bug_target,
     confirm_reprocess,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 from triage_parser import parse_triage_file, get_triage_timestamp
 from script_generator import (
@@ -492,12 +496,17 @@ Examples:
 
   # Save reproduction report to a custom directory
   %(prog)s --bug 2150752 --output-dir /tmp/reproductions
+
+  # Print a short summary of the reproduction outcome
+  %(prog)s --bug 2150752 --print-summary
         """,
     )
     add_bug_args(parser, config)
+    add_summary_args(parser)
     args = parser.parse_args()
 
     bug_id, _output_dir, skip_tracking = resolve_bug_target(args, config)
+    _summary_prompt = Path(__file__).parent / "prompts" / "bug_reproduction_summary_prompt.txt"
 
     if bug_id:
         repro_dir = Path(config["triage_reports_dir"])
@@ -519,6 +528,17 @@ Examples:
         asyncio.run(process_triage(triage_files[0]))
     else:
         asyncio.run(main())
+
+    if needs_summary(args, config):
+        repro_output = Path(config["reproductions_output_dir"])
+        pattern = f"reproduction_{bug_id}_*.md" if bug_id else "reproduction_*.md"
+        from agents_lib import find_latest_report as _flr  # noqa: PLC0415
+        report = _flr(repro_output, pattern)
+        summary = generate_summary(report, _summary_prompt, config) if report else None
+        if summary:
+            print_summary(summary, report)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 if __name__ == "__main__":

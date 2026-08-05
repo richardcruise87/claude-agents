@@ -43,9 +43,33 @@
     "comment": "Gerrit server configuration. Usually doesn't need to change."
   },
   "test_commands": [
-    {"name": "unit tests",       "cmd": ["tox", "-e", "py3"],        "timeout": 600},
-    {"name": "functional tests", "cmd": ["tox", "-e", "functional"],  "timeout": 600},
-    {"name": "pep8",             "cmd": ["tox", "-e", "pep8"],        "timeout": 120}
+    {
+      "name": "unit tests",
+      "cmd": [
+        "tox",
+        "-e",
+        "py3"
+      ],
+      "timeout": 600
+    },
+    {
+      "name": "functional tests",
+      "cmd": [
+        "tox",
+        "-e",
+        "functional"
+      ],
+      "timeout": 600
+    },
+    {
+      "name": "pep8",
+      "cmd": [
+        "tox",
+        "-e",
+        "pep8"
+      ],
+      "timeout": 120
+    }
   ],
   "max_diff_lines": 300,
   "comment_testing": "test_commands: list of commands Python runs before the AI review. Each entry: name (display label), cmd (command as list), timeout (seconds). max_diff_lines: lines of git diff to include in prompt (AI can Read files for more).",
@@ -94,7 +118,8 @@
     "backport_voting": false,
     "backport_vote_label": "Backport-Candidate",
     "backport_recommend_score": 1,
-    "comment_backport_voting": "backport_voting: enable a separate Backport-Candidate Gerrit vote alongside the Code-Review vote (disabled by default). backport_vote_label: the Gerrit label to use (default: Backport-Candidate). backport_recommend_score: vote value when backport IS recommended (default: +1). When backport is NOT recommended the vote is always 0 (neutral). There is currently no separate score for the not-recommended case."
+    "comment_backport_voting": "backport_voting: enable a separate Backport-Candidate Gerrit vote alongside the Code-Review vote (disabled by default). backport_vote_label: the Gerrit label to use (default: Backport-Candidate). backport_recommend_score: vote value when backport IS recommended (default: +1). When backport is NOT recommended the vote is always 0 (neutral). There is currently no separate score for the not-recommended case.",
+    "post_summary": false
   },
   "context": {
     "rules_file": "~/.claude-agents/rules.md",

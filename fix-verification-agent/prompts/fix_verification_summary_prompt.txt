@@ -1,0 +1,20 @@
+You are summarising a fix verification report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+STATUS: [RESOLVED / NOT_RESOLVED / INCONCLUSIVE]
+
+BUG: [Bug number and one-line title]
+
+ATTEMPTS: [Number of verification attempts made]
+
+EXPLANATION: [One sentence explaining why the fix was verified as resolved, not resolved, or inconclusive.]
+
+NEXT STEP: [One sentence on what happens next, e.g. submit patch for review, revise the fix, retry after environment recovery.]

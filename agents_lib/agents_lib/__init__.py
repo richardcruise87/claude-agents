@@ -119,11 +119,13 @@ from .cli_args import (
     add_change_args,
     add_jira_args,
     add_post_args,
+    add_summary_args,
     resolve_bug_target,
     resolve_change_target,
     resolve_jira_target,
     confirm_reprocess,
 )
+from .summariser import generate_summary, print_summary, needs_summary
 
 __all__ = [
     # git_info
@@ -230,8 +232,13 @@ __all__ = [
     "add_change_args",
     "add_jira_args",
     "add_post_args",
+    "add_summary_args",
     "resolve_bug_target",
     "resolve_change_target",
     "resolve_jira_target",
     "confirm_reprocess",
+    # summariser
+    "generate_summary",
+    "print_summary",
+    "needs_summary",
 ]

@@ -37,8 +37,12 @@ from agents_lib import (
     HelpOnErrorParser,
     add_bug_args,
     add_post_args,
+    add_summary_args,
     resolve_bug_target,
     confirm_reprocess,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 from launchpad_feedback import (
     get_gerrit_comments_since,
@@ -619,13 +623,21 @@ Examples:
 
   # Generate a proposal without posting to Launchpad
   %(prog)s --bug 2150752 --no-post
+
+  # Print a short summary of the proposal after generating
+  %(prog)s --bug 2150752 --print-summary
+
+  # Post only the summary to Launchpad (not the full proposal)
+  %(prog)s --bug 2150752 --post-summary
         """,
     )
     add_bug_args(parser, config)
     add_post_args(parser)
+    add_summary_args(parser)
     args = parser.parse_args()
 
     bug_id, output_dir, skip_tracking = resolve_bug_target(args, config)
+    _summary_prompt = Path(__file__).parent / "prompts" / "fix_proposal_summary_prompt.txt"
 
     if args.no_post:
         config["post_to_launchpad"] = False
@@ -645,9 +657,22 @@ Examples:
             print(f"❌ No proposal report found for bug {bug_id} in {proposals_dir}")
             sys.exit(1)
         print(f"📄 Using report: {report.name}")
-        subject = "AI Fix Proposal (automated, may contain errors)"
-        ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=5000)
-        sys.exit(0 if ok else 1)
+        cached_summary = None
+        if needs_summary(args, config):
+            cached_summary = generate_summary(report, _summary_prompt, config)
+            if cached_summary:
+                print_summary(cached_summary, report)
+            else:
+                print("ℹ️  No output file produced — summary not available.")
+        if not args.post_summary:
+            subject = "AI Fix Proposal (automated, may contain errors)"
+            ok = post_report_to_launchpad(bug_id, subject, report, config, max_chars=5000)
+            sys.exit(0 if ok else 1)
+        else:
+            if cached_summary:
+                subject = "AI Fix Proposal Summary (automated, may contain errors)"
+                post_report_to_launchpad(bug_id, subject, report, config, max_chars=2000)
+        return
 
     if bug_id:
         tracking_file = Path(config["proposal_tracking_file"])
@@ -684,6 +709,19 @@ Examples:
         ))
     else:
         asyncio.run(main())
+
+    if needs_summary(args, config):
+        proposals_dir = output_dir if args.output_dir else Path(config["proposals_output_dir"])
+        pattern = f"fix_proposal_{bug_id}_*.md" if bug_id else "fix_proposal_*.md"
+        report = find_latest_report(proposals_dir, pattern, exclude_suffix="_context")
+        summary = generate_summary(report, _summary_prompt, config) if report else None
+        if summary:
+            print_summary(summary, report)
+            if args.post_summary and bug_id:
+                subject = "AI Fix Proposal Summary (automated, may contain errors)"
+                post_report_to_launchpad(bug_id, subject, report, config, max_chars=2000)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 if __name__ == "__main__":

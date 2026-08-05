@@ -46,7 +46,11 @@ from agents_lib import (
     load_notifications_config,
     HelpOnErrorParser,
     add_change_args,
+    add_summary_args,
     resolve_change_target,
+    generate_summary,
+    print_summary,
+    needs_summary,
 )
 
 from prompts import get_backport_review_prompt
@@ -373,13 +377,37 @@ Examples:
 
   # Save review to a custom directory
   %(prog)s --change 923456 --output-dir /tmp/backport-reviews
+
+  # Print a short summary of the review after running
+  %(prog)s --change 923456 --print-summary
         """,
     )
     add_change_args(parser, config)
+    add_summary_args(parser)
     args = parser.parse_args()
 
     change_ref, _patchset, _output_dir, _skip = resolve_change_target(args, config)
+    _summary_prompt = Path(__file__).parent / "prompts" / "backport_review_summary_prompt.txt"
+
+    if args.post_summary:
+        print(
+            "❌ --post-summary is not supported for the backport review agent — "
+            "no forge posting is configured. Use --print-summary to display the summary locally.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     asyncio.run(main(change_url=change_ref))
+
+    if needs_summary(args, config):
+        from agents_lib import find_latest_report as _flr  # noqa: PLC0415
+        output_dir = Path(config["output_dir"])
+        report = _flr(output_dir, "review_*.md")
+        summary = generate_summary(report, _summary_prompt, config) if report else None
+        if summary:
+            print_summary(summary, report)
+        else:
+            print("ℹ️  No output file produced — summary not available.")
 
 
 if __name__ == "__main__":

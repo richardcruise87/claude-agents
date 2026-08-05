@@ -1,0 +1,20 @@
+You are summarising a DevStack integration test report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+STATUS: [PASS / FAIL / PARTIAL / ERROR]
+
+RESULTS: [X passed, Y failed, Z skipped]
+
+FAILED TESTS:
+- [test name]: [one-line reason for failure]
+- [Repeat for each failed test. Write "None." if all tests passed.]
+
+RECOMMENDATION: [One sentence on whether the change is safe to merge from a testing perspective.]

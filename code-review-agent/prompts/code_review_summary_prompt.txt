@@ -1,0 +1,22 @@
+You are summarising a code review report. Read the report below and produce a concise summary.
+
+## Report Content
+
+{report_content}
+
+## Required Output
+
+Produce a summary with exactly these sections. Use plain text, not markdown headers.
+Keep the total summary under 300 words.
+
+VERDICT: [Approve / Request Changes / Needs Discussion]
+
+REQUIRED CHANGES:
+- [List each required change as a short bullet. Write "None." if there are no required changes.]
+
+SUGGESTIONS:
+- [List optional improvements as short bullets. Write "None." if there are no suggestions.]
+
+BACKPORT: [Recommended for <branch(es)> / Not needed / Insufficient info]
+
+One-sentence overall assessment of the change quality.
