@@ -4,6 +4,19 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-08-10
+
+### Fixed: KeyError 'reporter' in bug triage --bug mode
+
+**`bug-triage-agent/bug_triage_agent.py`:**
+
+- `triage_bug_by_id`: fetched the reporter display name via `owner_link` (mirroring
+  the existing `fetch_bugs` logic) and added `reporter` to the `bug_info` dict.
+  Previously the key was missing, causing a `KeyError` when `triage_bug` tried
+  to build the prompt.
+
+---
+
 ## 2026-06-03
 
 ### Fixed: False-positive duplicate Change-Id in code review prompts

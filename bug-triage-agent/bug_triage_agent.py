@@ -556,6 +556,14 @@ async def triage_bug_by_id(bug_id: str, output_dir: Path):
             task_resp.raise_for_status()
             tasks = task_resp.json().get("entries", [])
             task = tasks[0] if tasks else {}
+            reporter = "Unknown"
+            if bug_data.get("owner_link"):
+                try:
+                    owner_resp = await client.get(bug_data["owner_link"])
+                    owner_resp.raise_for_status()
+                    reporter = owner_resp.json().get("display_name", "Unknown")
+                except Exception:
+                    pass
             bug_info = {
                 "number": bug_id,
                 "title": bug_data.get("title", f"Bug #{bug_id}"),
@@ -566,6 +574,7 @@ async def triage_bug_by_id(bug_id: str, output_dir: Path):
                 "date_last_updated": bug_data.get("date_last_updated", ""),
                 "tags": bug_data.get("tags", []),
                 "web_link": f"https://bugs.launchpad.net/bugs/{bug_id}",
+                "reporter": reporter,
             }
     except Exception as exc:
         print(f"❌ Could not fetch bug #{bug_id} from Launchpad: {exc}")
