@@ -4,6 +4,20 @@ All notable changes to the claude-agents project are documented here.
 
 ---
 
+## 2026-08-12
+
+### Fixed: TypeError when running bug triage with None timestamp
+
+**`agents_lib/agents_lib/tracking.py`:**
+
+- `should_process_item`: guard against `None` `item_last_updated` before
+  comparing with the tracked timestamp. A `None` value is now treated as
+  "unknown update time" and always triggers re-processing, preventing a
+  `TypeError: '>' not supported between instances of 'NoneType' and 'str'`
+  when `--bug` mode passes `None` as the last-updated date.
+
+---
+
 ## 2026-08-10
 
 ### Fixed: KeyError 'reporter' in bug triage --bug mode

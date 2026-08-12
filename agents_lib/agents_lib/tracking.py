@@ -75,7 +75,8 @@ def should_process_item(
 
     # Compare timestamps
     # If item has been updated since last processing, process again with incremented sequence
-    if item_last_updated > last_updated_tracked:
+    # Treat a missing/None timestamp as always newer (unknown update time → re-process)
+    if item_last_updated is None or item_last_updated > last_updated_tracked:
         next_sequence = last_processing.get('sequence', 0) + 1
         return (True, next_sequence)
 
